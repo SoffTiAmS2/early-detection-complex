@@ -111,6 +111,7 @@ function renderSensors() {
       });
     });
 
+    setupDeployControls(node, sensor);
     renderServiceChecks(node, sensor);
     $(".remove-sensor", node).addEventListener("click", () => {
       state.project.sensors.splice(index, 1);
@@ -122,6 +123,60 @@ function renderSensors() {
   });
 
   setStatus(`${state.project.sensors.length} сенсоров`);
+}
+
+function setupDeployControls(node, sensor) {
+  const deploy = {
+    ssh_host: sensor.host || "",
+    ssh_port: "22",
+    ssh_user: "root",
+    ssh_password: "",
+    become_password: "",
+  };
+  $$("[data-deploy]", node).forEach((input) => {
+    const field = input.dataset.deploy;
+    input.value = deploy[field];
+    input.addEventListener("input", () => {
+      deploy[field] = input.value;
+    });
+  });
+  $(".deploy-sensor", node).addEventListener("click", () => deploySensor(sensor, deploy, node));
+}
+
+async function deploySensor(sensor, deploy, node) {
+  const button = $(".deploy-sensor", node);
+  const status = $(".deploy-status", node);
+  const output = $(".deploy-output", node);
+  output.hidden = true;
+  output.textContent = "";
+  button.disabled = true;
+  status.textContent = "Подготовка...";
+
+  try {
+    await saveProject("Сохранено перед установкой");
+    status.textContent = "Установка по SSH...";
+    const result = await requestJson("/api/deploy-sensor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sensor: sensor.name,
+        ssh_host: deploy.ssh_host,
+        ssh_port: deploy.ssh_port || 22,
+        ssh_user: deploy.ssh_user,
+        ssh_password: deploy.ssh_password,
+        become_password: deploy.become_password,
+      }),
+    });
+    status.textContent = result.ok ? "Готово" : "Ошибка";
+    output.textContent = [result.stdout, result.stderr].filter(Boolean).join("\n\n").trim();
+    output.hidden = !output.textContent;
+  } catch (error) {
+    status.textContent = "Ошибка";
+    output.textContent = error.message;
+    output.hidden = false;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderServiceChecks(node, sensor) {
@@ -158,14 +213,14 @@ function applyProfileDefaults(sensor) {
   if (!sensor.mask.notes) sensor.mask.notes = `${sensor.profile} decoy`;
 }
 
-async function saveProject() {
+async function saveProject(message = "Сохранено") {
   syncNetworkFromDom();
   await requestJson("/api/project", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(state.project),
   });
-  setStatus("Сохранено");
+  setStatus(message);
 }
 
 async function generateProject() {
@@ -193,4 +248,3 @@ async function init() {
 }
 
 init().catch((error) => setStatus(error.message));
-

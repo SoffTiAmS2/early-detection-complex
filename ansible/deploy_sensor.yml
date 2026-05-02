@@ -1,0 +1,128 @@
+---
+- name: Install or update an Early Detection Complex sensor
+  hosts: sensors
+  become: true
+  gather_facts: true
+  vars:
+    remote_root: /opt/early-detection-complex
+
+  tasks:
+    - name: Validate requested sensor
+      ansible.builtin.assert:
+        that:
+          - target_sensor is defined
+          - target_sensor is match('^[A-Za-z0-9_-]+$')
+          - project_root is defined
+        fail_msg: "target_sensor and project_root are required"
+
+    - name: Install base packages
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - python3
+          - rsync
+          - curl
+        state: present
+        update_cache: true
+      when: ansible_os_family == "Debian"
+
+    - name: Try to install Docker Compose plugin
+      ansible.builtin.apt:
+        name: docker-compose-plugin
+        state: present
+      register: compose_plugin_install
+      ignore_errors: true
+      when: ansible_os_family == "Debian"
+
+    - name: Install legacy docker-compose when plugin is unavailable
+      ansible.builtin.apt:
+        name: docker-compose
+        state: present
+      when:
+        - ansible_os_family == "Debian"
+        - compose_plugin_install is failed
+
+    - name: Enable Docker service
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Create project directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ remote_root }}"
+        - "{{ remote_root }}/containers"
+        - "{{ remote_root }}/containers/fake-services"
+        - "{{ remote_root }}/containers/log-agent"
+        - "{{ remote_root }}/containers/display-agent"
+        - "{{ remote_root }}/sensors"
+        - "{{ remote_root }}/sensors/{{ target_sensor }}"
+        - "{{ remote_root }}/sensors/{{ target_sensor }}/config"
+        - "{{ remote_root }}/sensors/{{ target_sensor }}/logs"
+
+    - name: Copy shared container sources
+      ansible.builtin.copy:
+        src: "{{ project_root }}/{{ item }}"
+        dest: "{{ remote_root }}/{{ item }}"
+        mode: preserve
+      loop:
+        - containers/fake-services/Dockerfile
+        - containers/fake-services/fake_service.py
+        - containers/log-agent/Dockerfile
+        - containers/log-agent/log_agent.py
+        - containers/display-agent/Dockerfile
+        - containers/display-agent/display_agent.py
+
+    - name: Copy generated sensor files
+      ansible.builtin.copy:
+        src: "{{ project_root }}/sensors/{{ target_sensor }}/{{ item }}"
+        dest: "{{ remote_root }}/sensors/{{ target_sensor }}/{{ item }}"
+        mode: preserve
+      loop:
+        - .env
+        - README.md
+        - docker-compose.yml
+
+    - name: Copy generated service config
+      ansible.builtin.copy:
+        src: "{{ project_root }}/sensors/{{ target_sensor }}/config/services.json"
+        dest: "{{ remote_root }}/sensors/{{ target_sensor }}/config/services.json"
+        mode: "0644"
+
+    - name: Detect compose command
+      ansible.builtin.shell: |
+        set -eu
+        if docker compose version >/dev/null 2>&1; then
+          echo "docker compose"
+        elif command -v docker-compose >/dev/null 2>&1; then
+          echo "docker-compose"
+        else
+          exit 1
+        fi
+      args:
+        executable: /bin/sh
+      changed_when: false
+      register: compose_command
+
+    - name: Start or update sensor containers
+      ansible.builtin.shell: "{{ compose_command.stdout }} up -d --build"
+      args:
+        chdir: "{{ remote_root }}/sensors/{{ target_sensor }}"
+        executable: /bin/sh
+      register: compose_up
+
+    - name: Show sensor container status
+      ansible.builtin.shell: "{{ compose_command.stdout }} ps"
+      args:
+        chdir: "{{ remote_root }}/sensors/{{ target_sensor }}"
+        executable: /bin/sh
+      changed_when: false
+      register: compose_ps
+
+    - name: Deployment summary
+      ansible.builtin.debug:
+        msg: "{{ compose_ps.stdout_lines }}"

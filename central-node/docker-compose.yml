@@ -12,3 +12,20 @@ services:
     volumes:
       - ./storage:/data
     restart: unless-stopped
+
+  manager:
+    build:
+      context: ..
+      dockerfile: manager/Dockerfile
+    container_name: early-detection-manager
+    command: ["python", "manager/backend/server.py", "--host", "0.0.0.0", "--port", "8090"]
+    environment:
+      MANAGER_HOST: 0.0.0.0
+      MANAGER_PORT: 8090
+    ports:
+      - "8090:8090"
+    volumes:
+      - ..:/app
+    depends_on:
+      - central-node
+    restart: unless-stopped

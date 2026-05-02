@@ -1,7 +1,0 @@
-{
-  "name": "honeytrap",
-  "purpose": "Extensible honeypot framework for combining multiple exposed services.",
-  "fit": "Candidate profile for broader network deception when resources allow it.",
-  "log_strategy": "Framework events forwarded through log-agent or dedicated integration."
-}
-

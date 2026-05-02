@@ -103,10 +103,35 @@
           </label>
         </div>
       </div>
+
+      <div class="subsection deploy">
+        <h4>Установка/обновление по SSH</h4>
+        <div class="grid five">
+          <label>SSH host
+            <input data-deploy="ssh_host" autocomplete="off">
+          </label>
+          <label>Port
+            <input data-deploy="ssh_port" inputmode="numeric" value="22" autocomplete="off">
+          </label>
+          <label>Login
+            <input data-deploy="ssh_user" autocomplete="username">
+          </label>
+          <label>Password
+            <input data-deploy="ssh_password" type="password" autocomplete="current-password">
+          </label>
+          <label>Sudo password
+            <input data-deploy="become_password" type="password" autocomplete="current-password">
+          </label>
+        </div>
+        <div class="deploy-actions">
+          <button class="primary deploy-sensor" type="button">Установить/обновить</button>
+          <span class="deploy-status"></span>
+        </div>
+        <pre class="deploy-output" hidden></pre>
+      </div>
     </article>
   </template>
 
   <script src="/app.js"></script>
 </body>
 </html>
-

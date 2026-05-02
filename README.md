@@ -7,7 +7,8 @@
 - настройка сенсорных узлов;
 - выбор профиля и сервисов-приманок;
 - маскировка сенсора под правдоподобный сетевой актив;
-- запуск контейнеров на Banana Pi Pro или другой Debian/Armbian-системе;
+- установка и обновление сенсоров с центрального узла по SSH;
+- запуск контейнеров на Banana Pi Pro или другой Debian/Armbian-системе без ручной настройки Docker на сенсоре;
 - локальная запись событий;
 - отправка событий на центральный узел;
 - просмотр событий через API и dashboard.
@@ -53,6 +54,8 @@ Switch с Docker также не выбран как основная площа
 - Локальные JSONL-логи на сенсоре.
 - Пересылка событий в центральный узел.
 - Dashboard: `http://<central-ip>:8080/dashboard`.
+- Web-консоль управления: `http://<central-ip>:8090`.
+- Установка/обновление сенсоров из центра через Ansible по SSH.
 - Проверка работоспособности через shell-скрипты.
 
 ## Почему не T-Pot
@@ -88,15 +91,17 @@ manager/
   frontend/                # HTML/CSS/JS web-интерфейс
   cli.py                   # CLI-конфигуратор
 
+ansible/
+  deploy_sensor.yml        # установка/обновление сенсора с центра по SSH
+
 orchestrator/
   generate.py              # генератор sensor1/sensor2/sensor3
-  profiles/                # описания профилей
 
 scripts/
   bootstrap_clean.sh       # установка на чистую систему
   configure.sh             # CLI-настройка
   generate_sensor.sh       # генерация конфигураций
-  install_central.sh       # установка и запуск центра
+  install_central.sh       # установка Docker и запуск центральной web-консоли
   install_sensor.sh        # установка сенсора
   start_manager.sh         # web-конфигуратор
   start_sensor.sh          # запуск сенсора
@@ -228,50 +233,40 @@ inventory/project.json
 }
 ```
 
-## Быстрый старт для разработки
+## Быстрый старт центра
 
 Из корня проекта:
 
 ```sh
 cd /home/shizik/Yandex.Disk/early-detection-complex
+scripts/install_central.sh
 ```
 
-Запустить web-конфигуратор:
+Открыть web-консоль:
+
+```text
+http://<central-ip>:8090
+```
+
+Открыть dashboard событий:
+
+```text
+http://<central-ip>:8080/dashboard
+```
+
+На сенсорной плате вручную нужна только ОС и SSH. В web-консоли выбери сенсор, укажи IP, профиль, сервисы и SSH-доступ, затем нажми `Установить/обновить`.
+
+## Локальный режим разработки
+
+Если нужно запускать manager без контейнера:
 
 ```sh
 scripts/start_manager.sh
 ```
 
-Открыть:
-
-```text
-http://127.0.0.1:8090
-```
-
-Сгенерировать конфигурации:
-
-```sh
-scripts/generate_sensor.sh
-```
-
-Запустить центральный узел:
-
-```sh
-cd central-node
-docker compose up -d --build
-```
-
-Запустить сенсор:
-
-```sh
-cd ../sensors/sensor1
-docker compose up -d --build
-```
-
 Проверить:
 
 ```sh
-docker compose ps
 curl http://127.0.0.1:8080/health
 ```
 
@@ -286,7 +281,7 @@ path: /home/banana/early-detection-complex
 OS: Armbian/Debian 13
 ```
 
-Проверка Docker:
+Проверка Docker на центральном узле:
 
 ```sh
 docker --version
@@ -303,16 +298,11 @@ active
 Запуск центра на плате:
 
 ```sh
-cd /home/banana/early-detection-complex/central-node
-docker compose up -d --build
+cd /home/banana/early-detection-complex
+scripts/install_central.sh
 ```
 
-Запуск сенсора:
-
-```sh
-cd /home/banana/early-detection-complex/sensors/sensor1
-docker compose up -d --build
-```
+Сенсоры после этого устанавливаются из web-консоли центра по SSH.
 
 ## Проверка работоспособности
 

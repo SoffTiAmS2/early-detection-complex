@@ -1,0 +1,9 @@
+.git
+__pycache__/
+*.py[cod]
+.env
+logs/
+central-node/storage/events.jsonl
+sensors/*/.env
+sensors/*/logs/
+.pytest_cache/

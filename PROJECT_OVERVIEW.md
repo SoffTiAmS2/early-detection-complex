@@ -9,7 +9,8 @@
 - `containers/log-agent` - агент, который отправляет локальные события сенсора в центр.
 - `containers/display-agent` - агент статуса сенсора.
 - `orchestrator/generate.py` - генератор конфигураций сенсоров.
-- `manager` - web-конфигуратор профилей, IP, сервисов и маскировки.
+- `manager` - web-консоль профилей, IP, сервисов, маскировки и SSH-установки сенсоров.
+- `ansible/deploy_sensor.yml` - установка/обновление сенсора с центрального узла по SSH.
 - `inventory/project.json` - главный файл настройки проекта.
 - `sensors/<sensor>` - готовые директории сенсоров с `docker-compose.yml`.
 
@@ -17,24 +18,16 @@
 
 ```sh
 cd /home/shizik/Yandex.Disk/early-detection-complex
-scripts/generate_sensor.sh
-cd central-node
-docker compose up -d --build
-cd ../sensors/sensor1
-docker compose up -d --build
+scripts/install_central.sh
 ```
 
-## Web-конфигуратор
+После этого открой `http://<central-ip>:8090`, добавь IP сенсора, профиль и SSH-доступ.
+Плата сенсора должна иметь только установленную ОС и включенный SSH; Docker и конфигурацию центр поставит сам.
 
-```sh
-cd /home/shizik/Yandex.Disk/early-detection-complex
-scripts/start_manager.sh
-```
-
-Открыть:
+## Web-консоль
 
 ```text
-http://127.0.0.1:8090
+http://<central-ip>:8090
 ```
 
 ## Проверка

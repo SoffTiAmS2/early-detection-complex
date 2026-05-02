@@ -1,7 +1,0 @@
-{
-  "name": "conpot",
-  "purpose": "ICS/SCADA honeypot for industrial and OT scenarios.",
-  "fit": "Good profile for mining operations and technological network segments.",
-  "log_strategy": "Container or file logs, forwarded by log-agent."
-}
-

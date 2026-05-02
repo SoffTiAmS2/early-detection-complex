@@ -91,6 +91,11 @@ button.danger {
   color: var(--danger);
 }
 
+button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
 .layout {
   padding: 20px 28px 32px;
 }
@@ -257,6 +262,31 @@ select:focus {
   width: auto;
 }
 
+.deploy-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.deploy-status {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.deploy-output {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px;
+  margin: 10px 0 0;
+  background: #0f1712;
+  color: #e8f2eb;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
 @media (max-width: 1060px) {
   .workspace,
   .grid.three,
@@ -284,4 +314,3 @@ select:focus {
     grid-template-columns: 1fr;
   }
 }
-

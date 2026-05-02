@@ -1,7 +1,0 @@
-{
-  "name": "dionaea",
-  "purpose": "Multi-protocol honeypot focused on malicious network connections.",
-  "fit": "Useful in isolated DMZ experiments, but heavier than the baseline fake-services profile.",
-  "log_strategy": "JSON or SQLite/log outputs, forwarded after normalization."
-}
-

@@ -1,7 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
-# Запускает web-конфигуратор профилей, IP-адресов и маскировки.
+# Запускает web-конфигуратор локально, без Docker. Для обычного запуска центра
+# используй scripts/install_central.sh: он поднимает manager в контейнере.
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 HOST=${MANAGER_HOST:-127.0.0.1}
@@ -9,4 +10,3 @@ PORT=${MANAGER_PORT:-8090}
 
 cd "$PROJECT_ROOT"
 python3 manager/backend/server.py --host "$HOST" --port "$PORT"
-

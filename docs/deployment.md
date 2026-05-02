@@ -8,11 +8,9 @@
 
 ## Требования
 
-- Armbian/Debian 13 на Banana Pi Pro.
-- `python3`.
-- `docker.io`.
-- `docker-compose-plugin`.
-- `i2c-tools`, если используется LCD 16x2.
+- Центральный узел: Debian/Armbian и Docker/Compose. `scripts/install_central.sh` ставит их сам.
+- Сенсорная плата: установленная ОС, сеть и включенный SSH.
+- Docker, Compose и конфигурацию на сенсор ставит центральная web-консоль через Ansible.
 
 ## Генерация конфигураций
 
@@ -30,17 +28,7 @@ scripts/configure.sh
 - набор сервисов-приманок;
 - параметры маскировки.
 
-Web-режим:
-
-```sh
-scripts/start_manager.sh
-```
-
-Адрес по умолчанию:
-
-```text
-http://127.0.0.1:8090
-```
+Web-режим работает внутри центрального Docker stack и доступен на `http://<central>:8090`.
 
 Повторная генерация без вопросов:
 
@@ -60,10 +48,11 @@ scripts/generate_sensor.sh
 scripts/install_central.sh
 ```
 
-Скрипт устанавливает Docker, включает сервис и запускает `central-node/docker-compose.yml`.
+Скрипт устанавливает Docker/Compose, включает сервис Docker и запускает `central-node/docker-compose.yml`.
 
 После запуска доступны:
 
+- `http://<central>:8090` - web-консоль управления и установки сенсоров;
 - `http://<central>:8080/health`;
 - `http://<central>:8080/api/events`;
 - `http://<central>:8080/api/sensors`;
@@ -71,12 +60,14 @@ scripts/install_central.sh
 
 ## Сенсор
 
-```sh
-scripts/install_sensor.sh sensor1
-scripts/start_sensor.sh sensor1
-```
+1. Установи ОС на плату.
+2. Включи SSH и убедись, что IP доступен с центрального узла.
+3. Открой `http://<central>:8090`.
+4. Добавь или выбери сенсор, укажи IP/профиль/сервисы/маскировку.
+5. В блоке `Установка/обновление по SSH` введи SSH host, login и password.
+6. Нажми `Установить/обновить`.
 
-`install_sensor.sh` готовит плату, а `start_sensor.sh` запускает контейнеры выбранного сенсора.
+Центр сам сгенерирует конфигурацию, поставит Docker на сенсор, скопирует нужные файлы и запустит контейнеры.
 
 ## Проверка
 
