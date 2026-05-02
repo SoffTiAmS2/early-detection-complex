@@ -1,92 +1,84 @@
 # Deployment
 
-Полный отчет по реализации и эксплуатации см. также:
-
-- `docs/full_report.md`;
-- `/home/shizik/Yandex.Disk/Document/Obsidian Vault/ВКР/Документация_early_detection_complex/10_полный_отчет_о_реализации.md`;
-- `/home/shizik/Yandex.Disk/Document/Obsidian Vault/ВКР/Документация_early_detection_complex/11_инструкция_по_эксплуатации.md`.
-
 ## Требования
 
-- Центральный узел: Debian/Armbian и Docker/Compose. `scripts/install_central.sh` ставит их сам.
-- Сенсорная плата: установленная ОС, сеть и включенный SSH.
-- Docker, Compose и конфигурацию на сенсор ставит центральная web-консоль через Ansible.
+- Центральный узел: Debian/Armbian с доступом к интернету.
+- Сенсорная плата: Debian/Armbian, сеть и включенный SSH.
+- На сенсор заранее не нужно ставить Docker или копировать проект.
 
-## Генерация конфигураций
+## Центральный Узел
 
-Интерактивный режим:
-
-```sh
-scripts/configure.sh
-```
-
-Он позволяет задать:
-
-- IP центрального узла;
-- IP каждого сенсора;
-- honeypot/deception-профиль;
-- набор сервисов-приманок;
-- параметры маскировки.
-
-Web-режим работает внутри центрального Docker stack и доступен на `http://<central>:8090`.
-
-Повторная генерация без вопросов:
-
-```sh
-scripts/generate_sensor.sh
-```
-
-Команда запускает `orchestrator/generate.py` и создает для каждого сенсора:
-
-- `.env`;
-- `docker-compose.yml`;
-- `README.md`.
-
-## Центральный узел
+Из корня проекта:
 
 ```sh
 scripts/install_central.sh
 ```
 
-Скрипт устанавливает Docker/Compose, включает сервис Docker и запускает `central-node/docker-compose.yml`.
+Скрипт ставит Docker/Compose, включает Docker и запускает:
+
+- `central-node` на `8080`;
+- `manager` на `8090`.
 
 После запуска доступны:
 
-- `http://<central>:8090` - web-консоль управления и установки сенсоров;
-- `http://<central>:8080/health`;
-- `http://<central>:8080/api/events`;
-- `http://<central>:8080/api/sensors`;
-- `http://<central>:8080/dashboard`.
+```text
+http://<central>:8090            # web-консоль управления
+http://<central>:8080/dashboard  # dashboard событий
+http://<central>:8080/health     # health API
+```
 
 ## Сенсор
 
 1. Установи ОС на плату.
-2. Включи SSH и убедись, что IP доступен с центрального узла.
-3. Открой `http://<central>:8090`.
-4. Добавь или выбери сенсор, укажи IP/профиль/сервисы/маскировку.
-5. В блоке `Установка/обновление по SSH` введи SSH host, login и password.
-6. Нажми `Установить/обновить`.
+2. Включи SSH.
+3. Убедись, что центральный узел видит IP платы.
+4. Открой `http://<central>:8090`.
+5. Настрой сенсор: IP, профиль, сервисы, маскировку.
+6. В блоке `Установка/обновление по SSH` введи SSH host/login/password.
+7. Нажми `Установить/обновить`.
 
-Центр сам сгенерирует конфигурацию, поставит Docker на сенсор, скопирует нужные файлы и запустит контейнеры.
+Центр сам:
+
+- генерирует `sensors/<sensor>/`;
+- ставит Docker/Compose на плату;
+- копирует контейнеры и конфигурацию;
+- запускает `docker compose up -d --build` на сенсоре.
+
+## Генерация Для Отладки
+
+```sh
+scripts/generate_sensor.sh
+```
+
+Команда создает ignored-артефакты:
+
+- `sensors/<sensor>/.env`;
+- `sensors/<sensor>/docker-compose.yml`;
+- `sensors/<sensor>/config/services.json`;
+- `inventory/network.yml`;
+- `inventory/sensors.yml`.
+
+Эти файлы не хранятся в git.
 
 ## Проверка
 
+Центр:
+
 ```sh
-scripts/health_check.sh sensor1
+curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:8080/api/sensors | python3 -m json.tool
 ```
 
-Проверяется Docker, связь с центральным узлом, наличие I2C и состояние контейнеров.
-
-## Чистая система
-
-На центральном узле:
+Сенсор с отдельной машины:
 
 ```sh
-scripts/bootstrap_clean.sh central
+printf 'admin\r\n' | nc -w 2 <sensor-ip> 2222
+printf 'GET /admin HTTP/1.0\r\n\r\n' | nc -w 2 <sensor-ip> 8081
 ```
 
-На сенсорной плате:
+События проверяются через dashboard или API:
 
-```sh
-scripts/bootstrap_clean.sh sensor sensor1
+```text
+http://<central>:8080/dashboard
+http://<central>:8080/api/events
 ```

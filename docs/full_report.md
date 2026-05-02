@@ -11,12 +11,7 @@
 
 ```sh
 cd /home/shizik/Yandex.Disk/early-detection-complex
-scripts/start_manager.sh
-scripts/generate_sensor.sh
-cd central-node
-docker compose up -d --build
-cd ../sensors/sensor1
-docker compose up -d --build
+scripts/install_central.sh
 ```
 
 Проверка:
@@ -24,12 +19,11 @@ docker compose up -d --build
 ```sh
 curl http://127.0.0.1:8080/health
 curl http://127.0.0.1:8080/api/sensors | python3 -m json.tool
-printf 'test\r\n' | nc -w 2 127.0.0.1 2222
-tail -n 20 sensors/sensor1/logs/events.jsonl
 ```
 
 Dashboard:
 
 ```text
 http://<central-node-ip>:8080/dashboard
+http://<central-node-ip>:8090
 ```

@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-# Генерирует конфигурации sensor1..sensor3 из inventory/.
+# Генерирует локальные ignored-конфигурации сенсоров из inventory/project.json.
 # Запускать из любой директории: путь к проекту определяется по месту скрипта.
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)

@@ -1,48 +1,48 @@
-# Web configurator
+# Web Console
 
-Web-консоль находится в `manager/` и обычно запускается внутри центрального Docker stack.
-
-## Запуск
+Web-консоль запускается в составе центрального Docker stack.
 
 ```sh
 scripts/install_central.sh
 ```
 
-По умолчанию интерфейс доступен на:
+Адрес:
 
 ```text
 http://<central-ip>:8090
 ```
 
-## Что можно настроить
+## Возможности
 
-- лабораторную подсеть;
-- шлюз;
-- IP центрального узла;
-- список сенсоров;
-- профиль каждого сенсора;
-- набор сервисов-приманок;
-- параметры маскировки.
-- SSH host/login/password для установки или обновления сенсора.
+- настройка подсети, шлюза и IP центрального узла;
+- добавление и удаление сенсоров;
+- выбор профиля и сервисов-приманок;
+- настройка deception-маскировки;
+- генерация конфигураций;
+- установка или обновление сенсора по SSH через Ansible.
 
 ## API
 
-- `GET /api/catalog` - список профилей и сервисов.
+- `GET /api/catalog` - профили и сервисы.
 - `GET /api/project` - текущий `inventory/project.json`.
 - `PUT /api/project` - сохранить конфигурацию.
-- `POST /api/generate` - запустить `orchestrator/generate.py`.
-- `POST /api/deploy-sensor` - сгенерировать конфигурацию и установить/обновить сенсор по SSH через Ansible.
+- `POST /api/generate` - сгенерировать ignored-артефакты в `sensors/`.
+- `POST /api/deploy-sensor` - сгенерировать конфигурацию и установить/обновить сенсор по SSH.
 
-## Как это связано с установкой
+## Хранение Данных
 
-После сохранения и генерации web-интерфейс обновляет:
+Tracked source of truth:
 
-- `inventory/project.json`;
-- `inventory/network.yml`;
-- `inventory/sensors.yml`;
-- `sensors/<sensor>/.env`;
-- `sensors/<sensor>/docker-compose.yml`;
-- `sensors/<sensor>/config/services.json`.
+```text
+inventory/project.json
+```
 
-После этого кнопка `Установить/обновить` запускает `ansible/deploy_sensor.yml`.
-Пароль используется только для текущего запуска Ansible и не записывается в `inventory/project.json`.
+Generated ignored files:
+
+```text
+sensors/<sensor>/
+inventory/network.yml
+inventory/sensors.yml
+```
+
+SSH-пароль используется только во время текущего Ansible-запуска и не сохраняется в `inventory/project.json`.

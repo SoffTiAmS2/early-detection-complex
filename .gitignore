@@ -3,4 +3,7 @@ __pycache__/
 .env
 logs/
 central-node/storage/events.jsonl
+sensors/
 sensors/*/logs/
+inventory/network.yml
+inventory/sensors.yml

@@ -4,6 +4,9 @@ __pycache__/
 .env
 logs/
 central-node/storage/events.jsonl
+sensors/
 sensors/*/.env
 sensors/*/logs/
+inventory/network.yml
+inventory/sensors.yml
 .pytest_cache/
