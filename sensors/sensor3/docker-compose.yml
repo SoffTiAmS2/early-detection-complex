@@ -1,0 +1,33 @@
+services:
+  fake-services:
+    build:
+      context: ../../containers/fake-services
+    env_file:
+      - .env
+    ports:
+      - "8081:8081"
+      - "1502:1502"
+    volumes:
+      - ./logs:/logs
+      - ./config:/config:ro
+    restart: unless-stopped
+
+  log-agent:
+    build:
+      context: ../../containers/log-agent
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/logs
+    depends_on:
+      - fake-services
+    restart: unless-stopped
+
+  display-agent:
+    build:
+      context: ../../containers/display-agent
+    env_file:
+      - .env
+    depends_on:
+      - log-agent
+    restart: unless-stopped

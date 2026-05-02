@@ -1,0 +1,32 @@
+{
+  "services": [
+    {
+      "port": 2222,
+      "protocol": "ssh",
+      "banner": "SSH-2.0-OpenSSH_8.4",
+      "response": "Permission denied, please try again.\r\n",
+      "name": "ssh",
+      "mask": {
+        "hostname": "office-filesrv-01",
+        "os": "Debian GNU/Linux 13",
+        "department": "Office",
+        "asset_tag": "OFF-FS-01",
+        "notes": "internal SSH/Telnet decoy"
+      }
+    },
+    {
+      "port": 2323,
+      "protocol": "telnet",
+      "banner": "Debian GNU/Linux 13\r\nlogin: ",
+      "response": "Password: ",
+      "name": "telnet",
+      "mask": {
+        "hostname": "office-filesrv-01",
+        "os": "Debian GNU/Linux 13",
+        "department": "Office",
+        "asset_tag": "OFF-FS-01",
+        "notes": "internal SSH/Telnet decoy"
+      }
+    }
+  ]
+}

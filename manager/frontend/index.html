@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EDC Configurator</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>Early Detection Complex</h1>
+      <p>Конфигуратор сенсоров, профилей и deception-маскировки</p>
+    </div>
+    <div class="actions">
+      <button id="addSensor" type="button">Добавить сенсор</button>
+      <button id="saveProject" type="button">Сохранить</button>
+      <button id="generateProject" type="button" class="primary">Сгенерировать</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel network-panel">
+      <h2>Сеть</h2>
+      <div class="grid three">
+        <label>Подсеть
+          <input id="subnet" name="subnet" autocomplete="off">
+        </label>
+        <label>Шлюз
+          <input id="gateway" name="gateway" autocomplete="off">
+        </label>
+        <label>Центральный узел
+          <input id="centralNode" name="central_node" autocomplete="off">
+        </label>
+      </div>
+    </section>
+
+    <section class="workspace">
+      <aside class="panel catalog">
+        <h2>Профили</h2>
+        <div id="profileCatalog" class="catalog-list"></div>
+        <h2>Сервисы</h2>
+        <div id="serviceCatalog" class="service-list"></div>
+      </aside>
+
+      <section class="sensor-area">
+        <div class="section-head">
+          <h2>Сенсоры</h2>
+          <span id="statusLine"></span>
+        </div>
+        <div id="sensors"></div>
+      </section>
+    </section>
+  </main>
+
+  <template id="sensorTemplate">
+    <article class="sensor-card">
+      <div class="sensor-title">
+        <div>
+          <h3></h3>
+          <span class="profile-pill"></span>
+        </div>
+        <button class="danger remove-sensor" type="button">Удалить</button>
+      </div>
+
+      <div class="grid four">
+        <label>Имя
+          <input data-field="name" autocomplete="off">
+        </label>
+        <label>IP
+          <input data-field="host" autocomplete="off">
+        </label>
+        <label>Роль
+          <input data-field="role" autocomplete="off">
+        </label>
+        <label>Профиль
+          <select data-field="profile"></select>
+        </label>
+      </div>
+
+      <div class="subsection">
+        <h4>Сервисы-приманки</h4>
+        <div class="checks services"></div>
+      </div>
+
+      <div class="subsection">
+        <h4>Маскировка</h4>
+        <div class="grid five">
+          <label>Hostname
+            <input data-mask="hostname" autocomplete="off">
+          </label>
+          <label>OS
+            <input data-mask="os" autocomplete="off">
+          </label>
+          <label>Department
+            <input data-mask="department" autocomplete="off">
+          </label>
+          <label>Asset tag
+            <input data-mask="asset_tag" autocomplete="off">
+          </label>
+          <label>Notes
+            <input data-mask="notes" autocomplete="off">
+          </label>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <script src="/app.js"></script>
+</body>
+</html>
+

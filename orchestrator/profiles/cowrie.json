@@ -1,0 +1,7 @@
+{
+  "name": "cowrie",
+  "purpose": "SSH and Telnet honeypot for brute-force and interactive session capture.",
+  "fit": "Good profile for office or server segment sensors where SSH/Telnet attempts are expected.",
+  "log_strategy": "JSON/file outputs, forwarded by log-agent."
+}
+

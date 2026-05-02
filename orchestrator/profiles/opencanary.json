@@ -1,0 +1,7 @@
+{
+  "name": "opencanary",
+  "purpose": "Lightweight multi-service honeypot for DMZ and internal decoy nodes.",
+  "fit": "Good baseline profile for low-resource boards and broad service emulation.",
+  "log_strategy": "File or syslog output, forwarded by log-agent."
+}
+

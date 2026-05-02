@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.env
+logs/
+central-node/storage/events.jsonl
+sensors/*/logs/

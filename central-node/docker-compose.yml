@@ -1,0 +1,14 @@
+services:
+  central-node:
+    build:
+      context: ./ingest
+    container_name: early-detection-central
+    environment:
+      CENTRAL_BIND: 0.0.0.0
+      CENTRAL_PORT: 8080
+      EVENT_STORE: /data/events.jsonl
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./storage:/data
+    restart: unless-stopped

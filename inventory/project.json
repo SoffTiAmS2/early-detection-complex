@@ -1,0 +1,63 @@
+{
+  "network": {
+    "subnet": "192.168.10.0/24",
+    "gateway": "192.168.10.1",
+    "central_node": "192.168.10.2"
+  },
+  "sensors": [
+    {
+      "name": "sensor1",
+      "host": "192.168.10.11",
+      "role": "dmz",
+      "profile": "opencanary",
+      "services": [
+        "ssh",
+        "http",
+        "ftp",
+        "smtp"
+      ],
+      "mask": {
+        "hostname": "dmz-backup-gw",
+        "os": "Debian GNU/Linux 13",
+        "department": "DMZ",
+        "asset_tag": "DMZ-BAK-01",
+        "notes": "external-facing decoy node"
+      }
+    },
+    {
+      "name": "sensor2",
+      "host": "192.168.10.12",
+      "role": "office",
+      "profile": "cowrie",
+      "services": [
+        "ssh",
+        "telnet"
+      ],
+      "mask": {
+        "hostname": "office-filesrv-01",
+        "os": "Debian GNU/Linux 13",
+        "department": "Office",
+        "asset_tag": "OFF-FS-01",
+        "notes": "internal SSH/Telnet decoy"
+      }
+    },
+    {
+      "name": "sensor3",
+      "host": "192.168.10.13",
+      "role": "ot-mining",
+      "profile": "conpot",
+      "services": [
+        "http",
+        "modbus"
+      ],
+      "mask": {
+        "hostname": "mine-telemetry-gw",
+        "os": "Embedded Linux",
+        "department": "Mining operations",
+        "asset_tag": "OT-TEL-01",
+        "notes": "OT telemetry gateway decoy"
+      }
+    }
+  ]
+}
+

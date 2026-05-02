@@ -1,0 +1,8 @@
+all:
+  hosts:
+    sensor1:
+      ansible_host: 192.168.10.11
+    sensor2:
+      ansible_host: 192.168.10.12
+    sensor3:
+      ansible_host: 192.168.10.13

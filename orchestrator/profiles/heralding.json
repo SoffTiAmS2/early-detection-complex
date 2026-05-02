@@ -1,0 +1,7 @@
+{
+  "name": "heralding",
+  "purpose": "Credential-catching honeypot for multiple authentication protocols.",
+  "fit": "Good profile for measuring which protocols and credentials attackers try.",
+  "log_strategy": "CSV and JSON session logs, forwarded by log-agent."
+}
+

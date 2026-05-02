@@ -1,0 +1,412 @@
+"""Generate ready-to-run sensor configuration directories.
+
+The generator prefers inventory/project.json because it can store richer
+deception settings than the small Ansible-style sensors.yml file. If the JSON
+inventory is absent, the old YAML-like inventory is still supported as a
+fallback.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parent.parent
+SENSORS_DIR = ROOT / "sensors"
+INVENTORY_DIR = ROOT / "inventory"
+PROJECT_FILE = INVENTORY_DIR / "project.json"
+SAFE_SENSOR_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+SERVICE_CATALOG: dict[str, dict[str, Any]] = {
+    "ssh": {
+        "port": 2222,
+        "protocol": "ssh",
+        "banner": "SSH-2.0-OpenSSH_8.4",
+        "response": "Permission denied, please try again.\r\n",
+    },
+    "telnet": {
+        "port": 2323,
+        "protocol": "telnet",
+        "banner": "Debian GNU/Linux 13\r\nlogin: ",
+        "response": "Password: ",
+    },
+    "http": {
+        "port": 8081,
+        "protocol": "http",
+        "banner": "HTTP/1.1 200 OK\r\nServer: nginx/1.22.1\r\nContent-Type: text/plain\r\n\r\nservice online\r\n",
+        "response": "",
+    },
+    "ftp": {
+        "port": 2121,
+        "protocol": "ftp",
+        "banner": "220 fileserver FTP service ready\r\n",
+        "response": "530 Login incorrect.\r\n",
+    },
+    "smtp": {
+        "port": 2525,
+        "protocol": "smtp",
+        "banner": "220 mail-gw ESMTP Postfix\r\n",
+        "response": "250 OK\r\n",
+    },
+    "mysql": {
+        "port": 33060,
+        "protocol": "mysql",
+        "banner": "5.7.31-log MySQL Community Server\r\n",
+        "response": "",
+    },
+    "modbus": {
+        "port": 1502,
+        "protocol": "modbus",
+        "banner": "",
+        "response": "",
+    },
+    "printer": {
+        "port": 9100,
+        "protocol": "printer",
+        "banner": "HP JetDirect ready\r\n",
+        "response": "",
+    },
+}
+
+
+PROFILE_DEFAULTS: dict[str, dict[str, Any]] = {
+    "opencanary": {
+        "services": ["ssh", "http", "ftp", "smtp"],
+        "role": "dmz",
+        "description": "multi-service decoy profile",
+    },
+    "cowrie": {
+        "services": ["ssh", "telnet"],
+        "role": "office",
+        "description": "SSH/Telnet brute-force profile",
+    },
+    "heralding": {
+        "services": ["ssh", "telnet", "ftp", "smtp", "http"],
+        "role": "office",
+        "description": "credential-attempt collection profile",
+    },
+    "conpot": {
+        "services": ["http", "modbus"],
+        "role": "ot-mining",
+        "description": "OT/ICS mining operations profile",
+    },
+    "dionaea": {
+        "services": ["http", "ftp", "mysql"],
+        "role": "dmz",
+        "description": "network malware-touchpoint profile",
+    },
+    "honeytrap": {
+        "services": ["ssh", "http", "ftp", "printer"],
+        "role": "custom",
+        "description": "generic multi-service deception profile",
+    },
+}
+
+
+FALLBACK_PROJECT = {
+    "network": {
+        "subnet": "192.168.10.0/24",
+        "gateway": "192.168.10.1",
+        "central_node": "192.168.10.2",
+    },
+    "sensors": [
+        {
+            "name": "sensor1",
+            "host": "192.168.10.11",
+            "role": "dmz",
+            "profile": "opencanary",
+            "services": ["ssh", "http", "ftp", "smtp"],
+            "mask": {
+                "hostname": "dmz-backup-gw",
+                "os": "Debian GNU/Linux 13",
+                "department": "DMZ",
+                "asset_tag": "DMZ-BAK-01",
+            },
+        },
+        {
+            "name": "sensor2",
+            "host": "192.168.10.12",
+            "role": "office",
+            "profile": "cowrie",
+            "services": ["ssh", "telnet"],
+            "mask": {
+                "hostname": "office-filesrv-01",
+                "os": "Debian GNU/Linux 13",
+                "department": "Office",
+                "asset_tag": "OFF-FS-01",
+            },
+        },
+        {
+            "name": "sensor3",
+            "host": "192.168.10.13",
+            "role": "ot-mining",
+            "profile": "conpot",
+            "services": ["http", "modbus"],
+            "mask": {
+                "hostname": "mine-telemetry-gw",
+                "os": "Embedded Linux",
+                "department": "Mining operations",
+                "asset_tag": "OT-TEL-01",
+            },
+        },
+    ],
+}
+
+
+def read_project() -> dict[str, Any]:
+    """Load the rich project inventory or build a fallback from old files."""
+
+    if PROJECT_FILE.exists():
+        return json.loads(PROJECT_FILE.read_text(encoding="utf-8"))
+
+    project = json.loads(json.dumps(FALLBACK_PROJECT))
+    network_file = INVENTORY_DIR / "network.yml"
+    if network_file.exists():
+        text = network_file.read_text(encoding="utf-8")
+        for key in ("subnet", "gateway", "central_node"):
+            match = re.search(rf"{key}:\s*([0-9./]+)", text)
+            if match:
+                project["network"][key] = match.group(1)
+
+    sensors_file = INVENTORY_DIR / "sensors.yml"
+    if sensors_file.exists():
+        hosts = read_sensor_hosts(sensors_file)
+        for sensor in project["sensors"]:
+            if sensor["name"] in hosts:
+                sensor["host"] = hosts[sensor["name"]]
+    return project
+
+
+def read_sensor_hosts(path: Path) -> dict[str, str]:
+    """Read simple Ansible-style sensor host addresses."""
+
+    hosts: dict[str, str] = {}
+    current: str | None = None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        host_match = re.match(r"\s{4}([a-zA-Z0-9_-]+):\s*$", line)
+        if host_match:
+            current = host_match.group(1)
+            continue
+        address_match = re.match(r"\s+ansible_host:\s*([0-9.]+)\s*$", line)
+        if current and address_match:
+            hosts[current] = address_match.group(1)
+    return hosts
+
+
+def normalize_sensor(raw: dict[str, Any]) -> dict[str, Any]:
+    """Fill missing sensor fields from the selected profile defaults."""
+
+    profile = str(raw.get("profile", "opencanary"))
+    defaults = PROFILE_DEFAULTS.get(profile, PROFILE_DEFAULTS["opencanary"])
+    services = raw.get("services") or defaults["services"]
+    mask = raw.get("mask") or {}
+    name = str(raw.get("name", "sensor"))
+    if not SAFE_SENSOR_NAME.fullmatch(name):
+        raise ValueError(f"unsafe sensor name: {name!r}")
+    return {
+        "name": name,
+        "host": str(raw.get("host", "192.168.10.10")),
+        "role": str(raw.get("role", defaults["role"])),
+        "profile": profile,
+        "profile_description": defaults["description"],
+        "services": [str(item) for item in services],
+        "mask": {
+            "hostname": str(mask.get("hostname", name)),
+            "os": str(mask.get("os", "Debian GNU/Linux 13")),
+            "department": str(mask.get("department", "Lab")),
+            "asset_tag": str(mask.get("asset_tag", name.upper())),
+            "notes": str(mask.get("notes", "")),
+        },
+    }
+
+
+def build_services(sensor: dict[str, Any]) -> list[dict[str, Any]]:
+    """Create service definitions consumed by fake-services."""
+
+    services = []
+    mask = sensor["mask"]
+    for service_name in sensor["services"]:
+        base = SERVICE_CATALOG.get(service_name)
+        if not base:
+            continue
+        item = dict(base)
+        item["name"] = service_name
+        item["banner"] = str(item.get("banner", "")).format(**mask, sensor=sensor["name"])
+        item["response"] = str(item.get("response", "")).format(**mask, sensor=sensor["name"])
+        item["mask"] = mask
+        services.append(item)
+    return services
+
+
+def render_env(sensor: dict[str, Any], central_node: str) -> str:
+    """Render per-sensor environment variables."""
+
+    ports = ",".join(str(service["port"]) for service in build_services(sensor))
+    mask = sensor["mask"]
+    return f"""SENSOR_NAME={sensor['name']}
+SENSOR_HOST={sensor['host']}
+SENSOR_ROLE={sensor['role']}
+SENSOR_PROFILE={sensor['profile']}
+MASK_HOSTNAME={mask['hostname']}
+MASK_OS={mask['os']}
+MASK_DEPARTMENT={mask['department']}
+MASK_ASSET_TAG={mask['asset_tag']}
+CENTRAL_NODE_HOST={central_node}
+CENTRAL_URL=http://{central_node}:8080/api/events
+CENTRAL_HEALTH_URL=http://{central_node}:8080/health
+HONEYPOT_LOG_PATH=/logs/events.jsonl
+FAKE_SERVICE_CONFIG=/config/services.json
+FAKE_SERVICE_PORTS={ports}
+DISPLAY_INTERVAL=10
+"""
+
+
+def render_ports(services: list[dict[str, Any]]) -> str:
+    """Render compose port mappings."""
+
+    lines = [f'      - "{service["port"]}:{service["port"]}"' for service in services]
+    return "\n".join(lines) if lines else '      - "2222:2222"'
+
+
+def render_compose(sensor: dict[str, Any]) -> str:
+    """Render a compose file for one sensor."""
+
+    services = build_services(sensor)
+    return f"""services:
+  fake-services:
+    build:
+      context: ../../containers/fake-services
+    env_file:
+      - .env
+    ports:
+{render_ports(services)}
+    volumes:
+      - ./logs:/logs
+      - ./config:/config:ro
+    restart: unless-stopped
+
+  log-agent:
+    build:
+      context: ../../containers/log-agent
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/logs
+    depends_on:
+      - fake-services
+    restart: unless-stopped
+
+  display-agent:
+    build:
+      context: ../../containers/display-agent
+    env_file:
+      - .env
+    depends_on:
+      - log-agent
+    restart: unless-stopped
+"""
+
+
+def render_readme(sensor: dict[str, Any], central_node: str) -> str:
+    """Render human-readable notes for one generated sensor."""
+
+    services = build_services(sensor)
+    service_rows = "\n".join(
+        f"- `{item['name']}` on TCP `{item['port']}`: `{item.get('protocol', item['name'])}`"
+        for item in services
+    )
+    mask = sensor["mask"]
+    return f"""# {sensor['name']}
+
+## Назначение
+
+Сенсор `{sensor['name']}` предназначен для роли `{sensor['role']}` и использует профиль `{sensor['profile']}`.
+
+Профиль: {sensor['profile_description']}.
+
+## Сетевые параметры
+
+- IP сенсора: `{sensor['host']}`
+- Центральный узел: `{central_node}:8080`
+- Отправка событий: `http://{central_node}:8080/api/events`
+
+## Маскировка
+
+- Имя-легенда: `{mask['hostname']}`
+- ОС-легенда: `{mask['os']}`
+- Подразделение: `{mask['department']}`
+- Asset tag: `{mask['asset_tag']}`
+
+## Сервисы-приманки
+
+{service_rows}
+
+## Компоненты
+
+- `fake-services` - встроенный рабочий deception-слой с выбранными портами и баннерами.
+- `log-agent` - читает локальный файл событий и отправляет их на центральный узел.
+- `display-agent` - показывает статус сенсора и связь с центральным узлом.
+
+## Запуск
+
+```sh
+docker compose up -d --build
+docker compose ps
+```
+
+## Проверка
+
+```sh
+docker compose logs --tail=50
+```
+"""
+
+
+def write_legacy_inventory(project: dict[str, Any]) -> None:
+    """Keep old inventory files in sync for simple scripts and thesis notes."""
+
+    network = project["network"]
+    (INVENTORY_DIR / "network.yml").write_text(
+        "network:\n"
+        f"  subnet: {network['subnet']}\n"
+        f"  gateway: {network['gateway']}\n"
+        f"  central_node: {network['central_node']}\n",
+        encoding="utf-8",
+    )
+
+    lines = ["all:", "  hosts:"]
+    for raw in project["sensors"]:
+        sensor = normalize_sensor(raw)
+        lines.append(f"    {sensor['name']}:")
+        lines.append(f"      ansible_host: {sensor['host']}")
+    (INVENTORY_DIR / "sensors.yml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    project = read_project()
+    central_node = str(project["network"]["central_node"])
+    write_legacy_inventory(project)
+
+    for raw_sensor in project["sensors"]:
+        sensor = normalize_sensor(raw_sensor)
+        sensor_dir = SENSORS_DIR / sensor["name"]
+        config_dir = sensor_dir / "config"
+        sensor_dir.mkdir(parents=True, exist_ok=True)
+        config_dir.mkdir(parents=True, exist_ok=True)
+
+        services = build_services(sensor)
+        (sensor_dir / "README.md").write_text(render_readme(sensor, central_node), encoding="utf-8")
+        (sensor_dir / ".env").write_text(render_env(sensor, central_node), encoding="utf-8")
+        (sensor_dir / "docker-compose.yml").write_text(render_compose(sensor), encoding="utf-8")
+        (config_dir / "services.json").write_text(
+            json.dumps({"services": services}, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+
+if __name__ == "__main__":
+    main()
