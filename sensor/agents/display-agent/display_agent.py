@@ -23,7 +23,7 @@ def render_console(line1: str, line2: str) -> None:
 
 def main() -> None:
     sensor = os.getenv("SENSOR_NAME", "sensor-unknown")
-    profile = os.getenv("SENSOR_PROFILE", "fake-services")
+    profile = os.getenv("SENSOR_PROFILE", "cowrie")
     health_url = os.getenv("CENTRAL_HEALTH_URL", "http://central-node:8080/health")
     interval = float(os.getenv("DISPLAY_INTERVAL", "10"))
 
@@ -43,4 +43,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

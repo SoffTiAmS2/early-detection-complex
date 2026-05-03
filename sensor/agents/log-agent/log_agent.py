@@ -28,10 +28,10 @@ def post_json(url: str, payload: dict[str, Any], timeout: int = 5) -> bool:
 
 def enrich_event(event: dict[str, Any]) -> dict[str, Any]:
     event.setdefault("timestamp", now_ts())
-    event.setdefault("type", "honeypot_event")
+    event.setdefault("type", event.get("eventid", "honeypot_event"))
     event["sensor"] = os.getenv("SENSOR_NAME", "sensor-unknown")
     event["role"] = os.getenv("SENSOR_ROLE", "unknown")
-    event["profile"] = os.getenv("SENSOR_PROFILE", "fake-services")
+    event["profile"] = os.getenv("SENSOR_PROFILE", "cowrie")
     return event
 
 

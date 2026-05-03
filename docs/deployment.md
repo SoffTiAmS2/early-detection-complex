@@ -41,7 +41,7 @@ http://<central>:8080/api/events # события collector
 
 - генерирует `sensors/<sensor>/`;
 - ставит Docker/Compose на плату;
-- копирует контейнеры и конфигурацию;
+- копирует agents, Cowrie-конфигурацию и compose;
 - запускает `docker compose up -d --build` на сенсоре.
 
 ## Генерация Для Отладки
@@ -54,7 +54,7 @@ scripts/generate_sensor.sh
 
 - `sensors/<sensor>/.env`;
 - `sensors/<sensor>/docker-compose.yml`;
-- `sensors/<sensor>/config/services.json`;
+- `sensors/<sensor>/cowrie/etc/cowrie.cfg`;
 
 Эти файлы не хранятся в git.
 
@@ -71,7 +71,7 @@ curl http://127.0.0.1:8080/api/sensors | python3 -m json.tool
 
 ```sh
 printf 'admin\r\n' | nc -w 2 <sensor-ip> 2222
-printf 'GET /admin HTTP/1.0\r\n\r\n' | nc -w 2 <sensor-ip> 8081
+printf 'admin\r\n' | nc -w 2 <sensor-ip> 2223
 ```
 
 События проверяются через API:

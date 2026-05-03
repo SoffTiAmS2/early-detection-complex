@@ -10,7 +10,7 @@ COPY center/honeypots /app/center/honeypots
 COPY center/manager /app/center/manager
 COPY center/orchestrator /app/center/orchestrator
 COPY config /app/config
-COPY sensor/containers /app/sensor/containers
+COPY sensor/agents /app/sensor/agents
 
 EXPOSE 8090
 CMD ["python", "center/manager/backend/server.py", "--host", "0.0.0.0", "--port", "8090"]

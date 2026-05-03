@@ -350,7 +350,8 @@ select:focus {
 }
 
 .check {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 92px;
   align-items: center;
   gap: 8px;
   border: 1px solid var(--line);
@@ -362,6 +363,11 @@ select:focus {
 
 .check input {
   width: auto;
+}
+
+.check .port-input {
+  width: 92px;
+  padding: 6px 7px;
 }
 
 .check small {

@@ -8,7 +8,7 @@
 
 ```text
 center/              # collector, web-консоль, генератор, Ansible и Docker Compose stack центра
-sensor/              # контейнеры, которые устанавливаются на сенсорную плату
+sensor/              # агенты сенсора: доставка логов и локальный статус
 config/              # tracked-конфигурация проекта
 scripts/             # запуск центра и dev helpers
 docs/                # вспомогательная документация
@@ -59,9 +59,9 @@ http://<central-ip>:8080/api/events # события collector
 - `center/manager/backend/server.py` обслуживает web-консоль, job-статусы и Ansible-деплой.
 - `center/orchestrator/generate.py` читает `config/project.json` и создает локальные `sensors/<name>/`.
 - `center/ansible/deploy_sensor.yml` устанавливает/обновляет выбранный сенсор по SSH.
-- `sensor/containers/fake-services` открывает TCP-порты-приманки и пишет события.
-- `sensor/containers/log-agent` доставляет события в центр.
-- `sensor/containers/display-agent` показывает локальный статус сенсора.
+- `cowrie/cowrie:latest` запускается на сенсоре как настоящий Cowrie honeypot.
+- `sensor/agents/log-agent` доставляет JSON-события Cowrie в центр.
+- `sensor/agents/display-agent` показывает локальный статус сенсора.
 
 ## Конфигурация
 
@@ -76,7 +76,7 @@ config/project.json
 - сеть и IP центрального узла;
 - список сенсоров;
 - роль сенсора;
-- дерево honeypot: `opencanary`, `cowrie`, `heralding`, `conpot`, `dionaea`, `honeytrap`;
+- honeypot: сейчас реально поддержан `cowrie`;
 - сервисы и настройки внутри каждого выбранного honeypot;
 - маскировка: hostname, OS, department, asset tag, notes.
 
@@ -99,7 +99,7 @@ curl http://127.0.0.1:8080/api/sensors | python3 -m json.tool
 
 ```sh
 printf 'admin\r\n' | nc -w 2 <sensor-ip> 2222
-printf 'GET /admin HTTP/1.0\r\n\r\n' | nc -w 2 <sensor-ip> 8081
+printf 'admin\r\n' | nc -w 2 <sensor-ip> 2223
 ```
 
 События должны появиться в:

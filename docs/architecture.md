@@ -7,17 +7,17 @@
 - `center/collector` - прием, хранение и просмотр событий.
 - `center/manager` - web-консоль управления, генерации конфигураций и SSH-деплоя сенсоров.
 - `center/ansible` - установка или обновление сенсорной платы с центрального узла.
-- `sensor` - плата или VM с контейнерами deception-сервисов.
+- `sensor` - плата или VM с Cowrie и агентами доставки событий.
 - `log-agent` - доставка событий с сенсора в центр.
 - `display-agent` - локальный статус сенсора.
-- `fake-services` - встроенный тестовый honeypot, который позволяет проверить стенд до подключения реальных honeypot-контейнеров.
+- `cowrie` - настоящий open-source SSH/Telnet honeypot на сенсоре.
 
 ## Поток события
 
 ```mermaid
 sequenceDiagram
     participant A as Attacker
-    participant H as Honeypot/Fake service
+    participant H as Cowrie
     participant L as Log Agent
     participant C as Central Node
     participant S as Storage

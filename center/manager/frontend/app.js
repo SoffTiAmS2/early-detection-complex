@@ -41,35 +41,51 @@ function defaultHoneypot(type) {
 
 function ensureSensorShape(sensor) {
   if (!Array.isArray(sensor.honeypots) || !sensor.honeypots.length) {
-    const type = state.catalog.honeypots[sensor.profile] ? sensor.profile : "opencanary";
+    const type = state.catalog.honeypots[sensor.profile] ? sensor.profile : "cowrie";
     const honeypot = defaultHoneypot(type);
     if (Array.isArray(sensor.services)) {
       const allowed = new Set(state.catalog.honeypots[type].services);
-      honeypot.services = sensor.services.filter((service) => allowed.has(service));
+      honeypot.services = sensor.services
+        .map((service) => normalizeServiceForUi(service, type))
+        .filter((service) => service && allowed.has(service.name));
     }
     sensor.honeypots = [honeypot];
   }
   sensor.honeypots.forEach((honeypot) => {
-    const catalog = state.catalog.honeypots[honeypot.type] || state.catalog.honeypots.opencanary;
-    honeypot.type = catalog === state.catalog.honeypots[honeypot.type] ? honeypot.type : "opencanary";
+    const catalog = state.catalog.honeypots[honeypot.type] || state.catalog.honeypots.cowrie;
+    honeypot.type = catalog === state.catalog.honeypots[honeypot.type] ? honeypot.type : "cowrie";
     honeypot.enabled = honeypot.enabled !== false;
-    honeypot.services = Array.isArray(honeypot.services) ? honeypot.services.filter((service) => catalog.services.includes(service)) : [];
-    if (!honeypot.services.length) honeypot.services = [...catalog.default_services];
+    honeypot.services = Array.isArray(honeypot.services)
+      ? honeypot.services.map((service) => normalizeServiceForUi(service, honeypot.type)).filter((service) => service && catalog.services.includes(service.name))
+      : [];
+    if (!honeypot.services.length) {
+      honeypot.services = catalog.default_services.map((service) => normalizeServiceForUi(service, honeypot.type));
+    }
     honeypot.settings = { ...defaultSettings(honeypot.type), ...(honeypot.settings || {}) };
   });
   syncLegacyFields(sensor);
 }
 
+function normalizeServiceForUi(raw, type) {
+  const name = typeof raw === "string" ? raw : raw?.name;
+  if (!name || !state.catalog.services[name] || !state.catalog.honeypots[type].services.includes(name)) return null;
+  return {
+    name,
+    enabled: typeof raw === "object" ? raw.enabled !== false : true,
+    host_port: Number(raw?.host_port || state.catalog.services[name].default_host_port),
+  };
+}
+
 function syncLegacyFields(sensor) {
   const enabled = sensor.honeypots.filter((honeypot) => honeypot.enabled);
-  const primary = enabled[0] || sensor.honeypots[0] || defaultHoneypot("opencanary");
+  const primary = enabled[0] || sensor.honeypots[0] || defaultHoneypot("cowrie");
   sensor.profile = primary.type;
-  sensor.services = [...new Set(enabled.flatMap((honeypot) => honeypot.services))];
+  sensor.services = [...new Set(enabled.flatMap((honeypot) => honeypot.services.filter((service) => service.enabled).map((service) => service.name)))];
   if (!sensor.role) sensor.role = state.catalog.honeypots[primary.type].role;
 }
 
 function sensorDefaults(index = 1) {
-  const type = "opencanary";
+  const type = "cowrie";
   return {
     name: `sensor${index}`,
     host: `192.168.10.${10 + index}`,
@@ -265,7 +281,7 @@ function renderHoneypotTree(node, sensor) {
     });
     $(".remove-honeypot", item).addEventListener("click", () => {
       sensor.honeypots.splice(index, 1);
-      if (!sensor.honeypots.length) sensor.honeypots.push(defaultHoneypot("opencanary"));
+      if (!sensor.honeypots.length) sensor.honeypots.push(defaultHoneypot("cowrie"));
       syncLegacyFields(sensor);
       renderSensors();
     });
@@ -281,17 +297,37 @@ function renderHoneypotServices(root, sensor, honeypot) {
   box.innerHTML = "";
   catalog.services.forEach((service) => {
     const serviceInfo = state.catalog.services[service];
+    const current = honeypot.services.find((item) => item.name === service) || {
+      name: service,
+      enabled: false,
+      host_port: serviceInfo.default_host_port,
+    };
     const label = document.createElement("label");
     label.className = "check";
-    const checked = honeypot.services.includes(service) ? "checked" : "";
-    label.innerHTML = `<input type="checkbox" value="${service}" ${checked}><span>${serviceInfo.title}<small>${serviceInfo.protocol}</small></span>`;
-    $("input", label).addEventListener("change", (event) => {
-      if (event.target.checked && !honeypot.services.includes(service)) {
-        honeypot.services.push(service);
+    label.innerHTML = `
+      <input type="checkbox" value="${service}" ${current.enabled ? "checked" : ""}>
+      <span>${serviceInfo.title}<small>${serviceInfo.protocol} container:${serviceInfo.container_port}</small></span>
+      <input class="port-input" type="number" min="1" max="65535" value="${current.host_port}" aria-label="${serviceInfo.title} host port">
+    `;
+    const checkbox = $("input[type='checkbox']", label);
+    const port = $(".port-input", label);
+    checkbox.addEventListener("change", () => {
+      let item = honeypot.services.find((entry) => entry.name === service);
+      if (!item) {
+        item = { name: service, enabled: true, host_port: serviceInfo.default_host_port };
+        honeypot.services.push(item);
       }
-      if (!event.target.checked) {
-        honeypot.services = honeypot.services.filter((item) => item !== service);
+      item.enabled = checkbox.checked;
+      item.host_port = Number(port.value || serviceInfo.default_host_port);
+      syncLegacyFields(sensor);
+    });
+    port.addEventListener("input", () => {
+      let item = honeypot.services.find((entry) => entry.name === service);
+      if (!item) {
+        item = { name: service, enabled: checkbox.checked, host_port: serviceInfo.default_host_port };
+        honeypot.services.push(item);
       }
+      item.host_port = Number(port.value || serviceInfo.default_host_port);
       syncLegacyFields(sensor);
     });
     box.append(label);

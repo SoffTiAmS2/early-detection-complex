@@ -203,37 +203,36 @@
 
 - `sensors/<name>/.env`;
 - `sensors/<name>/docker-compose.yml`;
-- `sensors/<name>/config/services.json`;
+- `sensors/<name>/cowrie/etc/cowrie.cfg`;
 - `sensors/<name>/README.md`;
 - ignored `config/network.yml` и `config/sensors.yml` для совместимости.
 
 ## Sensor Runtime
 
-### `fake-services`
+### `cowrie`
 
-Файл: `sensor/containers/fake-services/fake_service.py`
+Образ: `cowrie/cowrie:latest`
 
 Ввод:
 
-- `FAKE_SERVICE_CONFIG=/config/services.json`;
-- `HONEYPOT_LOG_PATH=/logs/events.jsonl`.
+- `cowrie/etc/cowrie.cfg`;
+- host-port mappings из `docker-compose.yml`.
 
 Что делает:
 
-- открывает выбранные TCP-сервисы;
-- отправляет баннер;
-- читает первый payload;
-- пишет событие в локальный JSONL.
+- запускает настоящий Cowrie SSH/Telnet honeypot;
+- пишет JSON-события в `logs/cowrie.json`;
+- сохраняет скачанные артефакты в `cowrie/downloads`.
 
-Вывод: `/logs/events.jsonl`.
+Вывод: `logs/cowrie.json`.
 
 ### `log-agent`
 
-Файл: `sensor/containers/log-agent/log_agent.py`
+Файл: `sensor/agents/log-agent/log_agent.py`
 
 Ввод:
 
-- `/logs/events.jsonl`;
+- `/logs/cowrie.json`;
 - `CENTRAL_URL=http://<center>:8080/api/events`.
 
 Что делает:
@@ -247,7 +246,7 @@
 
 ### `display-agent`
 
-Файл: `sensor/containers/display-agent/display_agent.py`
+Файл: `sensor/agents/display-agent/display_agent.py`
 
 Ввод:
 

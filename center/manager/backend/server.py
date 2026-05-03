@@ -28,7 +28,14 @@ ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from center.honeypots.catalog import HONEYPOT_CATALOG, SERVICE_CATALOG, catalog_payload, default_settings, legacy_honeypot
+from center.honeypots.catalog import (
+    HONEYPOT_CATALOG,
+    SERVICE_CATALOG,
+    catalog_payload,
+    default_settings,
+    legacy_honeypot,
+    normalize_service,
+)
 
 FRONTEND_DIR = ROOT / "center" / "manager" / "frontend"
 PROJECT_FILE = ROOT / "config" / "project.json"
@@ -97,17 +104,22 @@ def validate_project(project: Any) -> tuple[bool, str]:
                 return False, f"unsupported honeypot: {honeypot_type}"
             if not isinstance(honeypot.get("services"), list):
                 return False, f"{honeypot_type} services must be a list"
-            allowed_services = set(HONEYPOT_CATALOG[honeypot_type]["services"])
-            for service in honeypot["services"]:
-                if not isinstance(service, str):
-                    return False, "honeypot service must be a string"
-                if service not in allowed_services or service not in SERVICE_CATALOG:
-                    return False, f"unsupported service for {honeypot_type}: {service}"
-                if honeypot.get("enabled", True):
-                    port = int(SERVICE_CATALOG[service]["port"])
+            for raw_service in honeypot["services"]:
+                if isinstance(raw_service, dict) and "host_port" in raw_service:
+                    try:
+                        int(raw_service["host_port"])
+                    except (TypeError, ValueError):
+                        return False, f"host_port must be an integer for {honeypot_type}:{raw_service.get('name')}"
+                service = normalize_service(raw_service, str(honeypot_type))
+                if not service:
+                    return False, f"unsupported service for {honeypot_type}: {raw_service}"
+                if not 1 <= service["host_port"] <= 65535:
+                    return False, f"invalid host port for {honeypot_type}:{service['name']}"
+                if honeypot.get("enabled", True) and service["enabled"]:
+                    port = service["host_port"]
                     if port in used_ports:
-                        return False, f"port conflict: {honeypot_type}:{service} and {used_ports[port]} both use tcp/{port}"
-                    used_ports[port] = f"{honeypot_type}:{service}"
+                        return False, f"port conflict: {honeypot_type}:{service['name']} and {used_ports[port]} both use tcp/{port}"
+                    used_ports[port] = f"{honeypot_type}:{service['name']}"
             settings = honeypot.setdefault("settings", {})
             if not isinstance(settings, dict):
                 return False, f"{honeypot_type} settings must be an object"
