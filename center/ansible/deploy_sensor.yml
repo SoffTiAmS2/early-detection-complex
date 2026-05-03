@@ -56,10 +56,11 @@
         mode: "0755"
       loop:
         - "{{ remote_root }}"
-        - "{{ remote_root }}/containers"
-        - "{{ remote_root }}/containers/fake-services"
-        - "{{ remote_root }}/containers/log-agent"
-        - "{{ remote_root }}/containers/display-agent"
+        - "{{ remote_root }}/sensor"
+        - "{{ remote_root }}/sensor/containers"
+        - "{{ remote_root }}/sensor/containers/fake-services"
+        - "{{ remote_root }}/sensor/containers/log-agent"
+        - "{{ remote_root }}/sensor/containers/display-agent"
         - "{{ remote_root }}/sensors"
         - "{{ remote_root }}/sensors/{{ target_sensor }}"
         - "{{ remote_root }}/sensors/{{ target_sensor }}/config"
@@ -71,12 +72,12 @@
         dest: "{{ remote_root }}/{{ item }}"
         mode: preserve
       loop:
-        - containers/fake-services/Dockerfile
-        - containers/fake-services/fake_service.py
-        - containers/log-agent/Dockerfile
-        - containers/log-agent/log_agent.py
-        - containers/display-agent/Dockerfile
-        - containers/display-agent/display_agent.py
+        - sensor/containers/fake-services/Dockerfile
+        - sensor/containers/fake-services/fake_service.py
+        - sensor/containers/log-agent/Dockerfile
+        - sensor/containers/log-agent/log_agent.py
+        - sensor/containers/display-agent/Dockerfile
+        - sensor/containers/display-agent/display_agent.py
 
     - name: Copy generated sensor files
       ansible.builtin.copy:

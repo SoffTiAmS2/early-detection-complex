@@ -210,7 +210,7 @@ class CentralHandler(BaseHTTPRequestHandler):
         self._send_json({"status": "accepted"}, HTTPStatus.ACCEPTED)
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        print(f"central-node: {self.address_string()} - {fmt % args}")
+        print(f"collector: {self.address_string()} - {fmt % args}")
 
 
 def parse_args() -> argparse.Namespace:
@@ -225,7 +225,7 @@ def main() -> None:
     args = parse_args()
     CentralHandler.store = args.store
     server = ThreadingHTTPServer((args.host, args.port), CentralHandler)
-    print(f"central-node: listening on http://{args.host}:{args.port}, store={args.store}")
+    print(f"collector: listening on http://{args.host}:{args.port}, store={args.store}")
     server.serve_forever()
 
 

@@ -9,4 +9,4 @@ HOST=${MANAGER_HOST:-127.0.0.1}
 PORT=${MANAGER_PORT:-8090}
 
 cd "$PROJECT_ROOT"
-python3 manager/backend/server.py --host "$HOST" --port "$PORT"
+python3 center/manager/backend/server.py --host "$HOST" --port "$PORT"

@@ -7,9 +7,15 @@ import json
 import mimetypes
 import os
 import re
+import signal
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
+import urllib.error
+import urllib.request
+import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -17,11 +23,13 @@ from typing import Any
 from urllib.parse import urlparse
 
 
-ROOT = Path(__file__).resolve().parents[2]
-FRONTEND_DIR = ROOT / "manager" / "frontend"
-PROJECT_FILE = ROOT / "inventory" / "project.json"
-GENERATOR = ROOT / "orchestrator" / "generate.py"
-DEPLOY_PLAYBOOK = ROOT / "ansible" / "deploy_sensor.yml"
+ROOT = Path(__file__).resolve().parents[3]
+FRONTEND_DIR = ROOT / "center" / "manager" / "frontend"
+PROJECT_FILE = ROOT / "config" / "project.json"
+GENERATOR = ROOT / "center" / "orchestrator" / "generate.py"
+DEPLOY_PLAYBOOK = ROOT / "center" / "ansible" / "deploy_sensor.yml"
+JOB_LOCK = threading.Lock()
+JOBS: dict[str, dict[str, Any]] = {}
 
 PROFILES = {
     "opencanary": {
@@ -146,6 +154,36 @@ def run_generator() -> dict[str, Any]:
     }
 
 
+def now_ts() -> float:
+    return time.time()
+
+
+def update_job(job_id: str, **changes: Any) -> None:
+    with JOB_LOCK:
+        job = JOBS.get(job_id)
+        if job:
+            job.update(changes)
+
+
+def append_job_output(job_id: str, line: str) -> None:
+    with JOB_LOCK:
+        job = JOBS.get(job_id)
+        if not job:
+            return
+        output = job.setdefault("output", [])
+        output.append(line.rstrip())
+        if len(output) > 400:
+            del output[:-400]
+        if line.startswith("TASK ["):
+            task = line.removeprefix("TASK [").split("]", 1)[0]
+            job["step"] = task
+            job["progress"] = min(int(job.get("progress", 10)) + 6, 92)
+
+
+def public_job(job: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in job.items() if key not in {"process"}}
+
+
 def read_json_body(handler: BaseHTTPRequestHandler) -> tuple[Any | None, str | None]:
     try:
         length = int(handler.headers.get("Content-Length", "0"))
@@ -193,7 +231,7 @@ def validate_deploy_request(payload: Any) -> tuple[dict[str, Any] | None, str | 
     }, None
 
 
-def run_sensor_deploy(payload: dict[str, Any]) -> dict[str, Any]:
+def run_sensor_deploy(payload: dict[str, Any], job_id: str | None = None) -> dict[str, Any]:
     if not DEPLOY_PLAYBOOK.exists():
         return {"ok": False, "returncode": 1, "stdout": "", "stderr": f"missing playbook: {DEPLOY_PLAYBOOK}"}
     ansible_playbook = shutil.which("ansible-playbook")
@@ -215,6 +253,8 @@ def run_sensor_deploy(payload: dict[str, Any]) -> dict[str, Any]:
     generated = run_generator()
     if not generated["ok"]:
         return generated
+    if job_id:
+        update_job(job_id, step="configuration generated", progress=12)
 
     with tempfile.TemporaryDirectory(prefix="edc-ansible-") as tmp:
         tmp_path = Path(tmp)
@@ -238,28 +278,143 @@ def run_sensor_deploy(payload: dict[str, Any]) -> dict[str, Any]:
         extra_vars.write_text(json.dumps(vars_payload, ensure_ascii=False), encoding="utf-8")
         extra_vars.chmod(0o600)
 
+        command = [ansible_playbook, "-i", str(inventory), str(DEPLOY_PLAYBOOK), "--extra-vars", f"@{extra_vars}"]
         try:
-            result = subprocess.run(
-                [ansible_playbook, "-i", str(inventory), str(DEPLOY_PLAYBOOK), "--extra-vars", f"@{extra_vars}"],
+            process = subprocess.Popen(
+                command,
                 cwd=ROOT,
                 text=True,
-                capture_output=True,
-                check=False,
-                timeout=1800,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
                 env={**os.environ, "ANSIBLE_HOST_KEY_CHECKING": "False"},
             )
-        except subprocess.TimeoutExpired as exc:
+            if job_id:
+                update_job(job_id, process=process, step="ansible started", progress=15)
+
+            lines: list[str] = []
+            assert process.stdout is not None
+            deadline = now_ts() + 1800
+            while True:
+                if job_id:
+                    with JOB_LOCK:
+                        cancelled = bool(JOBS.get(job_id, {}).get("cancel_requested"))
+                    if cancelled and process.poll() is None:
+                        os.killpg(process.pid, signal.SIGTERM)
+                        update_job(job_id, status="cancelled", step="cancelled", finished_at=now_ts(), progress=100)
+                        return {"ok": False, "returncode": 130, "stdout": "\n".join(lines), "stderr": "deployment cancelled"}
+
+                line = process.stdout.readline()
+                if line:
+                    lines.append(line.rstrip())
+                    if job_id:
+                        append_job_output(job_id, line)
+                    continue
+
+                returncode = process.poll()
+                if returncode is not None:
+                    stdout = "\n".join(lines)
+                    return {"ok": returncode == 0, "returncode": returncode, "stdout": stdout, "stderr": ""}
+
+                if now_ts() > deadline:
+                    os.killpg(process.pid, signal.SIGTERM)
+                    return {"ok": False, "returncode": 124, "stdout": "\n".join(lines), "stderr": "sensor deploy timed out"}
+                time.sleep(0.2)
+        except Exception as exc:
             return {
                 "ok": False,
-                "returncode": 124,
-                "stdout": exc.stdout or "",
-                "stderr": "sensor deploy timed out",
+                "returncode": 1,
+                "stdout": "",
+                "stderr": str(exc),
             }
+
+
+def run_deploy_job(job_id: str, deploy_request: dict[str, Any]) -> None:
+    update_job(job_id, status="running", step="starting", started_at=now_ts(), progress=5)
+    result = run_sensor_deploy(deploy_request, job_id=job_id)
+    status = "succeeded" if result["ok"] else "failed"
+    with JOB_LOCK:
+        job = JOBS.get(job_id)
+        if job and job.get("status") == "cancelled":
+            return
+    update_job(
+        job_id,
+        status=status,
+        step="done" if result["ok"] else "failed",
+        finished_at=now_ts(),
+        progress=100,
+        result=result,
+    )
+
+
+def start_deploy_job(deploy_request: dict[str, Any]) -> dict[str, Any]:
+    job_id = uuid.uuid4().hex
+    job = {
+        "id": job_id,
+        "type": "deploy-sensor",
+        "sensor": deploy_request["sensor"],
+        "ssh_host": deploy_request["ssh_host"],
+        "status": "queued",
+        "step": "queued",
+        "progress": 0,
+        "created_at": now_ts(),
+        "output": [],
+        "cancel_requested": False,
+    }
+    with JOB_LOCK:
+        JOBS[job_id] = job
+    thread = threading.Thread(target=run_deploy_job, args=(job_id, deploy_request), daemon=True)
+    thread.start()
+    return public_job(job)
+
+
+def get_jobs() -> list[dict[str, Any]]:
+    with JOB_LOCK:
+        return [public_job(job) for job in sorted(JOBS.values(), key=lambda item: item["created_at"], reverse=True)]
+
+
+def get_job(job_id: str) -> dict[str, Any] | None:
+    with JOB_LOCK:
+        job = JOBS.get(job_id)
+        return public_job(job) if job else None
+
+
+def cancel_job(job_id: str) -> bool:
+    with JOB_LOCK:
+        job = JOBS.get(job_id)
+        if not job:
+            return False
+        job["cancel_requested"] = True
+        process = job.get("process")
+        if process and process.poll() is None:
+            os.killpg(process.pid, signal.SIGTERM)
+        job["status"] = "cancelled"
+        job["step"] = "cancelled"
+        job["finished_at"] = now_ts()
+        job["progress"] = 100
+        return True
+
+
+def fetch_json(url: str, timeout: int = 5) -> tuple[Any | None, str | None]:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8")), None
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
+        return None, str(exc)
+
+
+def central_status() -> dict[str, Any]:
+    project = read_project()
+    central_host = project["network"]["central_node"]
+    base = os.getenv("CENTRAL_API_BASE", f"http://{central_host}:8080").rstrip("/")
+    health, health_error = fetch_json(f"{base}/health")
+    sensors, sensors_error = fetch_json(f"{base}/api/sensors")
     return {
-        "ok": result.returncode == 0,
-        "returncode": result.returncode,
-        "stdout": result.stdout,
-        "stderr": result.stderr,
+        "central_url": base,
+        "collector": health,
+        "collector_error": health_error,
+        "sensors": (sensors or {}).get("sensors", []) if isinstance(sensors, dict) else [],
+        "sensors_error": sensors_error,
     }
 
 
@@ -297,7 +452,21 @@ class ManagerHandler(BaseHTTPRequestHandler):
             self._send_json({"profiles": PROFILES, "services": SERVICES})
             return
         if parsed.path == "/api/health":
-            self._send_json({"status": "ok", "project": str(PROJECT_FILE)})
+            self._send_json({"status": "ok", "project": str(PROJECT_FILE), "jobs": get_jobs()[:5]})
+            return
+        if parsed.path == "/api/center/status":
+            self._send_json(central_status())
+            return
+        if parsed.path == "/api/jobs":
+            self._send_json({"jobs": get_jobs()})
+            return
+        if parsed.path.startswith("/api/jobs/"):
+            job_id = parsed.path.rsplit("/", 1)[-1]
+            job = get_job(job_id)
+            if not job:
+                self._send_json({"error": "job not found"}, HTTPStatus.NOT_FOUND)
+                return
+            self._send_json(job)
             return
 
         relative = "index.html" if parsed.path in ("", "/") else parsed.path.lstrip("/")
@@ -335,9 +504,15 @@ class ManagerHandler(BaseHTTPRequestHandler):
             if error:
                 self._send_json({"error": error}, HTTPStatus.BAD_REQUEST)
                 return
-            result = run_sensor_deploy(deploy_request)
-            status = HTTPStatus.OK if result["ok"] else HTTPStatus.INTERNAL_SERVER_ERROR
-            self._send_json(result, status)
+            job = start_deploy_job(deploy_request)
+            self._send_json({"status": "started", "job": job}, HTTPStatus.ACCEPTED)
+            return
+        if path.startswith("/api/jobs/") and path.endswith("/cancel"):
+            job_id = path.split("/")[-2]
+            if not cancel_job(job_id):
+                self._send_json({"error": "job not found"}, HTTPStatus.NOT_FOUND)
+                return
+            self._send_json({"status": "cancelled", "job": get_job(job_id)})
             return
         else:
             self._send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)

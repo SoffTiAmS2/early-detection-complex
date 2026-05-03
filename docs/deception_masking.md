@@ -15,7 +15,7 @@
 
 ## Как это сделано здесь
 
-Файл `inventory/project.json` хранит выбранную легенду:
+Файл `config/project.json` хранит выбранную легенду:
 
 - `profile` - общий тип honeypot-профиля;
 - `services` - какие сервисы открыть;
@@ -24,7 +24,7 @@
 - `mask.department` - контекст размещения;
 - `mask.asset_tag` - инвентарная метка.
 
-Web-консоль позволяет выбрать эти параметры. После этого `orchestrator/generate.py` создает ignored-артефакты:
+Web-консоль позволяет выбрать эти параметры. После этого `center/orchestrator/generate.py` создает ignored-артефакты:
 
 - `.env`;
 - `docker-compose.yml`;

@@ -13,6 +13,7 @@
       <p>Конфигуратор сенсоров, профилей и deception-маскировки</p>
     </div>
     <div class="actions">
+      <button id="refreshStatus" type="button">Обновить статус</button>
       <button id="addSensor" type="button">Добавить сенсор</button>
       <button id="saveProject" type="button">Сохранить</button>
       <button id="generateProject" type="button" class="primary">Сгенерировать</button>
@@ -33,6 +34,21 @@
           <input id="centralNode" name="central_node" autocomplete="off">
         </label>
       </div>
+    </section>
+
+    <section class="status-grid">
+      <article class="panel status-panel">
+        <h2>Центр</h2>
+        <div id="centerStatus" class="status-line">Проверка...</div>
+      </article>
+      <article class="panel status-panel">
+        <h2>Статус сенсоров</h2>
+        <div id="runtimeSensors"></div>
+      </article>
+      <article class="panel status-panel">
+        <h2>Установки</h2>
+        <div id="jobs"></div>
+      </article>
     </section>
 
     <section class="workspace">
@@ -125,8 +141,10 @@
         </div>
         <div class="deploy-actions">
           <button class="primary deploy-sensor" type="button">Установить/обновить</button>
+          <button class="danger cancel-deploy" type="button" hidden>Отменить</button>
           <span class="deploy-status"></span>
         </div>
+        <div class="progress" hidden><span></span></div>
         <pre class="deploy-output" hidden></pre>
       </div>
     </article>

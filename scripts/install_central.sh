@@ -10,7 +10,7 @@ sudo apt install -y docker.io curl
 sudo apt install -y docker-compose-plugin || sudo apt install -y docker-compose
 sudo systemctl enable --now docker
 
-cd "$PROJECT_ROOT/central-node"
+cd "$PROJECT_ROOT/center"
 if sudo docker compose version >/dev/null 2>&1; then
   sudo docker compose up -d --build
   sudo docker compose ps

@@ -1,10 +1,4 @@
-"""Generate ready-to-run sensor configuration directories.
-
-The generator prefers inventory/project.json because it can store richer
-deception settings than the small Ansible-style sensors.yml file. If the JSON
-inventory is absent, the old YAML-like inventory is still supported as a
-fallback.
-"""
+"""Generate ready-to-run sensor configuration directories."""
 
 from __future__ import annotations
 
@@ -14,9 +8,9 @@ from pathlib import Path
 from typing import Any
 
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 SENSORS_DIR = ROOT / "sensors"
-INVENTORY_DIR = ROOT / "inventory"
+INVENTORY_DIR = ROOT / "config"
 PROJECT_FILE = INVENTORY_DIR / "project.json"
 SAFE_SENSOR_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -279,7 +273,7 @@ def render_compose(sensor: dict[str, Any]) -> str:
     return f"""services:
   fake-services:
     build:
-      context: ../../containers/fake-services
+      context: ../../sensor/containers/fake-services
     env_file:
       - .env
     ports:
@@ -291,7 +285,7 @@ def render_compose(sensor: dict[str, Any]) -> str:
 
   log-agent:
     build:
-      context: ../../containers/log-agent
+      context: ../../sensor/containers/log-agent
     env_file:
       - .env
     volumes:
@@ -302,7 +296,7 @@ def render_compose(sensor: dict[str, Any]) -> str:
 
   display-agent:
     build:
-      context: ../../containers/display-agent
+      context: ../../sensor/containers/display-agent
     env_file:
       - .env
     depends_on:

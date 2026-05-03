@@ -7,17 +7,14 @@
 ## Что Внутри
 
 ```text
-central-node/        # collector, dashboard API и Docker Compose stack центра
-manager/             # web-консоль управления, генерации и SSH-деплоя
-ansible/             # playbook установки/обновления сенсора по SSH
-containers/          # сервисы, запускаемые на сенсорной плате
-orchestrator/        # генератор конфигураций из inventory/project.json
-inventory/           # tracked источник конфигурации проекта
+center/              # collector, web-консоль, генератор, Ansible и Docker Compose stack центра
+sensor/              # контейнеры, которые устанавливаются на сенсорную плату
+config/              # tracked-конфигурация проекта
 scripts/             # запуск центра и dev helpers
 docs/                # вспомогательная документация
 ```
 
-`sensors/`, `inventory/network.yml` и `inventory/sensors.yml` не хранятся в git. Они генерируются локально из `inventory/project.json`.
+`sensors/` не хранится в git. Он генерируется локально из `config/project.json`.
 
 ## Быстрый Запуск Центра
 
@@ -33,7 +30,7 @@ http://<central-ip>:8080/dashboard  # dashboard событий
 http://<central-ip>:8080/health     # health API
 ```
 
-`install_central.sh` ставит Docker/Compose на центральный узел и запускает `central-node/docker-compose.yml`.
+`install_central.sh` ставит Docker/Compose на центральный узел и запускает `center/docker-compose.yml`.
 
 ## Подготовка Сенсорной Платы
 
@@ -54,23 +51,24 @@ http://<central-ip>:8080/health     # health API
 5. Нажми `Установить/обновить`.
 
 Центр сгенерирует конфигурацию, поставит Docker на плату, скопирует нужные файлы и запустит контейнеры сенсора.
+Прогресс установки, текущий шаг Ansible, вывод и кнопка отмены отображаются в web-консоли.
 
 ## Основные Компоненты
 
-- `central-node/ingest/server.py` принимает события, хранит JSONL и отдает dashboard/API.
-- `manager/backend/server.py` обслуживает web-консоль, запускает генератор и Ansible-деплой.
-- `orchestrator/generate.py` читает `inventory/project.json` и создает локальные `sensors/<name>/`.
-- `ansible/deploy_sensor.yml` устанавливает/обновляет выбранный сенсор по SSH.
-- `containers/fake-services` открывает TCP-порты-приманки и пишет события.
-- `containers/log-agent` доставляет события в центр.
-- `containers/display-agent` показывает локальный статус сенсора.
+- `center/collector/server.py` принимает события, хранит JSONL и отдает dashboard/API.
+- `center/manager/backend/server.py` обслуживает web-консоль, job-статусы и Ansible-деплой.
+- `center/orchestrator/generate.py` читает `config/project.json` и создает локальные `sensors/<name>/`.
+- `center/ansible/deploy_sensor.yml` устанавливает/обновляет выбранный сенсор по SSH.
+- `sensor/containers/fake-services` открывает TCP-порты-приманки и пишет события.
+- `sensor/containers/log-agent` доставляет события в центр.
+- `sensor/containers/display-agent` показывает локальный статус сенсора.
 
 ## Конфигурация
 
 Основной tracked-файл:
 
 ```text
-inventory/project.json
+config/project.json
 ```
 
 В нем задаются:
@@ -122,14 +120,14 @@ scripts/start_manager.sh
 Проверка compose-конфигурации центра:
 
 ```sh
-cd central-node
+cd center
 docker compose config
 ```
 
 ## Безопасность
 
 - SSH-доступ к платам должен быть в management-сети, не в атакующем сегменте.
-- Пароли, введенные в web-консоли для деплоя, используются только для текущего Ansible-запуска и не сохраняются в `inventory/project.json`.
+- Пароли, введенные в web-консоли для деплоя, используются только для текущего Ansible-запуска и не сохраняются в `config/project.json`.
 - `.env`, `sensors/`, logs и `events.jsonl` игнорируются git.
 
 ## Документация

@@ -16,7 +16,7 @@ scripts/install_central.sh
 
 Скрипт ставит Docker/Compose, включает Docker и запускает:
 
-- `central-node` на `8080`;
+- `collector` на `8080`;
 - `manager` на `8090`.
 
 После запуска доступны:
@@ -55,8 +55,6 @@ scripts/generate_sensor.sh
 - `sensors/<sensor>/.env`;
 - `sensors/<sensor>/docker-compose.yml`;
 - `sensors/<sensor>/config/services.json`;
-- `inventory/network.yml`;
-- `inventory/sensors.yml`.
 
 Эти файлы не хранятся в git.
 

@@ -3,10 +3,10 @@ __pycache__/
 *.py[cod]
 .env
 logs/
-central-node/storage/events.jsonl
+center/storage/
 sensors/
 sensors/*/.env
 sensors/*/logs/
-inventory/network.yml
-inventory/sensors.yml
+config/network.yml
+config/sensors.yml
 .pytest_cache/

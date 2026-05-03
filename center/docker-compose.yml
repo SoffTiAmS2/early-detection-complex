@@ -1,7 +1,7 @@
 services:
-  central-node:
+  collector:
     build:
-      context: ./ingest
+      context: ./collector
     container_name: early-detection-central
     environment:
       CENTRAL_BIND: 0.0.0.0
@@ -16,16 +16,17 @@ services:
   manager:
     build:
       context: ..
-      dockerfile: manager/Dockerfile
+      dockerfile: center/manager/Dockerfile
     container_name: early-detection-manager
-    command: ["python", "manager/backend/server.py", "--host", "0.0.0.0", "--port", "8090"]
+    command: ["python", "center/manager/backend/server.py", "--host", "0.0.0.0", "--port", "8090"]
     environment:
       MANAGER_HOST: 0.0.0.0
       MANAGER_PORT: 8090
+      CENTRAL_API_BASE: http://collector:8080
     ports:
       - "8090:8090"
     volumes:
       - ..:/app
     depends_on:
-      - central-node
+      - collector
     restart: unless-stopped

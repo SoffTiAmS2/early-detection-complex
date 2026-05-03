@@ -113,6 +113,43 @@ button:disabled {
   margin-bottom: 18px;
 }
 
+.status-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.status-panel {
+  padding: 16px;
+}
+
+.status-line,
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.job-item {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 9px;
+  margin-top: 8px;
+  background: var(--surface-2);
+}
+
+.job-item div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.job-item span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -274,6 +311,22 @@ select:focus {
   font-size: 13px;
 }
 
+.progress {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #dfe6df;
+  margin-top: 10px;
+}
+
+.progress span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
 .deploy-output {
   max-height: 240px;
   overflow: auto;
@@ -289,6 +342,7 @@ select:focus {
 
 @media (max-width: 1060px) {
   .workspace,
+  .status-grid,
   .grid.three,
   .grid.four,
   .grid.five {
