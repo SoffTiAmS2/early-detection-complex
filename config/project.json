@@ -16,6 +16,25 @@
         "ftp",
         "smtp"
       ],
+      "honeypots": [
+        {
+          "type": "opencanary",
+          "enabled": true,
+          "services": [
+            "ssh",
+            "http",
+            "ftp",
+            "smtp"
+          ],
+          "settings": {
+            "node_id": "dmz-backup-gw",
+            "listen_addr": "0.0.0.0",
+            "honeycred_user": "admin",
+            "honeycred_password": "password",
+            "http_skin": "basic"
+          }
+        }
+      ],
       "mask": {
         "hostname": "dmz-backup-gw",
         "os": "Debian GNU/Linux 13",
@@ -32,6 +51,25 @@
       "services": [
         "ssh",
         "telnet"
+      ],
+      "honeypots": [
+        {
+          "type": "cowrie",
+          "enabled": true,
+          "services": [
+            "ssh",
+            "telnet"
+          ],
+          "settings": {
+            "hostname": "office-filesrv-01",
+            "kernel_version": "5.10.0-23-amd64",
+            "ssh_version": "SSH-2.0-OpenSSH_8.4",
+            "backend": "shell",
+            "auth_class": "deny",
+            "download_limit_mb": 10,
+            "sftp_enabled": true
+          }
+        }
       ],
       "mask": {
         "hostname": "office-filesrv-01",
@@ -50,6 +88,22 @@
         "http",
         "modbus"
       ],
+      "honeypots": [
+        {
+          "type": "conpot",
+          "enabled": true,
+          "services": [
+            "http",
+            "modbus"
+          ],
+          "settings": {
+            "template": "default",
+            "device_name": "S7-200",
+            "vendor": "Siemens",
+            "strict_mode": false
+          }
+        }
+      ],
       "mask": {
         "hostname": "mine-telemetry-gw",
         "os": "Embedded Linux",
@@ -60,4 +114,3 @@
     }
   ]
 }
-

@@ -17,8 +17,9 @@
 
 Файл `config/project.json` хранит выбранную легенду:
 
-- `profile` - общий тип honeypot-профиля;
-- `services` - какие сервисы открыть;
+- `honeypots[]` - выбранные honeypot на сенсоре;
+- `honeypots[].services` - какие сервисы открыть внутри конкретного honeypot;
+- `honeypots[].settings` - настройки конкретного honeypot;
 - `mask.hostname` - имя хоста-легенды;
 - `mask.os` - ОС-легенда;
 - `mask.department` - контекст размещения;

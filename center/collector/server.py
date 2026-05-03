@@ -8,7 +8,6 @@ prototype.
 from __future__ import annotations
 
 import argparse
-import html
 import json
 import os
 import time
@@ -94,62 +93,8 @@ def summarize_sensors(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
     return sensors
 
 
-def render_dashboard(events: list[dict[str, Any]]) -> bytes:
-    """Render a small HTML dashboard for manual thesis demonstrations."""
-
-    sensors = summarize_sensors(events)
-    rows = []
-    for event in reversed(events[-100:]):
-        rows.append(
-            "<tr>"
-            f"<td>{html.escape(str(event.get('received_at', '')))}</td>"
-            f"<td>{html.escape(str(event.get('sensor', 'unknown')))}</td>"
-            f"<td>{html.escape(str(event.get('type', 'event')))}</td>"
-            f"<td>{html.escape(str(event.get('source_ip', '')))}</td>"
-            f"<td><pre>{html.escape(json.dumps(event, ensure_ascii=False, sort_keys=True))}</pre></td>"
-            "</tr>"
-        )
-
-    sensor_items = []
-    for sensor in sensors.values():
-        sensor_items.append(
-            "<li>"
-            f"<b>{html.escape(str(sensor['sensor']))}</b>: "
-            f"{sensor['events']} events, "
-            f"last={html.escape(str(sensor['last_type']))}, "
-            f"profile={html.escape(str(sensor.get('profile')))}"
-            "</li>"
-        )
-
-    body = f"""<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8">
-  <title>Early Detection Complex</title>
-  <style>
-    body {{ font-family: sans-serif; margin: 24px; background: #f7f7f4; color: #1f2933; }}
-    table {{ width: 100%; border-collapse: collapse; background: white; }}
-    th, td {{ border: 1px solid #d8dee4; padding: 8px; vertical-align: top; }}
-    th {{ background: #eef2f3; text-align: left; }}
-    pre {{ white-space: pre-wrap; margin: 0; }}
-  </style>
-</head>
-<body>
-  <h1>Early Detection Complex</h1>
-  <h2>Сенсоры</h2>
-  <ul>{''.join(sensor_items) or '<li>Нет событий</li>'}</ul>
-  <h2>Последние события</h2>
-  <table>
-    <thead><tr><th>received_at</th><th>sensor</th><th>type</th><th>source_ip</th><th>event</th></tr></thead>
-    <tbody>{''.join(rows)}</tbody>
-  </table>
-</body>
-</html>"""
-    return body.encode("utf-8")
-
-
 class CentralHandler(BaseHTTPRequestHandler):
-    """HTTP routes for ingest, status and dashboard."""
+    """HTTP routes for ingest, status and sensor summaries."""
 
     store = DEFAULT_STORE
 
@@ -160,13 +105,6 @@ class CentralHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
-
-    def _send_html(self, payload: bytes) -> None:
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        self.wfile.write(payload)
 
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
         parsed = urlparse(self.path)
@@ -185,7 +123,7 @@ class CentralHandler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/sensors":
             self._send_json({"sensors": list(summarize_sensors(events).values())})
         elif parsed.path in ("/", "/dashboard"):
-            self._send_html(render_dashboard(events))
+            self._send_json({"error": "html view removed; use manager UI on port 8090 or /api/events"}, HTTPStatus.NOT_FOUND)
         else:
             self._send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
 

@@ -16,14 +16,15 @@ http://<central-ip>:8090
 
 - настройка подсети, шлюза и IP центрального узла;
 - добавление и удаление сенсоров;
-- выбор профиля и сервисов-приманок;
+- древовидный выбор honeypot;
+- выбор сервисов и настроек внутри каждого honeypot;
 - настройка deception-маскировки;
 - генерация конфигураций;
 - установка или обновление сенсора по SSH через Ansible.
 
 ## API
 
-- `GET /api/catalog` - профили и сервисы.
+- `GET /api/catalog` - honeypot, сервисы и поля настроек.
 - `GET /api/project` - текущий `config/project.json`.
 - `PUT /api/project` - сохранить конфигурацию.
 - `POST /api/generate` - сгенерировать ignored-артефакты в `sensors/`.
@@ -48,3 +49,29 @@ sensors/<sensor>/
 ```
 
 SSH-пароль используется только во время текущего Ansible-запуска и не сохраняется в `config/project.json`.
+
+## Дерево Honeypot
+
+Новая схема сенсора:
+
+```json
+{
+  "name": "sensor1",
+  "host": "192.168.0.128",
+  "role": "dmz",
+  "honeypots": [
+    {
+      "type": "cowrie",
+      "enabled": true,
+      "services": ["ssh", "telnet"],
+      "settings": {
+        "hostname": "srv01",
+        "ssh_version": "SSH-2.0-OpenSSH_8.4"
+      }
+    }
+  ],
+  "mask": {}
+}
+```
+
+Поля `profile` и `services` пока сохраняются для совместимости со старыми generated-файлами, но основная настройка идет через `honeypots[]`.

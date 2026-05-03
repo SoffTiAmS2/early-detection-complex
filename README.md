@@ -26,8 +26,8 @@ scripts/install_central.sh
 
 ```text
 http://<central-ip>:8090            # web-консоль управления
-http://<central-ip>:8080/dashboard  # dashboard событий
 http://<central-ip>:8080/health     # health API
+http://<central-ip>:8080/api/events # события collector
 ```
 
 `install_central.sh` ставит Docker/Compose на центральный узел и запускает `center/docker-compose.yml`.
@@ -46,7 +46,7 @@ http://<central-ip>:8080/health     # health API
 
 1. Открой `http://<central-ip>:8090`.
 2. Добавь или выбери сенсор.
-3. Укажи IP, профиль, сервисы-приманки и маскировку.
+3. Укажи IP, выбери honeypot, затем сервисы и настройки внутри него.
 4. В блоке `Установка/обновление по SSH` введи SSH-доступ.
 5. Нажми `Установить/обновить`.
 
@@ -55,7 +55,7 @@ http://<central-ip>:8080/health     # health API
 
 ## Основные Компоненты
 
-- `center/collector/server.py` принимает события, хранит JSONL и отдает dashboard/API.
+- `center/collector/server.py` принимает события, хранит JSONL и отдает API.
 - `center/manager/backend/server.py` обслуживает web-консоль, job-статусы и Ansible-деплой.
 - `center/orchestrator/generate.py` читает `config/project.json` и создает локальные `sensors/<name>/`.
 - `center/ansible/deploy_sensor.yml` устанавливает/обновляет выбранный сенсор по SSH.
@@ -76,8 +76,8 @@ config/project.json
 - сеть и IP центрального узла;
 - список сенсоров;
 - роль сенсора;
-- профиль: `opencanary`, `cowrie`, `heralding`, `conpot`, `dionaea`, `honeytrap`;
-- сервисы-приманки;
+- дерево honeypot: `opencanary`, `cowrie`, `heralding`, `conpot`, `dionaea`, `honeytrap`;
+- сервисы и настройки внутри каждого выбранного honeypot;
 - маскировка: hostname, OS, department, asset tag, notes.
 
 Сгенерировать конфигурации вручную для отладки:
@@ -106,7 +106,6 @@ printf 'GET /admin HTTP/1.0\r\n\r\n' | nc -w 2 <sensor-ip> 8081
 
 ```text
 http://<central-ip>:8080/api/events
-http://<central-ip>:8080/dashboard
 ```
 
 ## Dev Режим
@@ -135,5 +134,7 @@ docker compose config
 - `docs/deployment.md` - установка и эксплуатация.
 - `docs/architecture.md` - архитектура.
 - `docs/deception_masking.md` - логика маскировки.
+- `docs/honeypot_catalog.md` - справочник honeypot, сервисов и настроек.
 - `docs/web_configurator.md` - web-консоль и API.
+- `docs/functions_io.md` - функции, входы и выходы компонентов.
 - `docs/full_report.md` - ссылки на полный отчет ВКР.

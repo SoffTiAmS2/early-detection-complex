@@ -23,8 +23,8 @@ scripts/install_central.sh
 
 ```text
 http://<central>:8090            # web-консоль управления
-http://<central>:8080/dashboard  # dashboard событий
 http://<central>:8080/health     # health API
+http://<central>:8080/api/events # события collector
 ```
 
 ## Сенсор
@@ -33,7 +33,7 @@ http://<central>:8080/health     # health API
 2. Включи SSH.
 3. Убедись, что центральный узел видит IP платы.
 4. Открой `http://<central>:8090`.
-5. Настрой сенсор: IP, профиль, сервисы, маскировку.
+5. Настрой сенсор: IP, honeypot, сервисы внутри honeypot, настройки и маскировку.
 6. В блоке `Установка/обновление по SSH` введи SSH host/login/password.
 7. Нажми `Установить/обновить`.
 
@@ -74,9 +74,8 @@ printf 'admin\r\n' | nc -w 2 <sensor-ip> 2222
 printf 'GET /admin HTTP/1.0\r\n\r\n' | nc -w 2 <sensor-ip> 8081
 ```
 
-События проверяются через dashboard или API:
+События проверяются через API:
 
 ```text
-http://<central>:8080/dashboard
 http://<central>:8080/api/events
 ```

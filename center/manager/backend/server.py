@@ -10,6 +10,7 @@ import re
 import signal
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -24,62 +25,17 @@ from urllib.parse import urlparse
 
 
 ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from center.honeypots.catalog import HONEYPOT_CATALOG, SERVICE_CATALOG, catalog_payload, default_settings, legacy_honeypot
+
 FRONTEND_DIR = ROOT / "center" / "manager" / "frontend"
 PROJECT_FILE = ROOT / "config" / "project.json"
 GENERATOR = ROOT / "center" / "orchestrator" / "generate.py"
 DEPLOY_PLAYBOOK = ROOT / "center" / "ansible" / "deploy_sensor.yml"
 JOB_LOCK = threading.Lock()
 JOBS: dict[str, dict[str, Any]] = {}
-
-PROFILES = {
-    "opencanary": {
-        "title": "OpenCanary-like",
-        "role": "dmz",
-        "services": ["ssh", "http", "ftp", "smtp"],
-        "description": "Мультисервисная приманка для DMZ и внутренних decoy-узлов.",
-    },
-    "cowrie": {
-        "title": "Cowrie-like",
-        "role": "office",
-        "services": ["ssh", "telnet"],
-        "description": "SSH/Telnet профиль для brute force и интерактивных попыток входа.",
-    },
-    "heralding": {
-        "title": "Heralding-like",
-        "role": "office",
-        "services": ["ssh", "telnet", "ftp", "smtp", "http"],
-        "description": "Профиль для сбора попыток аутентификации на нескольких протоколах.",
-    },
-    "conpot": {
-        "title": "Conpot-like",
-        "role": "ot-mining",
-        "services": ["http", "modbus"],
-        "description": "OT/ICS профиль для технологического сегмента предприятия.",
-    },
-    "dionaea": {
-        "title": "Dionaea-like",
-        "role": "dmz",
-        "services": ["http", "ftp", "mysql"],
-        "description": "Профиль для сетевых вредоносных подключений в изолированной зоне.",
-    },
-    "honeytrap": {
-        "title": "Honeytrap-like",
-        "role": "custom",
-        "services": ["ssh", "http", "ftp", "printer"],
-        "description": "Универсальный профиль для набора сервисов-приманок.",
-    },
-}
-
-SERVICES = {
-    "ssh": {"title": "SSH", "port": 2222},
-    "telnet": {"title": "Telnet", "port": 2323},
-    "http": {"title": "HTTP", "port": 8081},
-    "ftp": {"title": "FTP", "port": 2121},
-    "smtp": {"title": "SMTP", "port": 2525},
-    "mysql": {"title": "MySQL", "port": 33060},
-    "modbus": {"title": "Modbus", "port": 1502},
-    "printer": {"title": "Printer", "port": 9100},
-}
 
 SAFE_SENSOR_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
 FRONTEND_ROOT = FRONTEND_DIR.resolve()
@@ -116,22 +72,55 @@ def validate_project(project: Any) -> tuple[bool, str]:
     for sensor in project["sensors"]:
         if not isinstance(sensor, dict):
             return False, "sensor must be an object"
-        for key in ("name", "host", "role", "profile", "services", "mask"):
+        for key in ("name", "host", "role", "mask"):
             if key not in sensor:
                 return False, f"sensor is missing {key}"
         if not isinstance(sensor["name"], str) or not SAFE_SENSOR_NAME.fullmatch(sensor["name"]):
             return False, "sensor name must contain only letters, digits, underscore or hyphen"
-        for key in ("host", "role", "profile"):
+        for key in ("host", "role"):
             if not isinstance(sensor[key], str) or not sensor[key].strip():
                 return False, f"sensor {key} must be a non-empty string"
-        if sensor["profile"] not in PROFILES:
-            return False, f"unsupported profile: {sensor['profile']}"
-        if not isinstance(sensor["services"], list):
+        honeypots = sensor.get("honeypots")
+        if honeypots is None:
+            profile = sensor.get("profile")
+            if profile not in HONEYPOT_CATALOG:
+                return False, f"unsupported profile: {profile}"
+            honeypots = [legacy_honeypot(str(profile), sensor.get("services"))]
+        if not isinstance(honeypots, list) or not honeypots:
+            return False, "sensor honeypots must be a non-empty list"
+        used_ports: dict[int, str] = {}
+        for honeypot in honeypots:
+            if not isinstance(honeypot, dict):
+                return False, "sensor honeypot must be an object"
+            honeypot_type = honeypot.get("type")
+            if honeypot_type not in HONEYPOT_CATALOG:
+                return False, f"unsupported honeypot: {honeypot_type}"
+            if not isinstance(honeypot.get("services"), list):
+                return False, f"{honeypot_type} services must be a list"
+            allowed_services = set(HONEYPOT_CATALOG[honeypot_type]["services"])
+            for service in honeypot["services"]:
+                if not isinstance(service, str):
+                    return False, "honeypot service must be a string"
+                if service not in allowed_services or service not in SERVICE_CATALOG:
+                    return False, f"unsupported service for {honeypot_type}: {service}"
+                if honeypot.get("enabled", True):
+                    port = int(SERVICE_CATALOG[service]["port"])
+                    if port in used_ports:
+                        return False, f"port conflict: {honeypot_type}:{service} and {used_ports[port]} both use tcp/{port}"
+                    used_ports[port] = f"{honeypot_type}:{service}"
+            settings = honeypot.setdefault("settings", {})
+            if not isinstance(settings, dict):
+                return False, f"{honeypot_type} settings must be an object"
+            defaults = default_settings(honeypot_type)
+            for key in settings:
+                if key not in defaults:
+                    return False, f"unsupported setting for {honeypot_type}: {key}"
+        if "services" in sensor and not isinstance(sensor["services"], list):
             return False, "sensor services must be a list"
-        for service in sensor["services"]:
+        for service in sensor.get("services", []):
             if not isinstance(service, str):
                 return False, "sensor service must be a string"
-            if service not in SERVICES:
+            if service not in SERVICE_CATALOG:
                 return False, f"unsupported service: {service}"
         if not isinstance(sensor["mask"], dict):
             return False, "sensor mask must be an object"
@@ -449,7 +438,7 @@ class ManagerHandler(BaseHTTPRequestHandler):
             self._send_json(read_project())
             return
         if parsed.path == "/api/catalog":
-            self._send_json({"profiles": PROFILES, "services": SERVICES})
+            self._send_json(catalog_payload())
             return
         if parsed.path == "/api/health":
             self._send_json({"status": "ok", "project": str(PROJECT_FILE), "jobs": get_jobs()[:5]})

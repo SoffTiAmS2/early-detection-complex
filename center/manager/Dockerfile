@@ -6,6 +6,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY center/ansible /app/center/ansible
+COPY center/honeypots /app/center/honeypots
 COPY center/manager /app/center/manager
 COPY center/orchestrator /app/center/orchestrator
 COPY config /app/config

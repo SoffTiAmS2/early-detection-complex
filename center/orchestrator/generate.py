@@ -4,101 +4,21 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from center.honeypots.catalog import HONEYPOT_CATALOG, SERVICE_CATALOG, default_honeypot, default_settings, legacy_honeypot
+
 SENSORS_DIR = ROOT / "sensors"
 INVENTORY_DIR = ROOT / "config"
 PROJECT_FILE = INVENTORY_DIR / "project.json"
 SAFE_SENSOR_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
-
-
-SERVICE_CATALOG: dict[str, dict[str, Any]] = {
-    "ssh": {
-        "port": 2222,
-        "protocol": "ssh",
-        "banner": "SSH-2.0-OpenSSH_8.4",
-        "response": "Permission denied, please try again.\r\n",
-    },
-    "telnet": {
-        "port": 2323,
-        "protocol": "telnet",
-        "banner": "Debian GNU/Linux 13\r\nlogin: ",
-        "response": "Password: ",
-    },
-    "http": {
-        "port": 8081,
-        "protocol": "http",
-        "banner": "HTTP/1.1 200 OK\r\nServer: nginx/1.22.1\r\nContent-Type: text/plain\r\n\r\nservice online\r\n",
-        "response": "",
-    },
-    "ftp": {
-        "port": 2121,
-        "protocol": "ftp",
-        "banner": "220 fileserver FTP service ready\r\n",
-        "response": "530 Login incorrect.\r\n",
-    },
-    "smtp": {
-        "port": 2525,
-        "protocol": "smtp",
-        "banner": "220 mail-gw ESMTP Postfix\r\n",
-        "response": "250 OK\r\n",
-    },
-    "mysql": {
-        "port": 33060,
-        "protocol": "mysql",
-        "banner": "5.7.31-log MySQL Community Server\r\n",
-        "response": "",
-    },
-    "modbus": {
-        "port": 1502,
-        "protocol": "modbus",
-        "banner": "",
-        "response": "",
-    },
-    "printer": {
-        "port": 9100,
-        "protocol": "printer",
-        "banner": "HP JetDirect ready\r\n",
-        "response": "",
-    },
-}
-
-
-PROFILE_DEFAULTS: dict[str, dict[str, Any]] = {
-    "opencanary": {
-        "services": ["ssh", "http", "ftp", "smtp"],
-        "role": "dmz",
-        "description": "multi-service decoy profile",
-    },
-    "cowrie": {
-        "services": ["ssh", "telnet"],
-        "role": "office",
-        "description": "SSH/Telnet brute-force profile",
-    },
-    "heralding": {
-        "services": ["ssh", "telnet", "ftp", "smtp", "http"],
-        "role": "office",
-        "description": "credential-attempt collection profile",
-    },
-    "conpot": {
-        "services": ["http", "modbus"],
-        "role": "ot-mining",
-        "description": "OT/ICS mining operations profile",
-    },
-    "dionaea": {
-        "services": ["http", "ftp", "mysql"],
-        "role": "dmz",
-        "description": "network malware-touchpoint profile",
-    },
-    "honeytrap": {
-        "services": ["ssh", "http", "ftp", "printer"],
-        "role": "custom",
-        "description": "generic multi-service deception profile",
-    },
-}
 
 
 FALLBACK_PROJECT = {
@@ -195,19 +115,25 @@ def normalize_sensor(raw: dict[str, Any]) -> dict[str, Any]:
     """Fill missing sensor fields from the selected profile defaults."""
 
     profile = str(raw.get("profile", "opencanary"))
-    defaults = PROFILE_DEFAULTS.get(profile, PROFILE_DEFAULTS["opencanary"])
-    services = raw.get("services") or defaults["services"]
+    profile = profile if profile in HONEYPOT_CATALOG else "opencanary"
+    defaults = HONEYPOT_CATALOG[profile]
     mask = raw.get("mask") or {}
     name = str(raw.get("name", "sensor"))
     if not SAFE_SENSOR_NAME.fullmatch(name):
         raise ValueError(f"unsafe sensor name: {name!r}")
+    raw_honeypots = raw.get("honeypots")
+    if not isinstance(raw_honeypots, list) or not raw_honeypots:
+        raw_honeypots = [legacy_honeypot(profile, raw.get("services"))]
+    honeypots = [normalize_honeypot(item) for item in raw_honeypots]
+    enabled_services = sorted({service for honeypot in honeypots for service in honeypot["services"]})
     return {
         "name": name,
         "host": str(raw.get("host", "192.168.10.10")),
         "role": str(raw.get("role", defaults["role"])),
-        "profile": profile,
-        "profile_description": defaults["description"],
-        "services": [str(item) for item in services],
+        "profile": honeypots[0]["type"],
+        "profile_description": HONEYPOT_CATALOG[honeypots[0]["type"]]["description"],
+        "services": enabled_services,
+        "honeypots": honeypots,
         "mask": {
             "hostname": str(mask.get("hostname", name)),
             "os": str(mask.get("os", "Debian GNU/Linux 13")),
@@ -218,22 +144,81 @@ def normalize_sensor(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def normalize_honeypot(raw: Any) -> dict[str, Any]:
+    """Normalize one honeypot selection from the project file."""
+
+    if not isinstance(raw, dict):
+        raw = default_honeypot("opencanary")
+    honeypot_type = str(raw.get("type", "opencanary"))
+    if honeypot_type not in HONEYPOT_CATALOG:
+        honeypot_type = "opencanary"
+    catalog = HONEYPOT_CATALOG[honeypot_type]
+    allowed = set(catalog["services"])
+    services = [str(item) for item in raw.get("services", catalog["default_services"]) if str(item) in allowed]
+    if not services:
+        services = list(catalog["default_services"])
+    settings = default_settings(honeypot_type)
+    if isinstance(raw.get("settings"), dict):
+        for key, value in raw["settings"].items():
+            if key in settings:
+                settings[key] = value
+    return {
+        "type": honeypot_type,
+        "enabled": bool(raw.get("enabled", True)),
+        "services": services,
+        "settings": settings,
+    }
+
+
 def build_services(sensor: dict[str, Any]) -> list[dict[str, Any]]:
     """Create service definitions consumed by fake-services."""
 
     services = []
     mask = sensor["mask"]
-    for service_name in sensor["services"]:
-        base = SERVICE_CATALOG.get(service_name)
-        if not base:
+    for honeypot in sensor["honeypots"]:
+        if not honeypot["enabled"]:
             continue
-        item = dict(base)
-        item["name"] = service_name
-        item["banner"] = str(item.get("banner", "")).format(**mask, sensor=sensor["name"])
-        item["response"] = str(item.get("response", "")).format(**mask, sensor=sensor["name"])
-        item["mask"] = mask
-        services.append(item)
+        honeypot_type = honeypot["type"]
+        settings = honeypot["settings"]
+        for service_name in honeypot["services"]:
+            base = SERVICE_CATALOG.get(service_name)
+            if not base:
+                continue
+            item = dict(base)
+            item["name"] = f"{honeypot_type}:{service_name}"
+            item["honeypot"] = honeypot_type
+            item["service"] = service_name
+            item["settings"] = settings
+            item["banner"] = render_banner(item, mask, sensor)
+            item["response"] = str(item.get("response", "")).format(**mask, sensor=sensor["name"])
+            item["mask"] = mask
+            services.append(item)
     return services
+
+
+def render_banner(service: dict[str, Any], mask: dict[str, Any], sensor: dict[str, Any]) -> str:
+    """Apply honeypot-specific banner settings to the generic service."""
+
+    settings = service.get("settings", {})
+    service_name = service.get("service")
+    honeypot = service.get("honeypot")
+    if honeypot == "cowrie" and service_name == "ssh":
+        return str(settings.get("ssh_version") or service.get("banner", "")).format(**mask, sensor=sensor["name"])
+    if honeypot == "heralding" and service_name == "ssh":
+        return str(settings.get("ssh_version") or service.get("banner", "")).format(**mask, sensor=sensor["name"])
+    if honeypot == "opencanary" and service_name == "http":
+        skin = settings.get("http_skin", "basic")
+        return (
+            "HTTP/1.1 401 Unauthorized\r\n"
+            f"Server: {skin}\r\n"
+            "WWW-Authenticate: Basic realm=\"Restricted\"\r\n\r\n"
+        )
+    if honeypot == "conpot" and service_name == "http":
+        vendor = settings.get("vendor", "Siemens")
+        device = settings.get("device_name", "S7-200")
+        return f"HTTP/1.1 200 OK\r\nServer: {vendor} {device}\r\nContent-Type: text/plain\r\n\r\n{device} online\r\n"
+    base = str(service.get("banner", ""))
+    return base.format(**mask, sensor=sensor["name"])
 
 
 def render_env(sensor: dict[str, Any], central_node: str) -> str:

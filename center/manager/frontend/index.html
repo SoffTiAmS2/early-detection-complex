@@ -53,10 +53,8 @@
 
     <section class="workspace">
       <aside class="panel catalog">
-        <h2>Профили</h2>
-        <div id="profileCatalog" class="catalog-list"></div>
-        <h2>Сервисы</h2>
-        <div id="serviceCatalog" class="service-list"></div>
+        <h2>Honeypots</h2>
+        <div id="honeypotCatalog" class="catalog-list"></div>
       </aside>
 
       <section class="sensor-area">
@@ -74,12 +72,12 @@
       <div class="sensor-title">
         <div>
           <h3></h3>
-          <span class="profile-pill"></span>
+          <span class="honeypot-pill"></span>
         </div>
         <button class="danger remove-sensor" type="button">Удалить</button>
       </div>
 
-      <div class="grid four">
+      <div class="grid three">
         <label>Имя
           <input data-field="name" autocomplete="off">
         </label>
@@ -89,14 +87,17 @@
         <label>Роль
           <input data-field="role" autocomplete="off">
         </label>
-        <label>Профиль
-          <select data-field="profile"></select>
-        </label>
       </div>
 
       <div class="subsection">
-        <h4>Сервисы-приманки</h4>
-        <div class="checks services"></div>
+        <div class="subsection-head">
+          <h4>Наполняемость сенсора</h4>
+          <div class="inline-actions">
+            <select class="honeypot-type"></select>
+            <button class="add-honeypot" type="button">Добавить honeypot</button>
+          </div>
+        </div>
+        <div class="honeypots"></div>
       </div>
 
       <div class="subsection">

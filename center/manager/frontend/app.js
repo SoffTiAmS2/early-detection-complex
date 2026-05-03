@@ -21,6 +21,72 @@ function setStatus(message) {
   $("#statusLine").textContent = message;
 }
 
+function defaultSettings(type) {
+  const settings = {};
+  state.catalog.honeypots[type].settings.forEach((field) => {
+    settings[field.key] = field.default;
+  });
+  return settings;
+}
+
+function defaultHoneypot(type) {
+  const catalog = state.catalog.honeypots[type];
+  return {
+    type,
+    enabled: true,
+    services: [...catalog.default_services],
+    settings: defaultSettings(type),
+  };
+}
+
+function ensureSensorShape(sensor) {
+  if (!Array.isArray(sensor.honeypots) || !sensor.honeypots.length) {
+    const type = state.catalog.honeypots[sensor.profile] ? sensor.profile : "opencanary";
+    const honeypot = defaultHoneypot(type);
+    if (Array.isArray(sensor.services)) {
+      const allowed = new Set(state.catalog.honeypots[type].services);
+      honeypot.services = sensor.services.filter((service) => allowed.has(service));
+    }
+    sensor.honeypots = [honeypot];
+  }
+  sensor.honeypots.forEach((honeypot) => {
+    const catalog = state.catalog.honeypots[honeypot.type] || state.catalog.honeypots.opencanary;
+    honeypot.type = catalog === state.catalog.honeypots[honeypot.type] ? honeypot.type : "opencanary";
+    honeypot.enabled = honeypot.enabled !== false;
+    honeypot.services = Array.isArray(honeypot.services) ? honeypot.services.filter((service) => catalog.services.includes(service)) : [];
+    if (!honeypot.services.length) honeypot.services = [...catalog.default_services];
+    honeypot.settings = { ...defaultSettings(honeypot.type), ...(honeypot.settings || {}) };
+  });
+  syncLegacyFields(sensor);
+}
+
+function syncLegacyFields(sensor) {
+  const enabled = sensor.honeypots.filter((honeypot) => honeypot.enabled);
+  const primary = enabled[0] || sensor.honeypots[0] || defaultHoneypot("opencanary");
+  sensor.profile = primary.type;
+  sensor.services = [...new Set(enabled.flatMap((honeypot) => honeypot.services))];
+  if (!sensor.role) sensor.role = state.catalog.honeypots[primary.type].role;
+}
+
+function sensorDefaults(index = 1) {
+  const type = "opencanary";
+  return {
+    name: `sensor${index}`,
+    host: `192.168.10.${10 + index}`,
+    role: state.catalog.honeypots[type].role,
+    profile: type,
+    services: [...state.catalog.honeypots[type].default_services],
+    honeypots: [defaultHoneypot(type)],
+    mask: {
+      hostname: `sensor${index}-node`,
+      os: "Debian GNU/Linux 13",
+      department: "Lab",
+      asset_tag: `SENSOR${index}`,
+      notes: "deception node",
+    },
+  };
+}
+
 function jobLabel(job) {
   const step = job.step ? ` · ${job.step}` : "";
   return `${job.sensor || job.type}: ${job.status}${step}`;
@@ -75,57 +141,28 @@ function renderRuntimeSensors() {
   const byName = new Map(state.runtimeSensors.map((sensor) => [sensor.sensor, sensor]));
   const rows = configured.length
     ? configured.map((sensor) => ({ ...sensor, runtime: byName.get(sensor.name) }))
-    : state.runtimeSensors.map((sensor) => ({ name: sensor.sensor, host: "", profile: sensor.profile, role: sensor.role, runtime: sensor }));
+    : state.runtimeSensors.map((sensor) => ({ name: sensor.sensor, host: "", runtime: sensor }));
 
   rows.forEach((sensor) => {
     const runtime = sensor.runtime;
-    const stateLabel = runtime ? "online" : "waiting";
-    const events = runtime?.events || 0;
-    const last = formatLastSeen(runtime?.last_seen);
     const item = document.createElement("div");
     item.className = "job-item";
     item.innerHTML = `
-      <div><strong>${sensor.name}</strong><span>${stateLabel} · ${events} events</span></div>
-      <span>${sensor.host || "no host"} · ${runtime?.last_type || "no events"} · ${last}</span>
+      <div><strong>${sensor.name}</strong><span>${runtime ? "online" : "waiting"} · ${runtime?.events || 0} events</span></div>
+      <span>${sensor.host || "no host"} · ${runtime?.last_type || "no events"} · ${formatLastSeen(runtime?.last_seen)}</span>
     `;
     box.append(item);
   });
 }
 
-function sensorDefaults(index = 1) {
-  return {
-    name: `sensor${index}`,
-    host: `192.168.10.${10 + index}`,
-    role: "custom",
-    profile: "opencanary",
-    services: ["ssh", "http"],
-    mask: {
-      hostname: `sensor${index}-node`,
-      os: "Debian GNU/Linux 13",
-      department: "Lab",
-      asset_tag: `SENSOR${index}`,
-      notes: "deception node",
-    },
-  };
-}
-
 function renderCatalog() {
-  const profiles = $("#profileCatalog");
-  profiles.innerHTML = "";
-  Object.entries(state.catalog.profiles).forEach(([key, value]) => {
+  const box = $("#honeypotCatalog");
+  box.innerHTML = "";
+  Object.entries(state.catalog.honeypots).forEach(([key, value]) => {
     const item = document.createElement("div");
     item.className = "catalog-item";
-    item.innerHTML = `<strong>${key}</strong><span>${value.description}</span>`;
-    profiles.append(item);
-  });
-
-  const services = $("#serviceCatalog");
-  services.innerHTML = "";
-  Object.entries(state.catalog.services).forEach(([key, value]) => {
-    const item = document.createElement("div");
-    item.className = "service-item";
-    item.innerHTML = `<strong>${value.title}</strong><span>tcp/${value.port} · ${key}</span>`;
-    services.append(item);
+    item.innerHTML = `<strong>${value.title}</strong><span>${value.description}</span>`;
+    box.append(item);
   });
 }
 
@@ -147,31 +184,18 @@ function renderSensors() {
   container.innerHTML = "";
 
   state.project.sensors.forEach((sensor, index) => {
+    ensureSensorShape(sensor);
     const node = template.content.firstElementChild.cloneNode(true);
     $("h3", node).textContent = sensor.name || `sensor${index + 1}`;
-    $(".profile-pill", node).textContent = `${sensor.profile} · ${sensor.role}`;
+    $(".honeypot-pill", node).textContent = sensor.honeypots.map((honeypot) => honeypot.type).join(" + ");
 
     $$("[data-field]", node).forEach((input) => {
       const field = input.dataset.field;
-      if (field === "profile") {
-        input.innerHTML = "";
-        Object.keys(state.catalog.profiles).forEach((profile) => {
-          const option = document.createElement("option");
-          option.value = profile;
-          option.textContent = profile;
-          input.append(option);
-        });
-      }
       input.value = sensor[field] || "";
       input.addEventListener("input", () => {
         sensor[field] = input.value;
-        if (field === "profile") {
-          applyProfileDefaults(sensor);
-          renderSensors();
-        } else {
-          $("h3", node).textContent = sensor.name || `sensor${index + 1}`;
-          $(".profile-pill", node).textContent = `${sensor.profile} · ${sensor.role}`;
-        }
+        $("h3", node).textContent = sensor.name || `sensor${index + 1}`;
+        if (field === "role" && !sensor.mask.department) sensor.mask.department = input.value;
       });
     });
 
@@ -184,8 +208,8 @@ function renderSensors() {
       });
     });
 
+    setupHoneypotControls(node, sensor);
     setupDeployControls(node, sensor);
-    renderServiceChecks(node, sensor);
     $(".remove-sensor", node).addEventListener("click", () => {
       state.project.sensors.splice(index, 1);
       renderSensors();
@@ -196,6 +220,115 @@ function renderSensors() {
   });
 
   setStatus(`${state.project.sensors.length} сенсоров`);
+}
+
+function setupHoneypotControls(node, sensor) {
+  const select = $(".honeypot-type", node);
+  select.innerHTML = "";
+  Object.entries(state.catalog.honeypots).forEach(([type, catalog]) => {
+    const option = document.createElement("option");
+    option.value = type;
+    option.textContent = catalog.title;
+    select.append(option);
+  });
+  $(".add-honeypot", node).addEventListener("click", () => {
+    sensor.honeypots.push(defaultHoneypot(select.value));
+    syncLegacyFields(sensor);
+    renderSensors();
+  });
+  renderHoneypotTree(node, sensor);
+}
+
+function renderHoneypotTree(node, sensor) {
+  const box = $(".honeypots", node);
+  box.innerHTML = "";
+  sensor.honeypots.forEach((honeypot, index) => {
+    const catalog = state.catalog.honeypots[honeypot.type];
+    const item = document.createElement("section");
+    item.className = "honeypot-node";
+    item.innerHTML = `
+      <div class="honeypot-head">
+        <label class="switch"><input type="checkbox" class="honeypot-enabled" ${honeypot.enabled ? "checked" : ""}><span>${catalog.title}</span></label>
+        <button class="danger remove-honeypot" type="button">Удалить</button>
+      </div>
+      <p>${catalog.description}</p>
+      <div class="honeypot-branch">
+        <h5>Сервисы</h5>
+        <div class="checks honeypot-services"></div>
+        <h5>Настройки</h5>
+        <div class="settings-grid"></div>
+      </div>
+    `;
+    $(".honeypot-enabled", item).addEventListener("change", (event) => {
+      honeypot.enabled = event.target.checked;
+      syncLegacyFields(sensor);
+    });
+    $(".remove-honeypot", item).addEventListener("click", () => {
+      sensor.honeypots.splice(index, 1);
+      if (!sensor.honeypots.length) sensor.honeypots.push(defaultHoneypot("opencanary"));
+      syncLegacyFields(sensor);
+      renderSensors();
+    });
+    renderHoneypotServices(item, sensor, honeypot);
+    renderHoneypotSettings(item, sensor, honeypot);
+    box.append(item);
+  });
+}
+
+function renderHoneypotServices(root, sensor, honeypot) {
+  const box = $(".honeypot-services", root);
+  const catalog = state.catalog.honeypots[honeypot.type];
+  box.innerHTML = "";
+  catalog.services.forEach((service) => {
+    const serviceInfo = state.catalog.services[service];
+    const label = document.createElement("label");
+    label.className = "check";
+    const checked = honeypot.services.includes(service) ? "checked" : "";
+    label.innerHTML = `<input type="checkbox" value="${service}" ${checked}><span>${serviceInfo.title}<small>${serviceInfo.protocol}</small></span>`;
+    $("input", label).addEventListener("change", (event) => {
+      if (event.target.checked && !honeypot.services.includes(service)) {
+        honeypot.services.push(service);
+      }
+      if (!event.target.checked) {
+        honeypot.services = honeypot.services.filter((item) => item !== service);
+      }
+      syncLegacyFields(sensor);
+    });
+    box.append(label);
+  });
+}
+
+function renderHoneypotSettings(root, sensor, honeypot) {
+  const box = $(".settings-grid", root);
+  const catalog = state.catalog.honeypots[honeypot.type];
+  box.innerHTML = "";
+  catalog.settings.forEach((field) => {
+    const label = document.createElement("label");
+    label.textContent = field.title;
+    const input = field.type === "select" ? document.createElement("select") : document.createElement("input");
+    if (field.type === "boolean") input.type = "checkbox";
+    if (field.type === "number") input.type = "number";
+    if (field.type === "select") {
+      field.options.forEach((optionValue) => {
+        const option = document.createElement("option");
+        option.value = optionValue;
+        option.textContent = optionValue;
+        input.append(option);
+      });
+    }
+    const value = honeypot.settings[field.key] ?? field.default;
+    if (field.type === "boolean") {
+      input.checked = Boolean(value);
+    } else {
+      input.value = value;
+    }
+    input.addEventListener("input", () => {
+      honeypot.settings[field.key] = field.type === "boolean" ? input.checked : input.value;
+      syncLegacyFields(sensor);
+    });
+    label.append(input);
+    box.append(label);
+  });
 }
 
 function setupDeployControls(node, sensor) {
@@ -286,42 +419,12 @@ async function watchDeployJob(jobId, controls) {
   }
 }
 
-function renderServiceChecks(node, sensor) {
-  const box = $(".services", node);
-  box.innerHTML = "";
-  Object.entries(state.catalog.services).forEach(([key, value]) => {
-    const label = document.createElement("label");
-    label.className = "check";
-    const checked = sensor.services?.includes(key) ? "checked" : "";
-    label.innerHTML = `<input type="checkbox" value="${key}" ${checked}><span>${value.title} <small>tcp/${value.port}</small></span>`;
-    $("input", label).addEventListener("change", (event) => {
-      sensor.services ||= [];
-      if (event.target.checked && !sensor.services.includes(key)) {
-        sensor.services.push(key);
-      }
-      if (!event.target.checked) {
-        sensor.services = sensor.services.filter((item) => item !== key);
-      }
-    });
-    box.append(label);
-  });
-}
-
-function applyProfileDefaults(sensor) {
-  const profile = state.catalog.profiles[sensor.profile];
-  if (!profile) return;
-  sensor.role = profile.role;
-  sensor.services = [...profile.services];
-  sensor.mask ||= {};
-  if (!sensor.mask.hostname) sensor.mask.hostname = `${sensor.name}-node`;
-  if (!sensor.mask.os) sensor.mask.os = "Debian GNU/Linux 13";
-  if (!sensor.mask.department) sensor.mask.department = profile.role;
-  if (!sensor.mask.asset_tag) sensor.mask.asset_tag = sensor.name.toUpperCase();
-  if (!sensor.mask.notes) sensor.mask.notes = `${sensor.profile} decoy`;
-}
-
 async function saveProject(message = "Сохранено") {
   syncNetworkFromDom();
+  state.project.sensors.forEach((sensor) => {
+    ensureSensorShape(sensor);
+    syncLegacyFields(sensor);
+  });
   await requestJson("/api/project", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -340,14 +443,13 @@ async function init() {
   state.catalog = await requestJson("/api/catalog");
   state.project = await requestJson("/api/project");
   state.project.sensors ||= [];
+  state.project.sensors.forEach(ensureSensorShape);
   renderCatalog();
   syncNetworkToDom();
   renderSensors();
 
   $("#addSensor").addEventListener("click", () => {
-    const sensor = sensorDefaults(state.project.sensors.length + 1);
-    applyProfileDefaults(sensor);
-    state.project.sensors.push(sensor);
+    state.project.sensors.push(sensorDefaults(state.project.sensors.length + 1));
     renderSensors();
   });
   $("#saveProject").addEventListener("click", () => saveProject().catch((error) => setStatus(error.message)));

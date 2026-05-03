@@ -24,6 +24,6 @@ curl http://127.0.0.1:8080/api/sensors | python3 -m json.tool
 Dashboard:
 
 ```text
-http://<central-ip>:8080/dashboard
 http://<central-ip>:8090
+http://<central-ip>:8080/api/events
 ```
