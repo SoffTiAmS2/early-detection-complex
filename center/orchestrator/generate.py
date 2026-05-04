@@ -181,7 +181,7 @@ contents_path = /cowrie/cowrie-git/src/cowrie/data/honeyfs
 log_path = var/log/cowrie
 download_path = var/lib/cowrie/downloads
 download_limit_size = {settings.get('download_limit_size', 10485760)}
-auth_class = cowrie.core.auth.{settings.get('auth_class', 'UserDB')}
+auth_class = {settings.get('auth_class', 'UserDB')}
 backend = {settings.get('backend', 'shell')}
 
 [shell]
