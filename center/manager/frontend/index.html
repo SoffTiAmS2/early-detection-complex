@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>EDC Configurator</title>
+  <title>Панель EDC</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
   <header class="topbar">
     <div>
-      <h1>Early Detection Complex</h1>
-      <p>Конфигуратор сенсоров, профилей и deception-маскировки</p>
+      <h1>Панель EDC</h1>
+      <p>Центр настройки и установки сенсоров</p>
     </div>
     <div class="actions">
       <button id="refreshStatus" type="button">Обновить статус</button>
@@ -53,7 +53,7 @@
 
     <section class="workspace">
       <aside class="panel catalog">
-        <h2>Honeypots</h2>
+        <h2>Приманки</h2>
         <div id="honeypotCatalog" class="catalog-list"></div>
       </aside>
 
@@ -94,7 +94,7 @@
           <h4>Наполняемость сенсора</h4>
           <div class="inline-actions">
             <select class="honeypot-type"></select>
-            <button class="add-honeypot" type="button">Добавить honeypot</button>
+            <button class="add-honeypot" type="button">Добавить приманку</button>
           </div>
         </div>
         <div class="honeypots"></div>
@@ -103,19 +103,19 @@
       <div class="subsection">
         <h4>Маскировка</h4>
         <div class="grid five">
-          <label>Hostname
+          <label>Имя узла
             <input data-mask="hostname" autocomplete="off">
           </label>
-          <label>OS
+          <label>ОС
             <input data-mask="os" autocomplete="off">
           </label>
-          <label>Department
+          <label>Отдел
             <input data-mask="department" autocomplete="off">
           </label>
-          <label>Asset tag
+          <label>Инвентарный номер
             <input data-mask="asset_tag" autocomplete="off">
           </label>
-          <label>Notes
+          <label>Заметки
             <input data-mask="notes" autocomplete="off">
           </label>
         </div>
@@ -124,19 +124,19 @@
       <div class="subsection deploy">
         <h4>Установка/обновление по SSH</h4>
         <div class="grid five">
-          <label>SSH host
+          <label>Адрес SSH
             <input data-deploy="ssh_host" autocomplete="off">
           </label>
-          <label>Port
+          <label>Порт
             <input data-deploy="ssh_port" inputmode="numeric" value="22" autocomplete="off">
           </label>
-          <label>Login
+          <label>Логин
             <input data-deploy="ssh_user" autocomplete="username">
           </label>
-          <label>Password
+          <label>Пароль
             <input data-deploy="ssh_password" type="password" autocomplete="current-password">
           </label>
-          <label>Sudo password
+          <label>Пароль sudo
             <input data-deploy="become_password" type="password" autocomplete="current-password">
           </label>
         </div>

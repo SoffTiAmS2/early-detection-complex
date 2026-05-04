@@ -132,6 +132,7 @@ docker compose config
 
 - `docs/deployment.md` - установка и эксплуатация.
 - `docs/architecture.md` - архитектура.
+- `docs/file_map.md` - значение каждого tracked-файла.
 - `docs/deception_masking.md` - логика маскировки.
 - `docs/honeypot_catalog.md` - справочник honeypot, сервисов и настроек.
 - `docs/web_configurator.md` - web-консоль и API.

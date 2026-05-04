@@ -21,6 +21,51 @@ function setStatus(message) {
   $("#statusLine").textContent = message;
 }
 
+const ERROR_TEXT = {
+  "Failed to fetch": "Нет связи с центром",
+};
+
+const STATUS_TEXT = {
+  cancelled: "отменено",
+  failed: "ошибка",
+  queued: "в очереди",
+  running: "выполняется",
+  succeeded: "готово",
+};
+
+function labelStatus(value) {
+  return STATUS_TEXT[value] || value || "неизвестно";
+}
+
+function labelError(error) {
+  return ERROR_TEXT[error.message] || error.message || "Ошибка";
+}
+
+function labelService(value) {
+  const names = {
+    ssh: "SSH",
+    telnet: "Telnet",
+  };
+  return names[value] || value;
+}
+
+function labelSetting(value) {
+  const names = {
+    auth_class: "Правило входа",
+    backend: "Режим Cowrie",
+    download_limit_size: "Лимит загрузки, байт",
+    hostname: "Имя узла",
+    sftp_enabled: "Включить SFTP",
+    ssh_version: "Версия SSH",
+  };
+  return names[value] || value;
+}
+
+function labelHoneypot(value) {
+  const item = state.catalog?.honeypots?.[value];
+  return item?.title || value;
+}
+
 function defaultSettings(type) {
   const settings = {};
   state.catalog.honeypots[type].settings.forEach((field) => {
@@ -96,16 +141,16 @@ function sensorDefaults(index = 1) {
     mask: {
       hostname: `sensor${index}-node`,
       os: "Debian GNU/Linux 13",
-      department: "Lab",
+      department: "Лаборатория",
       asset_tag: `SENSOR${index}`,
-      notes: "deception node",
+      notes: "сенсор-приманка",
     },
   };
 }
 
 function jobLabel(job) {
   const step = job.step ? ` · ${job.step}` : "";
-  return `${job.sensor || job.type}: ${job.status}${step}`;
+  return `${job.sensor || job.type}: ${labelStatus(job.status)}${step}`;
 }
 
 function renderJobs() {
@@ -119,7 +164,7 @@ function renderJobs() {
     const item = document.createElement("div");
     item.className = "job-item";
     item.innerHTML = `
-      <div><strong>${job.sensor || job.type}</strong><span>${job.status} · ${job.progress || 0}%</span></div>
+      <div><strong>${job.sensor || job.type}</strong><span>${labelStatus(job.status)} · ${job.progress || 0}%</span></div>
       <div class="progress"><span style="width: ${job.progress || 0}%"></span></div>
     `;
     box.append(item);
@@ -131,10 +176,10 @@ async function refreshCenterStatus() {
   const center = await requestJson("/api/center/status");
   state.jobs = health.jobs || [];
   state.runtimeSensors = center.sensors || [];
-  const collector = center.collector?.status || "offline";
+  const collector = center.collector?.status === "ok" ? "работает" : "недоступен";
   const events = center.collector?.events ?? 0;
   const error = center.collector_error ? ` · ${center.collector_error}` : "";
-  $("#centerStatus").textContent = `${collector} · ${center.central_url} · events ${events}${error}`;
+  $("#centerStatus").textContent = `${collector} · ${center.central_url} · событий: ${events}${error}`;
   renderJobs();
   renderRuntimeSensors();
 }
@@ -164,8 +209,8 @@ function renderRuntimeSensors() {
     const item = document.createElement("div");
     item.className = "job-item";
     item.innerHTML = `
-      <div><strong>${sensor.name}</strong><span>${runtime ? "online" : "waiting"} · ${runtime?.events || 0} events</span></div>
-      <span>${sensor.host || "no host"} · ${runtime?.last_type || "no events"} · ${formatLastSeen(runtime?.last_seen)}</span>
+      <div><strong>${sensor.name}</strong><span>${runtime ? "на связи" : "ожидание"} · событий: ${runtime?.events || 0}</span></div>
+      <span>${sensor.host || "адрес не задан"} · ${runtime?.last_type || "событий нет"} · ${formatLastSeen(runtime?.last_seen)}</span>
     `;
     box.append(item);
   });
@@ -203,7 +248,7 @@ function renderSensors() {
     ensureSensorShape(sensor);
     const node = template.content.firstElementChild.cloneNode(true);
     $("h3", node).textContent = sensor.name || `sensor${index + 1}`;
-    $(".honeypot-pill", node).textContent = sensor.honeypots.map((honeypot) => honeypot.type).join(" + ");
+    $(".honeypot-pill", node).textContent = sensor.honeypots.map((honeypot) => labelHoneypot(honeypot.type)).join(" + ");
 
     $$("[data-field]", node).forEach((input) => {
       const field = input.dataset.field;
@@ -306,8 +351,8 @@ function renderHoneypotServices(root, sensor, honeypot) {
     label.className = "check";
     label.innerHTML = `
       <input type="checkbox" value="${service}" ${current.enabled ? "checked" : ""}>
-      <span>${serviceInfo.title}<small>${serviceInfo.protocol} container:${serviceInfo.container_port}</small></span>
-      <input class="port-input" type="number" min="1" max="65535" value="${current.host_port}" aria-label="${serviceInfo.title} host port">
+      <span>${labelService(service)}<small>порт в контейнере: ${serviceInfo.container_port}</small></span>
+      <input class="port-input" type="number" min="1" max="65535" value="${current.host_port}" aria-label="Внешний порт ${labelService(service)}">
     `;
     const checkbox = $("input[type='checkbox']", label);
     const port = $(".port-input", label);
@@ -340,7 +385,7 @@ function renderHoneypotSettings(root, sensor, honeypot) {
   box.innerHTML = "";
   catalog.settings.forEach((field) => {
     const label = document.createElement("label");
-    label.textContent = field.title;
+    label.textContent = labelSetting(field.key);
     const input = field.type === "select" ? document.createElement("select") : document.createElement("input");
     if (field.type === "boolean") input.type = "checkbox";
     if (field.type === "number") input.type = "number";
@@ -421,7 +466,7 @@ async function deploySensor(sensor, deploy, node) {
     await watchDeployJob(jobId, { button, cancel, status, output, progressFill });
   } catch (error) {
     status.textContent = "Ошибка";
-    output.textContent = error.message;
+    output.textContent = labelError(error);
     output.hidden = false;
   } finally {
     button.disabled = false;
@@ -488,11 +533,11 @@ async function init() {
     state.project.sensors.push(sensorDefaults(state.project.sensors.length + 1));
     renderSensors();
   });
-  $("#saveProject").addEventListener("click", () => saveProject().catch((error) => setStatus(error.message)));
-  $("#generateProject").addEventListener("click", () => generateProject().catch((error) => setStatus(error.message)));
-  $("#refreshStatus").addEventListener("click", () => refreshCenterStatus().catch((error) => setStatus(error.message)));
+  $("#saveProject").addEventListener("click", () => saveProject().catch((error) => setStatus(labelError(error))));
+  $("#generateProject").addEventListener("click", () => generateProject().catch((error) => setStatus(labelError(error))));
+  $("#refreshStatus").addEventListener("click", () => refreshCenterStatus().catch((error) => setStatus(labelError(error))));
   refreshCenterStatus().catch(() => {});
   setInterval(() => refreshCenterStatus().catch(() => {}), 5000);
 }
 
-init().catch((error) => setStatus(error.message));
+init().catch((error) => setStatus(labelError(error)));
