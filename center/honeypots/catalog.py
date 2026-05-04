@@ -37,6 +37,12 @@ HONEYPOT_CATALOG: dict[str, dict[str, Any]] = {
             {"key": "auth_class", "title": "Правило входа", "type": "select", "default": "UserDB", "options": ["UserDB", "AuthRandom"]},
             {"key": "download_limit_size", "title": "Лимит загрузки, байт", "type": "number", "default": 10485760},
             {"key": "sftp_enabled", "title": "Включить SFTP", "type": "boolean", "default": True},
+            {"key": "login_user", "title": "Фейковый пользователь", "type": "text", "default": "backup"},
+            {"key": "login_password", "title": "Фейковый пароль", "type": "text", "default": "backup123"},
+            {"key": "shell_user", "title": "Пользователь shell", "type": "text", "default": "backup"},
+            {"key": "shell_uid", "title": "UID", "type": "number", "default": 1001},
+            {"key": "shell_gid", "title": "GID", "type": "number", "default": 1001},
+            {"key": "kernel_version", "title": "Версия ядра", "type": "text", "default": "5.10.0-23-amd64"},
         ],
     },
 }

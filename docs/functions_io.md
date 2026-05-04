@@ -204,6 +204,9 @@
 - `sensors/<name>/.env`;
 - `sensors/<name>/docker-compose.yml`;
 - `sensors/<name>/cowrie/etc/cowrie.cfg`;
+- `sensors/<name>/cowrie/etc/userdb.txt`;
+- `sensors/<name>/cowrie/honeyfs/...`;
+- `sensors/<name>/cowrie/downloads/`;
 - `sensors/<name>/README.md`;
 - ignored `config/network.yml` и `config/sensors.yml` для совместимости.
 
@@ -216,11 +219,16 @@
 Ввод:
 
 - `cowrie/etc/cowrie.cfg`;
+- `cowrie/etc/userdb.txt`;
+- `cowrie/honeyfs`;
 - host-port mappings из `docker-compose.yml`.
 
 Что делает:
 
 - запускает настоящий Cowrie SSH/Telnet honeypot;
+- перед запуском собирает `/tmp/edc-cowrie/fs.pickle` из `cowrie/honeyfs` через `createfs`;
+- применяет фейковую базу входа Cowrie из `userdb.txt`;
+- показывает атакующему сгенерированную системную легенду: hostname, motd, passwd/group, домашнюю директорию и приманочные файлы;
 - пишет JSON-события в `logs/cowrie.json`;
 - сохраняет скачанные артефакты в `cowrie/downloads`.
 

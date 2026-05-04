@@ -37,7 +37,7 @@
 
 ## Генератор
 
-- `center/orchestrator/generate.py` - превращает `config/project.json` в ignored-папку `sensors/<name>/`: `.env`, `docker-compose.yml`, `cowrie.cfg`, runtime-директории.
+- `center/orchestrator/generate.py` - превращает `config/project.json` в ignored-папку `sensors/<name>/`: `.env`, `docker-compose.yml`, `cowrie.cfg`, `userdb.txt`, `honeyfs`, runtime-директории.
 
 ## Ansible
 

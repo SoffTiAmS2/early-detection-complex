@@ -36,7 +36,13 @@
             "backend": "shell",
             "auth_class": "UserDB",
             "download_limit_size": 10485760,
-            "sftp_enabled": true
+            "sftp_enabled": true,
+            "login_user": "backup",
+            "login_password": "backup123",
+            "shell_user": "backup",
+            "shell_uid": 1001,
+            "shell_gid": 1001,
+            "kernel_version": "5.10.0-23-amd64"
           }
         }
       ],

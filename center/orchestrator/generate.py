@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import sys
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -161,6 +163,7 @@ def render_compose(sensor: dict[str, Any]) -> str:
 {ports}
     volumes:
       - ./cowrie/etc:/cowrie/cowrie-git/etc:ro
+      - ./cowrie/honeyfs:/cowrie/cowrie-git/honeyfs:ro
       - ./logs:/cowrie/cowrie-git/var/log/cowrie
       - ./cowrie/downloads:/cowrie/cowrie-git/var/lib/cowrie/downloads
     restart: unless-stopped
@@ -179,6 +182,9 @@ download_limit_size = {settings.get('download_limit_size', 10485760)}
 auth_class = cowrie.core.auth.{settings.get('auth_class', 'UserDB')}
 backend = {settings.get('backend', 'shell')}
 
+[shell]
+filesystem = /tmp/edc-cowrie/fs.pickle
+
 [ssh]
 enabled = true
 version = {settings.get('ssh_version', 'SSH-2.0-OpenSSH_8.4')}
@@ -193,6 +199,85 @@ listen_endpoints = tcp:2223:interface=0.0.0.0
 enabled = true
 logfile = cowrie.json
 """
+
+
+def render_cowrie_userdb(honeypot: dict[str, Any]) -> str:
+    settings = honeypot["settings"]
+    user = str(settings.get("login_user", "backup")).strip() or "backup"
+    password = str(settings.get("login_password", "backup123"))
+    return textwrap.dedent(
+        f"""\
+        # Format: username:x:password
+        # x means login succeeds with the supplied password.
+        {user}:x:{password}
+        root:!:*
+        admin:!:*
+        """
+    )
+
+
+def setting_int(settings: dict[str, Any], key: str, fallback: int) -> int:
+    try:
+        return int(settings.get(key, fallback))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def render_passwd(sensor: dict[str, Any], honeypot: dict[str, Any]) -> str:
+    settings = honeypot["settings"]
+    user = str(settings.get("shell_user", settings.get("login_user", "backup"))).strip() or "backup"
+    uid = setting_int(settings, "shell_uid", 1001)
+    gid = setting_int(settings, "shell_gid", 1001)
+    return textwrap.dedent(
+        f"""\
+        root:x:0:0:root:/root:/bin/bash
+        daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+        www-data:x:33:33:www-data:/var/www:/usr/sbin/nologin
+        {user}:x:{uid}:{gid}:{sensor['mask']['department']} service account:/home/{user}:/bin/bash
+        """
+    )
+
+
+def render_group(honeypot: dict[str, Any]) -> str:
+    settings = honeypot["settings"]
+    user = str(settings.get("shell_user", settings.get("login_user", "backup"))).strip() or "backup"
+    gid = setting_int(settings, "shell_gid", 1001)
+    return textwrap.dedent(
+        f"""\
+        root:x:0:
+        daemon:x:1:
+        www-data:x:33:
+        users:x:100:
+        {user}:x:{gid}:{user}
+        """
+    )
+
+
+def render_issue(sensor: dict[str, Any], honeypot: dict[str, Any]) -> str:
+    settings = honeypot["settings"]
+    return f"{sensor['mask']['os']} {settings.get('kernel_version', '5.10.0-23-amd64')} \\n \\l\n"
+
+
+def render_motd(sensor: dict[str, Any]) -> str:
+    return textwrap.dedent(
+        f"""\
+        Last login: Tue May  5 08:12:41 from 10.0.0.24
+
+        {sensor['mask']['hostname']} maintenance window: Sunday 03:00-04:00.
+        Unauthorized access is prohibited.
+        """
+    )
+
+
+def render_bash_history() -> str:
+    return textwrap.dedent(
+        """\
+        sudo systemctl status nginx
+        tail -n 50 /var/log/auth.log
+        df -h
+        ls -la /srv/backups
+        """
+    )
 
 
 def render_readme(sensor: dict[str, Any], central_node: str) -> str:
@@ -253,10 +338,14 @@ def write_legacy_inventory(project: dict[str, Any]) -> None:
 
 def write_sensor(sensor: dict[str, Any], central_node: str) -> None:
     sensor_dir = SENSORS_DIR / sensor["name"]
+    if sensor_dir.exists():
+        shutil.rmtree(sensor_dir)
     cowrie_etc = sensor_dir / "cowrie" / "etc"
+    cowrie_honeyfs = sensor_dir / "cowrie" / "honeyfs"
     (sensor_dir / "logs").mkdir(parents=True, exist_ok=True)
     (sensor_dir / "cowrie" / "downloads").mkdir(parents=True, exist_ok=True)
     cowrie_etc.mkdir(parents=True, exist_ok=True)
+    cowrie_honeyfs.mkdir(parents=True, exist_ok=True)
 
     (sensor_dir / ".env").write_text(render_env(sensor, central_node), encoding="utf-8")
     (sensor_dir / "docker-compose.yml").write_text(render_compose(sensor), encoding="utf-8")
@@ -264,6 +353,44 @@ def write_sensor(sensor: dict[str, Any], central_node: str) -> None:
     for honeypot in enabled_honeypots(sensor):
         if honeypot["type"] == "cowrie":
             (cowrie_etc / "cowrie.cfg").write_text(render_cowrie_config(sensor, honeypot), encoding="utf-8")
+            write_cowrie_persona(sensor, honeypot, cowrie_etc, cowrie_honeyfs)
+
+
+def write_cowrie_persona(
+    sensor: dict[str, Any],
+    honeypot: dict[str, Any],
+    cowrie_etc: Path,
+    honeyfs: Path,
+) -> None:
+    settings = honeypot["settings"]
+    user = str(settings.get("shell_user", settings.get("login_user", "backup"))).strip() or "backup"
+    (cowrie_etc / "userdb.txt").write_text(render_cowrie_userdb(honeypot), encoding="utf-8")
+
+    etc_dir = honeyfs / "etc"
+    home_dir = honeyfs / "home" / user
+    var_log_dir = honeyfs / "var" / "log"
+    srv_backup_dir = honeyfs / "srv" / "backups"
+    for path in (etc_dir, home_dir, var_log_dir, srv_backup_dir):
+        path.mkdir(parents=True, exist_ok=True)
+
+    (etc_dir / "hostname").write_text(sensor["mask"]["hostname"] + "\n", encoding="utf-8")
+    (etc_dir / "issue.net").write_text(render_issue(sensor, honeypot), encoding="utf-8")
+    (etc_dir / "motd").write_text(render_motd(sensor), encoding="utf-8")
+    (etc_dir / "passwd").write_text(render_passwd(sensor, honeypot), encoding="utf-8")
+    (etc_dir / "group").write_text(render_group(honeypot), encoding="utf-8")
+    (home_dir / ".bash_history").write_text(render_bash_history(), encoding="utf-8")
+    (home_dir / "README.txt").write_text(
+        f"{sensor['mask']['hostname']} backup workspace\nAsset: {sensor['mask']['asset_tag']}\n",
+        encoding="utf-8",
+    )
+    (srv_backup_dir / "inventory-notes.txt").write_text(
+        f"asset={sensor['mask']['asset_tag']}\ndepartment={sensor['mask']['department']}\n",
+        encoding="utf-8",
+    )
+    (var_log_dir / "auth.log").write_text(
+        "May  5 08:12:41 sshd[1142]: Accepted password for backup from 10.0.0.24 port 52218 ssh2\n",
+        encoding="utf-8",
+    )
 
 
 def main() -> None:

@@ -10,7 +10,17 @@ Manager использует единый справочник `center/honeypots
 
 - сервисы: `ssh`, `telnet`;
 - host-port для каждого сервиса;
-- настройки: `hostname`, `ssh_version`, `backend`, `auth_class`, `download_limit_size`, `sftp_enabled`.
+- настройки сети и поведения: `hostname`, `ssh_version`, `backend`, `auth_class`, `download_limit_size`, `sftp_enabled`;
+- настройки deception-персоны: `login_user`, `login_password`, `shell_user`, `shell_uid`, `shell_gid`, `kernel_version`.
+
+Генератор создает для Cowrie не только `cowrie.cfg`, но и рабочую легенду:
+
+- `cowrie/etc/userdb.txt` - фейковая база учетных данных, через которую Cowrie решает, кого пустить внутрь;
+- `cowrie/honeyfs/etc/hostname`, `issue.net`, `motd`, `passwd`, `group` - видимая системная маска;
+- `cowrie/honeyfs/home/<user>/...` и `cowrie/honeyfs/srv/backups/...` - приманочные файлы;
+- `cowrie/downloads` - место для файлов, загруженных атакующим.
+
+При старте единый контейнер `edc-sensor` запускает `createfs` и собирает `fs.pickle` из `honeyfs`, после чего Cowrie использует этот filesystem в `[shell]`. Это ближе к нормальной deception-модели: порт, баннер, логин, shell и файлы соответствуют одной легенде.
 
 ## Важное Ограничение
 

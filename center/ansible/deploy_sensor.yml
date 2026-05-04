@@ -87,6 +87,7 @@
       loop:
         - "{{ remote_root }}/sensors/{{ target_sensor }}/logs"
         - "{{ remote_root }}/sensors/{{ target_sensor }}/cowrie/downloads"
+        - "{{ remote_root }}/sensors/{{ target_sensor }}/cowrie/honeyfs"
 
     - name: Detect compose command
       ansible.builtin.shell: |

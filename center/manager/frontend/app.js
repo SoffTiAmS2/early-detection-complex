@@ -55,6 +55,12 @@ function labelSetting(value) {
     backend: "Режим Cowrie",
     download_limit_size: "Лимит загрузки, байт",
     hostname: "Имя узла",
+    kernel_version: "Версия ядра",
+    login_password: "Фейковый пароль",
+    login_user: "Фейковый пользователь",
+    shell_gid: "GID",
+    shell_uid: "UID",
+    shell_user: "Пользователь shell",
     sftp_enabled: "Включить SFTP",
     ssh_version: "Версия SSH",
   };
