@@ -34,7 +34,7 @@ Web-консоль позволяет выбрать эти параметры. 
 
 ## Что реально меняется
 
-Cowrie запускается из официального Docker-образа `cowrie/cowrie:latest`. Генератор создает `cowrie.cfg`, где задаются:
+Единый образ `edc-sensor` собирается из `sensor/Dockerfile` на базе официального `cowrie/cowrie:latest`. Генератор создает `cowrie.cfg`, где задаются:
 
 - fake hostname;
 - SSH version banner;

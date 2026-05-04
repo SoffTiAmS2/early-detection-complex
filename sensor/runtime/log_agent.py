@@ -89,7 +89,7 @@ def deliver_event(
 
 def main() -> None:
     central_url = os.getenv("CENTRAL_URL", "http://central-node:8080/api/events")
-    log_path = Path(os.getenv("HONEYPOT_LOG_PATH", "/logs/events.jsonl"))
+    log_path = Path(os.getenv("HONEYPOT_LOG_PATH", "/cowrie/cowrie-git/var/log/cowrie/cowrie.json"))
     poll_interval = float(os.getenv("POLL_INTERVAL", "1"))
     heartbeat_interval = float(os.getenv("HEARTBEAT_INTERVAL", "30"))
 

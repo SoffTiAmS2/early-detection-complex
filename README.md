@@ -59,9 +59,8 @@ http://<central-ip>:8080/api/events # события collector
 - `center/manager/backend/server.py` обслуживает web-консоль, job-статусы и Ansible-деплой.
 - `center/orchestrator/generate.py` читает `config/project.json` и создает локальные `sensors/<name>/`.
 - `center/ansible/deploy_sensor.yml` устанавливает/обновляет выбранный сенсор по SSH.
-- `cowrie/cowrie:latest` запускается на сенсоре как настоящий Cowrie honeypot.
-- `sensor/agents/log-agent` доставляет JSON-события Cowrie в центр.
-- `sensor/agents/display-agent` показывает локальный статус сенсора.
+- `sensor/Dockerfile` собирает единый образ `edc-sensor` на базе `cowrie/cowrie:latest`.
+- внутри `edc-sensor` запускаются Cowrie, log-agent и display-agent.
 
 ## Конфигурация
 

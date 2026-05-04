@@ -132,7 +132,7 @@ MASK_ASSET_TAG={mask['asset_tag']}
 CENTRAL_NODE_HOST={central_node}
 CENTRAL_URL=http://{central_node}:8080/api/events
 CENTRAL_HEALTH_URL=http://{central_node}:8080/health
-HONEYPOT_LOG_PATH=/logs/cowrie.json
+HONEYPOT_LOG_PATH=/cowrie/cowrie-git/var/log/cowrie/cowrie.json
 DISPLAY_INTERVAL=10
 """
 
@@ -146,51 +146,25 @@ def render_port_lines(honeypot: dict[str, Any]) -> str:
 
 
 def render_compose(sensor: dict[str, Any]) -> str:
-    service_blocks = []
-    dependencies = []
+    port_lines = []
     for honeypot in enabled_honeypots(sensor):
         if honeypot["type"] == "cowrie":
-            service_blocks.append(render_cowrie_service(honeypot))
-            dependencies.append("cowrie")
-
-    depends = "\n".join(f"      - {item}" for item in dependencies) if dependencies else "      - log-agent"
-    services = "\n\n".join(service_blocks)
+            port_lines.extend(render_port_lines(honeypot).splitlines())
+    ports = "\n".join(port_lines) if port_lines else '      - "2222:2222"'
     return f"""services:
-{services}
-
-  log-agent:
+  edc-sensor:
     build:
-      context: ../../sensor/agents/log-agent
+      context: ../../sensor
     env_file:
       - .env
-    volumes:
-      - ./logs:/logs:ro
-    depends_on:
-{depends}
-    restart: unless-stopped
-
-  display-agent:
-    build:
-      context: ../../sensor/agents/display-agent
-    env_file:
-      - .env
-    depends_on:
-      - log-agent
-    restart: unless-stopped
-"""
-
-
-def render_cowrie_service(honeypot: dict[str, Any]) -> str:
-    image = HONEYPOT_CATALOG["cowrie"]["image"]
-    return f"""  cowrie:
-    image: {image}
     ports:
-{render_port_lines(honeypot)}
+{ports}
     volumes:
       - ./cowrie/etc:/cowrie/cowrie-git/etc:ro
       - ./logs:/cowrie/cowrie-git/var/log/cowrie
       - ./cowrie/downloads:/cowrie/cowrie-git/var/lib/cowrie/downloads
-    restart: unless-stopped"""
+    restart: unless-stopped
+"""
 
 
 def render_cowrie_config(sensor: dict[str, Any], honeypot: dict[str, Any]) -> str:
@@ -234,7 +208,7 @@ def render_readme(sensor: dict[str, Any], central_node: str) -> str:
 
 ## Назначение
 
-Сенсор `{sensor['name']}` запускает реальные open-source honeypot-контейнеры.
+Сенсор `{sensor['name']}` запускает единый контейнер `edc-sensor` с Cowrie и агентами внутри.
 
 ## Сетевые параметры
 
@@ -255,9 +229,7 @@ def render_readme(sensor: dict[str, Any], central_node: str) -> str:
 
 ## Runtime
 
-- `cowrie` - официальный контейнер `cowrie/cowrie:latest`.
-- `log-agent` - читает `logs/cowrie.json` и отправляет события в центр.
-- `display-agent` - показывает локальный статус сенсора.
+- `edc-sensor` - единый образ на базе `cowrie/cowrie:latest`, внутри Cowrie, log-agent и display-agent.
 """
 
 

@@ -211,7 +211,7 @@
 
 ### `cowrie`
 
-Образ: `cowrie/cowrie:latest`
+Образ: единый `edc-sensor`, собирается из `sensor/Dockerfile` на базе `cowrie/cowrie:latest`.
 
 Ввод:
 
@@ -228,11 +228,11 @@
 
 ### `log-agent`
 
-Файл: `sensor/agents/log-agent/log_agent.py`
+Файл: `sensor/runtime/log_agent.py`
 
 Ввод:
 
-- `/logs/cowrie.json`;
+- `/cowrie/cowrie-git/var/log/cowrie/cowrie.json`;
 - `CENTRAL_URL=http://<center>:8080/api/events`.
 
 Что делает:
@@ -246,7 +246,7 @@
 
 ### `display-agent`
 
-Файл: `sensor/agents/display-agent/display_agent.py`
+Файл: `sensor/runtime/display_agent.py`
 
 Ввод:
 

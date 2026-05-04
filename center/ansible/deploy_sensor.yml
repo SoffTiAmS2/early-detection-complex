@@ -57,29 +57,36 @@
       loop:
         - "{{ remote_root }}"
         - "{{ remote_root }}/sensor"
-        - "{{ remote_root }}/sensor/agents"
-        - "{{ remote_root }}/sensor/agents/log-agent"
-        - "{{ remote_root }}/sensor/agents/display-agent"
+        - "{{ remote_root }}/sensor/runtime"
         - "{{ remote_root }}/sensors"
         - "{{ remote_root }}/sensors/{{ target_sensor }}"
         - "{{ remote_root }}/sensors/{{ target_sensor }}/logs"
 
-    - name: Copy sensor agent sources
+    - name: Copy sensor runtime image sources
       ansible.builtin.copy:
         src: "{{ project_root }}/{{ item }}"
         dest: "{{ remote_root }}/{{ item }}"
         mode: preserve
       loop:
-        - sensor/agents/log-agent/Dockerfile
-        - sensor/agents/log-agent/log_agent.py
-        - sensor/agents/display-agent/Dockerfile
-        - sensor/agents/display-agent/display_agent.py
+        - sensor/Dockerfile
+        - sensor/runtime/entrypoint.py
+        - sensor/runtime/log_agent.py
+        - sensor/runtime/display_agent.py
 
     - name: Copy generated sensor files
       ansible.builtin.copy:
         src: "{{ project_root }}/sensors/{{ target_sensor }}/"
         dest: "{{ remote_root }}/sensors/{{ target_sensor }}/"
         mode: preserve
+
+    - name: Ensure runtime writable directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0777"
+      loop:
+        - "{{ remote_root }}/sensors/{{ target_sensor }}/logs"
+        - "{{ remote_root }}/sensors/{{ target_sensor }}/cowrie/downloads"
 
     - name: Detect compose command
       ansible.builtin.shell: |

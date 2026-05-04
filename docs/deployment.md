@@ -41,7 +41,7 @@ http://<central>:8080/api/events # события collector
 
 - генерирует `sensors/<sensor>/`;
 - ставит Docker/Compose на плату;
-- копирует agents, Cowrie-конфигурацию и compose;
+- копирует `sensor/Dockerfile`, runtime-скрипты, Cowrie-конфигурацию и compose;
 - запускает `docker compose up -d --build` на сенсоре.
 
 ## Генерация Для Отладки
