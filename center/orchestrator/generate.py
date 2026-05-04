@@ -176,6 +176,8 @@ def render_cowrie_config(sensor: dict[str, Any], honeypot: dict[str, Any]) -> st
     sftp_enabled = "true" if settings.get("sftp_enabled", True) else "false"
     return f"""[honeypot]
 hostname = {settings.get('hostname') or sensor['mask']['hostname']}
+etc_path = /cowrie/cowrie-git/etc
+contents_path = /cowrie/cowrie-git/src/cowrie/data/honeyfs
 log_path = var/log/cowrie
 download_path = var/lib/cowrie/downloads
 download_limit_size = {settings.get('download_limit_size', 10485760)}
