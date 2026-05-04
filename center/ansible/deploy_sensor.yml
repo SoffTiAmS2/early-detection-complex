@@ -5,6 +5,7 @@
   gather_facts: true
   vars:
     remote_root: /opt/early-detection-complex
+    compose_project: "edc_{{ target_sensor | lower }}"
 
   tasks:
     - name: Validate requested sensor
@@ -49,6 +50,59 @@
         state: started
         enabled: true
 
+    - name: Detect compose command
+      ansible.builtin.shell: |
+        set -eu
+        command -v docker >/dev/null 2>&1
+        if docker compose version >/dev/null 2>&1; then
+          echo "docker compose"
+        elif command -v docker-compose >/dev/null 2>&1; then
+          echo "docker-compose"
+        else
+          exit 1
+        fi
+      args:
+        executable: /bin/sh
+      changed_when: false
+      register: compose_command
+
+    - name: Ensure sensor directory exists before cleanup
+      ansible.builtin.file:
+        path: "{{ remote_root }}/sensors/{{ target_sensor }}"
+        state: directory
+        mode: "0755"
+
+    - name: Stop previous sensor compose stack
+      ansible.builtin.shell: |
+        set -eu
+        if [ -f docker-compose.yml ] || [ -f compose.yml ] || [ -f compose.yaml ]; then
+          {{ compose_command.stdout }} down --remove-orphans
+          COMPOSE_PROJECT_NAME={{ compose_project }} {{ compose_command.stdout }} down --remove-orphans
+        fi
+      args:
+        chdir: "{{ remote_root }}/sensors/{{ target_sensor }}"
+        executable: /bin/sh
+      register: previous_compose_down
+      changed_when: "'Removing' in previous_compose_down.stdout or 'Stopping' in previous_compose_down.stdout"
+      failed_when: false
+
+    - name: Remove leftover EDC compose containers
+      ansible.builtin.shell: |
+        set -eu
+        containers="$( \
+          { \
+            docker ps -aq --filter "label=com.docker.compose.project={{ target_sensor }}"; \
+            docker ps -aq --filter "label=com.docker.compose.project={{ compose_project }}"; \
+          } | sort -u | tr '\n' ' ' \
+        )"
+        if [ -n "$(printf '%s' "$containers" | tr -d ' ')" ]; then
+          docker rm -f $containers
+        fi
+      args:
+        executable: /bin/sh
+      register: leftover_container_remove
+      changed_when: "leftover_container_remove.stdout | trim | length > 0"
+
     - name: Create project directories
       ansible.builtin.file:
         path: "{{ item }}"
@@ -89,31 +143,15 @@
         - "{{ remote_root }}/sensors/{{ target_sensor }}/cowrie/downloads"
         - "{{ remote_root }}/sensors/{{ target_sensor }}/cowrie/honeyfs"
 
-    - name: Detect compose command
-      ansible.builtin.shell: |
-        set -eu
-        command -v docker >/dev/null 2>&1
-        if docker compose version >/dev/null 2>&1; then
-          echo "docker compose"
-        elif command -v docker-compose >/dev/null 2>&1; then
-          echo "docker-compose"
-        else
-          exit 1
-        fi
-      args:
-        executable: /bin/sh
-      changed_when: false
-      register: compose_command
-
     - name: Start or update sensor containers
-      ansible.builtin.shell: "{{ compose_command.stdout }} up -d --build"
+      ansible.builtin.shell: "COMPOSE_PROJECT_NAME={{ compose_project }} {{ compose_command.stdout }} up -d --build"
       args:
         chdir: "{{ remote_root }}/sensors/{{ target_sensor }}"
         executable: /bin/sh
       register: compose_up
 
     - name: Show sensor container status
-      ansible.builtin.shell: "{{ compose_command.stdout }} ps"
+      ansible.builtin.shell: "COMPOSE_PROJECT_NAME={{ compose_project }} {{ compose_command.stdout }} ps"
       args:
         chdir: "{{ remote_root }}/sensors/{{ target_sensor }}"
         executable: /bin/sh

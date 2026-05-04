@@ -41,8 +41,9 @@ http://<central>:8080/api/events # события collector
 
 - генерирует `sensors/<sensor>/`;
 - ставит Docker/Compose на плату;
+- останавливает старый compose stack сенсора и удаляет orphan/leftover контейнеры этого EDC-сенсора;
 - копирует `sensor/Dockerfile`, runtime-скрипты, Cowrie-конфигурацию и compose;
-- запускает `docker compose up -d --build` на сенсоре.
+- запускает новый managed compose project `edc_<sensor>` через `docker compose up -d --build`.
 
 ## Генерация Для Отладки
 

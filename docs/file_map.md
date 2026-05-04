@@ -41,7 +41,7 @@
 
 ## Ansible
 
-- `center/ansible/deploy_sensor.yml` - playbook установки сенсора по SSH: ставит Docker/Compose, копирует `sensor/Dockerfile`, runtime-скрипты и generated-конфиг, затем запускает `docker compose up -d --build`.
+- `center/ansible/deploy_sensor.yml` - playbook установки сенсора по SSH: ставит Docker/Compose, останавливает старый EDC compose stack сенсора, удаляет leftover-контейнеры этого сенсора, копирует runtime/generated-конфиг и запускает новый `edc_<sensor>` compose project.
 
 ## Sensor
 
