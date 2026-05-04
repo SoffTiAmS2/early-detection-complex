@@ -163,7 +163,7 @@ def render_compose(sensor: dict[str, Any]) -> str:
 {ports}
     volumes:
       - ./cowrie/etc:/cowrie/cowrie-git/etc:ro
-      - ./cowrie/honeyfs:/cowrie/cowrie-git/honeyfs:ro
+      - ./cowrie/honeyfs:/cowrie/cowrie-git/src/cowrie/data/honeyfs:ro
       - ./logs:/cowrie/cowrie-git/var/log/cowrie
       - ./cowrie/downloads:/cowrie/cowrie-git/var/lib/cowrie/downloads
     restart: unless-stopped

@@ -51,7 +51,7 @@ def find_command(*names: str) -> str | None:
 
 def prepare_cowrie_filesystem() -> None:
     output = Path("/tmp/edc-cowrie/fs.pickle")
-    honeyfs = Path("/cowrie/cowrie-git/honeyfs")
+    honeyfs = Path("/cowrie/cowrie-git/src/cowrie/data/honeyfs")
     output.parent.mkdir(parents=True, exist_ok=True)
     createfs = find_command("createfs", "/cowrie/cowrie-git/bin/createfs")
     if not createfs:

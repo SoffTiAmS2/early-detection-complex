@@ -21,10 +21,6 @@ RUN useradd --create-home --home-dir /cowrie --shell /bin/bash cowrie \
     && mkdir -p /cowrie/cowrie-git /cowrie/cowrie-env /opt/edc/runtime \
     && chown -R cowrie:cowrie /cowrie /opt/edc
 
-USER root
-COPY runtime /opt/edc/runtime
-RUN chmod +x /opt/edc/runtime/entrypoint.py
-
 USER cowrie
 WORKDIR /cowrie
 RUN git clone --depth 1 https://github.com/cowrie/cowrie.git /cowrie/cowrie-git \
@@ -33,5 +29,11 @@ RUN git clone --depth 1 https://github.com/cowrie/cowrie.git /cowrie/cowrie-git 
     && /cowrie/cowrie-env/bin/pip install --no-cache-dir -r /cowrie/cowrie-git/requirements.txt \
     && /cowrie/cowrie-env/bin/pip install --no-cache-dir --editable /cowrie/cowrie-git
 
+USER root
+COPY runtime /opt/edc/runtime
+RUN chmod +x /opt/edc/runtime/entrypoint.py \
+    && chown -R cowrie:cowrie /opt/edc
+
+USER cowrie
 WORKDIR /cowrie/cowrie-git
 ENTRYPOINT ["python3", "/opt/edc/runtime/entrypoint.py"]
