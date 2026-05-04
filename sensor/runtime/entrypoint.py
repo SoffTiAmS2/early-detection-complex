@@ -22,8 +22,10 @@ def mark_stop(*_: object) -> None:
 
 def cowrie_command() -> list[str]:
     candidates = [
-        ["cowrie", "start", "-n"],
-        ["/cowrie/cowrie-git/bin/cowrie", "start", "-n"],
+        ["twistd", "-n", "cowrie"],
+        ["/cowrie/cowrie-env/bin/twistd", "-n", "cowrie"],
+        ["cowrie", "start"],
+        ["/cowrie/cowrie-git/bin/cowrie", "start"],
     ]
     for command in candidates:
         executable = command[0]
