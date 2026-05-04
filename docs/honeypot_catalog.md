@@ -24,4 +24,4 @@ Manager использует единый справочник `center/honeypots
 
 ## Важное Ограничение
 
-OpenCanary, Conpot, Dionaea и Heralding не показываются в UI, пока для них не добавлены настоящий контейнер, генератор конфигурации и сбор логов. Это лучше, чем иметь красивый, но нерабочий выбор.
+OpenCanary, Conpot, Dionaea и Heralding не показываются в UI, пока для них не добавлены настоящий runtime в `edc-sensor`, генератор конфигурации, mapping портов, parser логов и smoke-test. Детальный план подключения лежит в `docs/honeypot_integration_plan.md`.

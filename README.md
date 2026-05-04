@@ -135,6 +135,7 @@ docker compose config
 - `docs/file_map.md` - значение каждого tracked-файла.
 - `docs/deception_masking.md` - логика маскировки.
 - `docs/honeypot_catalog.md` - справочник honeypot, сервисов и настроек.
+- `docs/honeypot_integration_plan.md` - качественный план подключения OpenCanary, Conpot, Dionaea и Heralding без фейковых пунктов в UI.
 - `docs/web_configurator.md` - web-консоль и API.
 - `docs/functions_io.md` - функции, входы и выходы компонентов.
 - `docs/full_report.md` - ссылки на полный отчет ВКР.
