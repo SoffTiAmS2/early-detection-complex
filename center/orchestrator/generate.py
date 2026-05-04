@@ -199,7 +199,7 @@ listen_endpoints = tcp:2223:interface=0.0.0.0
 
 [output_jsonlog]
 enabled = true
-logfile = cowrie.json
+logfile = var/log/cowrie/cowrie.json
 """
 
 
