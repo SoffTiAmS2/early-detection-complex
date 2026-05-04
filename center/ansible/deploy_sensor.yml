@@ -103,6 +103,18 @@
       register: leftover_container_remove
       changed_when: "leftover_container_remove.stdout | trim | length > 0"
 
+    - name: Remove stale generated sensor files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ remote_root }}/sensors/{{ target_sensor }}/.env"
+        - "{{ remote_root }}/sensors/{{ target_sensor }}/README.md"
+        - "{{ remote_root }}/sensors/{{ target_sensor }}/docker-compose.yml"
+        - "{{ remote_root }}/sensors/{{ target_sensor }}/config"
+        - "{{ remote_root }}/sensors/{{ target_sensor }}/cowrie/etc"
+        - "{{ remote_root }}/sensors/{{ target_sensor }}/cowrie/honeyfs"
+
     - name: Create project directories
       ansible.builtin.file:
         path: "{{ item }}"
@@ -131,7 +143,7 @@
       ansible.builtin.copy:
         src: "{{ project_root }}/sensors/{{ target_sensor }}/"
         dest: "{{ remote_root }}/sensors/{{ target_sensor }}/"
-        mode: preserve
+        directory_mode: "0755"
 
     - name: Ensure runtime writable directories
       ansible.builtin.file:
