@@ -28,7 +28,9 @@ def cowrie_command() -> list[str]:
     for command in candidates:
         executable = command[0]
         if "/" not in executable:
-            return command
+            if shutil.which(executable):
+                return command
+            continue
         if Path(executable).exists():
             return command
     return candidates[0]

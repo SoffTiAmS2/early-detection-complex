@@ -30,7 +30,8 @@ WORKDIR /cowrie
 RUN git clone --depth 1 https://github.com/cowrie/cowrie.git /cowrie/cowrie-git \
     && python -m venv /cowrie/cowrie-env \
     && /cowrie/cowrie-env/bin/pip install --no-cache-dir --upgrade pip setuptools wheel \
-    && /cowrie/cowrie-env/bin/pip install --no-cache-dir -r /cowrie/cowrie-git/requirements.txt
+    && /cowrie/cowrie-env/bin/pip install --no-cache-dir -r /cowrie/cowrie-git/requirements.txt \
+    && /cowrie/cowrie-env/bin/pip install --no-cache-dir --editable /cowrie/cowrie-git
 
 WORKDIR /cowrie/cowrie-git
 ENTRYPOINT ["python3", "/opt/edc/runtime/entrypoint.py"]
