@@ -139,11 +139,23 @@
         - sensor/runtime/log_agent.py
         - sensor/runtime/display_agent.py
 
-    - name: Copy generated sensor files
-      ansible.builtin.copy:
-        src: "{{ project_root }}/sensors/{{ target_sensor }}/"
-        dest: "{{ remote_root }}/sensors/{{ target_sensor }}/"
-        directory_mode: "0755"
+    - name: Sync generated sensor files
+      ansible.builtin.command:
+        argv:
+          - sshpass
+          - "-p"
+          - "{{ ansible_password | default('') }}"
+          - rsync
+          - "-az"
+          - "--delete"
+          - "-e"
+          - "ssh -p {{ ansible_port | default(22) }} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+          - "{{ project_root }}/sensors/{{ target_sensor }}/"
+          - "{{ ansible_user }}@{{ ansible_host }}:{{ remote_root }}/sensors/{{ target_sensor }}/"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+      no_log: true
 
     - name: Ensure runtime writable directories
       ansible.builtin.file:
