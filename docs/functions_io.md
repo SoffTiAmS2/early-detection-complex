@@ -216,7 +216,7 @@
 
 ### `cowrie`
 
-Образ: единый `edc-sensor`, собирается из `sensor/Dockerfile` на базе `cowrie/cowrie:latest`.
+Образ: единый `edc-sensor`, собирается из `sensor/Dockerfile`: Python slim, Cowrie source checkout и Python venv. Такой вариант не зависит от наличия ARM manifest у официального Docker-образа Cowrie.
 
 Ввод:
 

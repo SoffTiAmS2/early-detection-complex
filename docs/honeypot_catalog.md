@@ -20,7 +20,7 @@ Manager использует единый справочник `center/honeypots
 - `cowrie/honeyfs/home/<user>/...` и `cowrie/honeyfs/srv/backups/...` - приманочные файлы;
 - `cowrie/downloads` - место для файлов, загруженных атакующим.
 
-При старте единый контейнер `edc-sensor` запускает `createfs` и собирает `fs.pickle` из `honeyfs`, после чего Cowrie использует этот filesystem в `[shell]`. Это ближе к нормальной deception-модели: порт, баннер, логин, shell и файлы соответствуют одной легенде.
+При старте единый контейнер `edc-sensor` запускает `createfs` и собирает `fs.pickle` из `honeyfs`, после чего Cowrie использует этот filesystem в `[shell]`. Сам образ собирает Cowrie из исходников, поэтому подходит для ARM-плат, где официальный `cowrie/cowrie` image может не иметь нужного manifest. Это ближе к нормальной deception-модели: порт, баннер, логин, shell и файлы соответствуют одной легенде.
 
 ## Важное Ограничение
 

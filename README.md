@@ -59,7 +59,7 @@ http://<central-ip>:8080/api/events # события collector
 - `center/manager/backend/server.py` обслуживает web-консоль, job-статусы и Ansible-деплой.
 - `center/orchestrator/generate.py` читает `config/project.json` и создает локальные `sensors/<name>/`.
 - `center/ansible/deploy_sensor.yml` устанавливает/обновляет выбранный сенсор по SSH.
-- `sensor/Dockerfile` собирает единый образ `edc-sensor` на базе `cowrie/cowrie:latest`.
+- `sensor/Dockerfile` собирает единый образ `edc-sensor` из Python slim и Cowrie source checkout, чтобы образ работал на ARM-платах без зависимости от amd64-only Docker manifest.
 - внутри `edc-sensor` запускаются Cowrie, log-agent и display-agent.
 
 ## Конфигурация

@@ -45,7 +45,7 @@
 
 ## Sensor
 
-- `sensor/Dockerfile` - единый образ сенсора `edc-sensor` на базе `cowrie/cowrie:latest`.
+- `sensor/Dockerfile` - единый образ сенсора `edc-sensor`; собирает Cowrie из исходников в Python venv, чтобы поддерживать ARM-платы.
 - `sensor/runtime/entrypoint.py` - стартует внутри одного контейнера Cowrie, log-agent и display-agent.
 - `sensor/runtime/log_agent.py` - читает `cowrie.json` и отправляет события в центр, не теряя их при временной недоступности collector.
 - `sensor/runtime/display_agent.py` - печатает локальный статус сенсора и связь с центром.
