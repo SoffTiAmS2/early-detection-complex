@@ -7,6 +7,7 @@
 - `.dockerignore` - исключает секреты, runtime-логи, generated-сенсоры и кэш из Docker build context.
 - `.gitignore` - не дает случайно закоммитить `.env`, логи, generated-файлы сенсоров и локальные дампы документации.
 - `README.md` - главный вход: что это за проект, как запустить центр, как поставить сенсор.
+- `archive/web-manager-frontend/` - отложенный web-интерфейс. Он сохранен для будущей переработки, но сейчас не участвует в работе центра.
 
 ## Конфигурация
 
@@ -15,7 +16,7 @@
 ## Центр
 
 - `center/__init__.py` - делает `center` Python-пакетом, чтобы backend и generator могли импортировать общий каталог.
-- `center/docker-compose.yml` - Docker stack центра: collector на `8080`, manager на `8090`.
+- `center/docker-compose.yml` - Docker stack центра: collector на `8080`, API-manager на `8090`.
 
 ## Collector
 
@@ -24,11 +25,8 @@
 
 ## Manager
 
-- `center/manager/Dockerfile` - образ web-manager с Ansible, генератором и исходниками сенсора.
-- `center/manager/backend/server.py` - backend web-консоли: читает/сохраняет проект, валидирует конфиг, запускает генерацию и Ansible jobs.
-- `center/manager/frontend/index.html` - разметка web-интерфейса.
-- `center/manager/frontend/app.js` - логика интерфейса: статусы, сенсоры, Cowrie-настройки, порты, deploy/cancel.
-- `center/manager/frontend/styles.css` - минималистичные стили web-интерфейса.
+- `center/manager/Dockerfile` - образ API-manager с Ansible, генератором и исходниками сенсора.
+- `center/manager/backend/server.py` - API-manager: читает/сохраняет проект, валидирует конфиг, запускает генерацию и Ansible jobs.
 
 ## Каталог Honeypot
 
@@ -53,6 +51,7 @@
 ## Scripts
 
 - `scripts/install_central.sh` - установка Docker/Compose и запуск центра.
+- `scripts/deploy_sensor.sh` - CLI-обертка над manager API для установки/обновления сенсора по SSH без web-интерфейса.
 - `scripts/generate_sensor.sh` - dev-helper для ручной генерации `sensors/<name>/`.
 - `scripts/start_manager.sh` - dev-helper для локального запуска manager без Docker.
 
@@ -66,6 +65,7 @@
 - `docs/full_report.md` - ссылки на полный отчет ВКР во внешнем Obsidian Vault.
 - `docs/functions_io.md` - входы и выходы основных API/скриптов/компонентов.
 - `docs/honeypot_catalog.md` - что сейчас поддерживает каталог приманок.
+- `docs/honeypot_installation.md` - как центр устанавливает и настраивает honeypot на сенсоре.
 - `docs/masking.md` - краткие тезисы по deception-маскировке.
 - `docs/thesis_notes.md` - заметки для ВКР.
-- `docs/web_configurator.md` - web-консоль и ее API.
+- `docs/archive/web_configurator.md` - старая документация web-конфигуратора, оставлена как архив.

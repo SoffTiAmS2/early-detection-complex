@@ -5,7 +5,7 @@
 ## Компоненты
 
 - `center/collector` - прием, хранение и просмотр событий.
-- `center/manager` - web-консоль управления, генерации конфигураций и SSH-деплоя сенсоров.
+- `center/manager` - API управления, генерации конфигураций и SSH-деплоя сенсоров.
 - `center/ansible` - установка или обновление сенсорной платы с центрального узла.
 - `sensor` - плата или VM с Cowrie и агентами доставки событий.
 - `log-agent` - доставка событий с сенсора в центр.
@@ -21,7 +21,7 @@ sequenceDiagram
     participant L as Log Agent
     participant C as Central Node
     participant S as Storage
-    participant D as Dashboard
+    participant D as API Client
 
     A->>H: TCP connection
     H->>L: JSON event in local log

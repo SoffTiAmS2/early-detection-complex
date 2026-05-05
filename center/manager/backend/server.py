@@ -1,10 +1,9 @@
-"""Web configurator for the early detection complex."""
+"""API manager for the early detection complex."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import mimetypes
 import os
 import re
 import signal
@@ -37,7 +36,6 @@ from center.honeypots.catalog import (
     normalize_service,
 )
 
-FRONTEND_DIR = ROOT / "center" / "manager" / "frontend"
 PROJECT_FILE = ROOT / "config" / "project.json"
 GENERATOR = ROOT / "center" / "orchestrator" / "generate.py"
 DEPLOY_PLAYBOOK = ROOT / "center" / "ansible" / "deploy_sensor.yml"
@@ -45,7 +43,6 @@ JOB_LOCK = threading.Lock()
 JOBS: dict[str, dict[str, Any]] = {}
 
 SAFE_SENSOR_NAME = re.compile(r"^[A-Za-z0-9_-]+$")
-FRONTEND_ROOT = FRONTEND_DIR.resolve()
 
 
 def read_project() -> dict[str, Any]:
@@ -428,24 +425,26 @@ class ManagerHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _send_file(self, path: Path) -> None:
-        resolved = path.resolve()
-        if not resolved.is_relative_to(FRONTEND_ROOT):
-            self._send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
-            return
-        if not resolved.exists() or not resolved.is_file():
-            self._send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
-            return
-        data = resolved.read_bytes()
-        content_type = mimetypes.guess_type(resolved.name)[0] or "application/octet-stream"
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
-
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
+        if parsed.path in ("", "/"):
+            self._send_json(
+                {
+                    "service": "early-detection-manager",
+                    "mode": "api-only",
+                    "endpoints": [
+                        "GET /api/health",
+                        "GET /api/project",
+                        "PUT /api/project",
+                        "GET /api/catalog",
+                        "POST /api/generate",
+                        "POST /api/deploy-sensor",
+                        "GET /api/jobs",
+                        "POST /api/jobs/<job_id>/cancel",
+                    ],
+                }
+            )
+            return
         if parsed.path == "/api/project":
             self._send_json(read_project())
             return
@@ -470,8 +469,7 @@ class ManagerHandler(BaseHTTPRequestHandler):
             self._send_json(job)
             return
 
-        relative = "index.html" if parsed.path in ("", "/") else parsed.path.lstrip("/")
-        self._send_file(FRONTEND_DIR / relative)
+        self._send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
 
     def do_PUT(self) -> None:  # noqa: N802
         if urlparse(self.path).path != "/api/project":
@@ -524,7 +522,7 @@ class ManagerHandler(BaseHTTPRequestHandler):
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run web configurator")
+    parser = argparse.ArgumentParser(description="Run Early Detection Complex API manager")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8090)
     return parser.parse_args()

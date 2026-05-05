@@ -2,16 +2,19 @@
 
 Распределенный комплекс раннего выявления подозрительной сетевой активности на базе honeypot/deception-сенсоров.
 
-Главная идея: центральный узел запускается как Docker stack, а сенсорные платы готовятся из web-консоли по SSH. На плате заранее нужны только ОС, сеть и SSH-доступ; Docker, конфигурацию и контейнеры ставит центр.
+Главная идея: центральный узел запускается как Docker stack, а сенсорные платы готовятся центром по SSH. На плате заранее нужны только ОС, сеть и SSH-доступ; Docker, конфигурацию и контейнеры ставит центр.
+
+Web-морда временно убрана в архив. Сейчас основной фокус проекта - надежная установка и настройка honeypot на сенсорах через API/CLI.
 
 ## Что Внутри
 
 ```text
-center/              # collector, web-консоль, генератор, Ansible и Docker Compose stack центра
+center/              # collector, API-manager, генератор, Ansible и Docker Compose stack центра
 sensor/              # агенты сенсора: доставка логов и локальный статус
 config/              # tracked-конфигурация проекта
 scripts/             # запуск центра и dev helpers
 docs/                # вспомогательная документация
+archive/             # отложенный web-интерфейс
 ```
 
 `sensors/` не хранится в git. Он генерируется локально из `config/project.json`.
@@ -25,7 +28,7 @@ scripts/install_central.sh
 После запуска:
 
 ```text
-http://<central-ip>:8090            # web-консоль управления
+http://<central-ip>:8090            # manager API
 http://<central-ip>:8080/health     # health API
 http://<central-ip>:8080/api/events # события collector
 ```
@@ -42,21 +45,19 @@ http://<central-ip>:8080/api/events # события collector
 - иметь пользователя `root` или пользователя с `sudo`;
 - знать IP, SSH port, login и password.
 
-Дальше все делается из web-консоли:
+Дальше все делается командой с центрального узла:
 
-1. Открой `http://<central-ip>:8090`.
-2. Добавь или выбери сенсор.
-3. Укажи IP, выбери honeypot, затем сервисы и настройки внутри него.
-4. В блоке `Установка/обновление по SSH` введи SSH-доступ.
-5. Нажми `Установить/обновить`.
+```sh
+EDC_CENTER_URL=http://127.0.0.1:8090 scripts/deploy_sensor.sh sensor1 <sensor-ip> root 22
+```
 
 Центр сгенерирует конфигурацию, поставит Docker на плату, скопирует нужные файлы и запустит контейнеры сенсора.
-Прогресс установки, текущий шаг Ansible, вывод и кнопка отмены отображаются в web-консоли.
+Прогресс установки, текущий шаг Ansible и последняя строка вывода отображаются прямо в терминале.
 
 ## Основные Компоненты
 
 - `center/collector/server.py` принимает события, хранит JSONL и отдает API.
-- `center/manager/backend/server.py` обслуживает web-консоль, job-статусы и Ansible-деплой.
+- `center/manager/backend/server.py` обслуживает API, job-статусы и Ansible-деплой.
 - `center/orchestrator/generate.py` читает `config/project.json` и создает локальные `sensors/<name>/`.
 - `center/ansible/deploy_sensor.yml` устанавливает/обновляет выбранный сенсор по SSH.
 - `sensor/Dockerfile` собирает единый образ `edc-sensor` из Python slim и Cowrie source checkout, чтобы образ работал на ARM-платах без зависимости от amd64-only Docker manifest.
@@ -109,7 +110,7 @@ http://<central-ip>:8080/api/events
 
 ## Dev Режим
 
-Локальный запуск manager без Docker нужен только для разработки:
+Локальный запуск manager без Docker нужен только для разработки API:
 
 ```sh
 scripts/start_manager.sh
@@ -125,7 +126,7 @@ docker compose config
 ## Безопасность
 
 - SSH-доступ к платам должен быть в management-сети, не в атакующем сегменте.
-- Пароли, введенные в web-консоли для деплоя, используются только для текущего Ansible-запуска и не сохраняются в `config/project.json`.
+- Пароли, переданные в deploy API или `scripts/deploy_sensor.sh`, используются только для текущего Ansible-запуска и не сохраняются в `config/project.json`.
 - `.env`, `sensors/`, logs и `events.jsonl` игнорируются git.
 
 ## Документация
@@ -133,9 +134,9 @@ docker compose config
 - `docs/deployment.md` - установка и эксплуатация.
 - `docs/architecture.md` - архитектура.
 - `docs/file_map.md` - значение каждого tracked-файла.
+- `docs/honeypot_installation.md` - как центр устанавливает и настраивает honeypot на сенсоре.
 - `docs/deception_masking.md` - логика маскировки.
 - `docs/honeypot_catalog.md` - справочник honeypot, сервисов и настроек.
 - `docs/honeypot_integration_plan.md` - качественный план подключения OpenCanary, Conpot, Dionaea и Heralding без фейковых пунктов в UI.
-- `docs/web_configurator.md` - web-консоль и API.
 - `docs/functions_io.md` - функции, входы и выходы компонентов.
 - `docs/full_report.md` - ссылки на полный отчет ВКР.

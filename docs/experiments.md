@@ -15,7 +15,7 @@
 2. Запустить `sensor1`.
 3. Подключиться к Cowrie SSH/Telnet порту.
 4. Проверить событие в `GET /api/events`.
-5. Изменить host-port в web-консоли и переустановить сенсор.
+5. Изменить host-port в `config/project.json` и переустановить сенсор через `scripts/deploy_sensor.sh`.
 
 ## Пример тестового подключения
 

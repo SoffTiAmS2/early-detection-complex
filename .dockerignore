@@ -11,3 +11,4 @@ config/network.yml
 config/sensors.yml
 docs-*-org-*-latest.md
 .pytest_cache/
+archive/

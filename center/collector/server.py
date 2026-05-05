@@ -123,7 +123,7 @@ class CentralHandler(BaseHTTPRequestHandler):
         elif parsed.path == "/api/sensors":
             self._send_json({"sensors": list(summarize_sensors(events).values())})
         elif parsed.path in ("/", "/dashboard"):
-            self._send_json({"error": "html view removed; use manager UI on port 8090 or /api/events"}, HTTPStatus.NOT_FOUND)
+            self._send_json({"error": "html view removed; use /api/events or manager API on port 8090"}, HTTPStatus.NOT_FOUND)
         else:
             self._send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
 

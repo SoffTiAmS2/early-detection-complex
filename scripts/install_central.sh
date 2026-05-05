@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-# Устанавливает Docker/Compose и запускает центральную консоль.
+# Устанавливает Docker/Compose и запускает центральный stack.
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROJECT_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)
 
@@ -19,5 +19,5 @@ else
   sudo docker-compose ps
 fi
 
-echo "Central dashboard: http://127.0.0.1:8080/dashboard"
-echo "Manager console:   http://127.0.0.1:8090"
+echo "Collector API: http://127.0.0.1:8080"
+echo "Manager API:   http://127.0.0.1:8090"

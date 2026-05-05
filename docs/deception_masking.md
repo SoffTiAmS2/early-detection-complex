@@ -25,7 +25,7 @@
 - `mask.department` - контекст размещения;
 - `mask.asset_tag` - инвентарная метка.
 
-Web-консоль позволяет выбрать эти параметры. После этого `center/orchestrator/generate.py` создает ignored-артефакты:
+Эти параметры задаются в `config/project.json`. После этого `center/orchestrator/generate.py` создает ignored-артефакты:
 
 - `.env`;
 - `docker-compose.yml`;
@@ -36,7 +36,7 @@ Web-консоль позволяет выбрать эти параметры. 
 
 ## Что реально меняется
 
-Единый образ `edc-sensor` собирается из `sensor/Dockerfile` на базе официального `cowrie/cowrie:latest`. Генератор создает `cowrie.cfg`, где задаются:
+Единый образ `edc-sensor` собирается из `sensor/Dockerfile`: Cowrie ставится из исходников в Python venv, чтобы сборка работала на ARM-платах. Генератор создает `cowrie.cfg`, где задаются:
 
 - fake hostname;
 - SSH version banner;
@@ -46,7 +46,7 @@ Web-консоль позволяет выбрать эти параметры. 
 - включение SFTP;
 - SSH/Telnet listen endpoints внутри контейнера.
 
-Host-порты задаются в `docker-compose.yml`, поэтому в web-консоли можно выбрать, на каком порту сенсор будет принимать SSH/Telnet honeypot-трафик.
+Host-порты задаются в generated `docker-compose.yml` на основе `config/project.json`, поэтому можно выбрать, на каком порту сенсор будет принимать SSH/Telnet honeypot-трафик.
 
 Генератор также создает Cowrie-персону:
 
