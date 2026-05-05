@@ -76,7 +76,30 @@ Cowrie запускается внутри единого образа `edc-sens
 - ставятся зависимости Cowrie;
 - выполняется editable install, чтобы появились console scripts;
 - стартует `twistd -n cowrie`;
-- параллельно стартуют `log_agent.py` и `display_agent.py`.
+- параллельно стартуют `sensor_node.py`, `log_agent.py` и `display_agent.py`.
+
+## EDC Sensor Node
+
+На сенсор ставится не просто Cowrie, а управляемый узел `edc-sensor`.
+
+Внутри одного контейнера работают:
+
+- `entrypoint.py` - supervisor процесса внутри контейнера;
+- Cowrie - SSH/Telnet honeypot;
+- `sensor_node.py` - status/control слой сенсора;
+- `log_agent.py` - доставка событий honeypot в центр;
+- `display_agent.py` - локальный статус для консоли или будущего дисплея.
+
+`sensor_node.py` делает базовые функции комплекса раннего обнаружения:
+
+- отправляет `sensor.status` в collector;
+- пишет локальный state в `state/sensor_status.json`;
+- передает версию сенсорного runtime;
+- сообщает список активных honeypot, сервисов и портов;
+- наблюдает `/proc/net/tcp` и `/proc/net/tcp6`;
+- отправляет `sensor.connection_seen`, когда видит подключение к managed honeypot-порту.
+
+Это дает ранний сигнал еще до глубоких событий Cowrie. Cowrie потом добавляет детальные события: успешный логин, неуспешный логин, команды, загрузки и закрытие сессии.
 
 ## Cowrie Конфигурация
 
@@ -89,6 +112,8 @@ sensors/<sensor>/cowrie/etc/cowrie.cfg
 sensors/<sensor>/cowrie/etc/userdb.txt
 sensors/<sensor>/cowrie/honeyfs/
 sensors/<sensor>/cowrie/downloads/
+sensors/<sensor>/config/sensor_node.json
+sensors/<sensor>/state/
 sensors/<sensor>/logs/
 ```
 
@@ -101,6 +126,7 @@ sensors/<sensor>/logs/
 - `honeyfs/` задает фейковую файловую систему: `/etc/hostname`, `/etc/passwd`, `/etc/group`, `/etc/motd`, `/srv/backups`, home-директорию пользователя и следы истории.
 - JSON-события пишутся в `var/log/cowrie/cowrie.json`.
 - `log_agent.py` читает этот JSONL-файл и отправляет события в collector.
+- `sensor_node.py` отправляет status и ранние сетевые события в тот же collector.
 
 ## Проверка После Установки
 

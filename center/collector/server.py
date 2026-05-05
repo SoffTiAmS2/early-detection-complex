@@ -83,6 +83,10 @@ def summarize_sensors(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
                 "last_seen": None,
                 "profile": event.get("profile"),
                 "role": event.get("role"),
+                "status": "unknown",
+                "sensor_version": event.get("sensor_version"),
+                "services": [],
+                "ports": [],
             },
         )
         item["events"] += 1
@@ -90,6 +94,11 @@ def summarize_sensors(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]
         item["last_seen"] = event.get("received_at") or event.get("timestamp")
         item["profile"] = event.get("profile") or item.get("profile")
         item["role"] = event.get("role") or item.get("role")
+        item["sensor_version"] = event.get("sensor_version") or item.get("sensor_version")
+        if event.get("type") == "sensor.status":
+            item["status"] = event.get("status", "online")
+            item["services"] = event.get("services", item["services"])
+            item["ports"] = event.get("ports", item["ports"])
     return sensors
 
 

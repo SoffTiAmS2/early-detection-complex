@@ -31,7 +31,7 @@ RUN git clone --depth 1 https://github.com/cowrie/cowrie.git /cowrie/cowrie-git 
 
 USER root
 COPY runtime /opt/edc/runtime
-RUN chmod +x /opt/edc/runtime/entrypoint.py \
+RUN chmod +x /opt/edc/runtime/entrypoint.py /opt/edc/runtime/sensor_node.py \
     && chown -R cowrie:cowrie /opt/edc
 
 USER cowrie

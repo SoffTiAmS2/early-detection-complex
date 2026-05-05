@@ -123,10 +123,12 @@ def enabled_services(honeypot: dict[str, Any]) -> list[dict[str, Any]]:
 
 def render_env(sensor: dict[str, Any], central_node: str) -> str:
     mask = sensor["mask"]
+    ports = json.dumps(sensor_port_contract(sensor), ensure_ascii=False, separators=(",", ":"))
     return f"""SENSOR_NAME={sensor['name']}
 SENSOR_HOST={sensor['host']}
 SENSOR_ROLE={sensor['role']}
 SENSOR_PROFILE={sensor['profile']}
+SENSOR_VERSION=0.1.0
 MASK_HOSTNAME={mask['hostname']}
 MASK_OS={mask['os']}
 MASK_DEPARTMENT={mask['department']}
@@ -135,8 +137,30 @@ CENTRAL_NODE_HOST={central_node}
 CENTRAL_URL=http://{central_node}:8080/api/events
 CENTRAL_HEALTH_URL=http://{central_node}:8080/health
 HONEYPOT_LOG_PATH=/cowrie/cowrie-git/var/log/cowrie/cowrie.json
+HONEYPOT_PORTS={ports}
+CONFIG_PATH=/opt/edc/config/sensor_node.json
+STATUS_PATH=/opt/edc/state/sensor_status.json
+SENSOR_STATUS_INTERVAL=30
+NETWATCH_INTERVAL=2
 DISPLAY_INTERVAL=10
 """
+
+
+def sensor_port_contract(sensor: dict[str, Any]) -> list[dict[str, Any]]:
+    ports = []
+    for honeypot in enabled_honeypots(sensor):
+        for service in enabled_services(honeypot):
+            catalog = SERVICE_CATALOG[service["name"]]
+            ports.append(
+                {
+                    "honeypot": honeypot["type"],
+                    "service": service["name"],
+                    "host_port": service["host_port"],
+                    "container_port": catalog["container_port"],
+                    "protocol": catalog["protocol"],
+                }
+            )
+    return ports
 
 
 def render_port_lines(honeypot: dict[str, Any]) -> str:
@@ -164,10 +188,26 @@ def render_compose(sensor: dict[str, Any]) -> str:
     volumes:
       - ./cowrie/etc:/cowrie/cowrie-git/etc:ro
       - ./cowrie/honeyfs:/cowrie/cowrie-git/src/cowrie/data/honeyfs:ro
+      - ./config:/opt/edc/config:ro
       - ./logs:/cowrie/cowrie-git/var/log/cowrie
       - ./cowrie/downloads:/cowrie/cowrie-git/var/lib/cowrie/downloads
+      - ./state:/opt/edc/state
     restart: unless-stopped
 """
+
+
+def render_sensor_config(sensor: dict[str, Any], central_node: str) -> str:
+    payload = {
+        "version": "0.1.0",
+        "sensor": sensor["name"],
+        "host": sensor["host"],
+        "role": sensor["role"],
+        "central_url": f"http://{central_node}:8080/api/events",
+        "mask": sensor["mask"],
+        "ports": sensor_port_contract(sensor),
+        "honeypots": sensor["honeypots"],
+    }
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
 
 
 def render_cowrie_config(sensor: dict[str, Any], honeypot: dict[str, Any]) -> str:
@@ -316,7 +356,8 @@ def render_readme(sensor: dict[str, Any], central_node: str) -> str:
 
 ## Runtime
 
-- `edc-sensor` - единый образ на базе `cowrie/cowrie:latest`, внутри Cowrie, log-agent и display-agent.
+- `edc-sensor` - единый образ на базе Python slim, Cowrie source checkout, sensor-node, log-agent и display-agent.
+- `sensor-node` пишет `state/sensor_status.json` и отправляет `sensor.status` / `sensor.connection_seen` в центр.
 """
 
 
@@ -345,12 +386,15 @@ def write_sensor(sensor: dict[str, Any], central_node: str) -> None:
     cowrie_etc = sensor_dir / "cowrie" / "etc"
     cowrie_honeyfs = sensor_dir / "cowrie" / "honeyfs"
     (sensor_dir / "logs").mkdir(parents=True, exist_ok=True)
+    (sensor_dir / "state").mkdir(parents=True, exist_ok=True)
     (sensor_dir / "cowrie" / "downloads").mkdir(parents=True, exist_ok=True)
     cowrie_etc.mkdir(parents=True, exist_ok=True)
     cowrie_honeyfs.mkdir(parents=True, exist_ok=True)
 
     (sensor_dir / ".env").write_text(render_env(sensor, central_node), encoding="utf-8")
     (sensor_dir / "docker-compose.yml").write_text(render_compose(sensor), encoding="utf-8")
+    (sensor_dir / "config" / "sensor_node.json").parent.mkdir(parents=True, exist_ok=True)
+    (sensor_dir / "config" / "sensor_node.json").write_text(render_sensor_config(sensor, central_node), encoding="utf-8")
     (sensor_dir / "README.md").write_text(render_readme(sensor, central_node), encoding="utf-8")
     for honeypot in enabled_honeypots(sensor):
         if honeypot["type"] == "cowrie":

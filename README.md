@@ -61,7 +61,8 @@ EDC_CENTER_URL=http://127.0.0.1:8090 scripts/deploy_sensor.sh sensor1 <sensor-ip
 - `center/orchestrator/generate.py` читает `config/project.json` и создает локальные `sensors/<name>/`.
 - `center/ansible/deploy_sensor.yml` устанавливает/обновляет выбранный сенсор по SSH.
 - `sensor/Dockerfile` собирает единый образ `edc-sensor` из Python slim и Cowrie source checkout, чтобы образ работал на ARM-платах без зависимости от amd64-only Docker manifest.
-- внутри `edc-sensor` запускаются Cowrie, log-agent и display-agent.
+- внутри `edc-sensor` запускаются Cowrie, sensor-node, log-agent и display-agent.
+- `sensor-node` отправляет `sensor.status`, пишет локальный `state/sensor_status.json` и фиксирует ранние `sensor.connection_seen` события по managed TCP-портам.
 
 ## Конфигурация
 

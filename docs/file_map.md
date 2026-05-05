@@ -21,7 +21,7 @@
 ## Collector
 
 - `center/collector/Dockerfile` - образ центрального приемника событий.
-- `center/collector/server.py` - HTTP API collector: принимает события, хранит JSONL, отдает `/health`, `/api/events`, `/api/sensors`.
+- `center/collector/server.py` - HTTP API collector: принимает события, хранит JSONL, отдает `/health`, `/api/events`, `/api/sensors`; понимает `sensor.status` и показывает версию, сервисы и порты сенсора.
 
 ## Manager
 
@@ -44,7 +44,8 @@
 ## Sensor
 
 - `sensor/Dockerfile` - единый образ сенсора `edc-sensor`; собирает Cowrie из исходников в Python venv, чтобы поддерживать ARM-платы.
-- `sensor/runtime/entrypoint.py` - стартует внутри одного контейнера Cowrie, log-agent и display-agent.
+- `sensor/runtime/entrypoint.py` - стартует внутри одного контейнера Cowrie, sensor-node, log-agent и display-agent.
+- `sensor/runtime/sensor_node.py` - управляемый слой сенсора: status heartbeat, локальный state, список портов/сервисов и раннее событие `sensor.connection_seen` по `/proc/net/tcp`.
 - `sensor/runtime/log_agent.py` - читает `cowrie.json` и отправляет события в центр, не теряя их при временной недоступности collector.
 - `sensor/runtime/display_agent.py` - печатает локальный статус сенсора и связь с центром.
 

@@ -28,11 +28,29 @@ def post_json(url: str, payload: dict[str, Any], timeout: int = 5) -> bool:
 
 def enrich_event(event: dict[str, Any]) -> dict[str, Any]:
     event.setdefault("timestamp", now_ts())
-    event.setdefault("type", event.get("eventid", "honeypot_event"))
+    event_type = str(event.get("eventid") or event.get("type") or "honeypot_event")
+    event["type"] = event_type
     event["sensor"] = os.getenv("SENSOR_NAME", "sensor-unknown")
+    event["sensor_host"] = os.getenv("SENSOR_HOST", "")
     event["role"] = os.getenv("SENSOR_ROLE", "unknown")
     event["profile"] = os.getenv("SENSOR_PROFILE", "cowrie")
+    event["sensor_version"] = os.getenv("SENSOR_VERSION", "0.1.0")
+    event["source"] = "log-agent"
+    event.setdefault("honeypot", "cowrie")
+    event.setdefault("severity", severity_for_event(event_type))
+    if "src_ip" not in event and isinstance(event.get("src_host"), str):
+        event["src_ip"] = event["src_host"]
     return event
+
+
+def severity_for_event(event_type: str) -> str:
+    if event_type.endswith(".login.success") or event_type.endswith(".command.input"):
+        return "high"
+    if event_type.endswith(".login.failed") or event_type.endswith(".session.connect"):
+        return "medium"
+    if event_type == "heartbeat":
+        return "info"
+    return "low"
 
 
 def parse_line(line: str) -> dict[str, Any]:

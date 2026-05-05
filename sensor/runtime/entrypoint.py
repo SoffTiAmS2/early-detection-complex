@@ -92,6 +92,7 @@ def main() -> int:
     prepare_cowrie_filesystem()
     processes = [
         start_process("cowrie", cowrie_command()),
+        start_process("sensor-node", ["python3", "/opt/edc/runtime/sensor_node.py"]),
         start_process("log-agent", ["python3", "/opt/edc/runtime/log_agent.py"]),
         start_process("display-agent", ["python3", "/opt/edc/runtime/display_agent.py"]),
     ]

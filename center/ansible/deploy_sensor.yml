@@ -114,6 +114,7 @@
         - "{{ remote_root }}/sensors/{{ target_sensor }}/config"
         - "{{ remote_root }}/sensors/{{ target_sensor }}/cowrie/etc"
         - "{{ remote_root }}/sensors/{{ target_sensor }}/cowrie/honeyfs"
+        - "{{ remote_root }}/sensors/{{ target_sensor }}/state/sensor_status.json"
 
     - name: Create project directories
       ansible.builtin.file:
@@ -136,6 +137,7 @@
       loop:
         - sensor/Dockerfile
         - sensor/runtime/entrypoint.py
+        - sensor/runtime/sensor_node.py
         - sensor/runtime/log_agent.py
         - sensor/runtime/display_agent.py
 
@@ -164,6 +166,7 @@
         mode: "0777"
       loop:
         - "{{ remote_root }}/sensors/{{ target_sensor }}/logs"
+        - "{{ remote_root }}/sensors/{{ target_sensor }}/state"
         - "{{ remote_root }}/sensors/{{ target_sensor }}/cowrie/downloads"
         - "{{ remote_root }}/sensors/{{ target_sensor }}/cowrie/honeyfs"
 

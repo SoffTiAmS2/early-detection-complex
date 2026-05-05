@@ -174,9 +174,13 @@
 
 ### `POST /api/events`
 
-Назначение: принять событие от log-agent.
+Назначение: принять событие от sensor runtime.
 
-Ввод: JSON-событие.
+Ввод: JSON-событие:
+
+- `sensor.status` - heartbeat управляемого сенсора, версия, сервисы и порты;
+- `sensor.connection_seen` - ранний сетевой сигнал от `sensor_node.py`;
+- `cowrie.*` - детальные события Cowrie из `log_agent.py`.
 
 Вывод: `202 Accepted`.
 
@@ -187,7 +191,19 @@
 Вывод:
 
 ```json
-{"sensors": [{"sensor": "sensor1", "events": 3, "last_type": "payload"}]}
+{
+  "sensors": [
+    {
+      "sensor": "sensor1",
+      "events": 3,
+      "last_type": "sensor.status",
+      "status": "online",
+      "sensor_version": "0.1.0",
+      "services": ["ssh", "telnet"],
+      "ports": []
+    }
+  ]
+}
 ```
 
 ## Generator
@@ -209,6 +225,8 @@
 - `sensors/<name>/cowrie/etc/userdb.txt`;
 - `sensors/<name>/cowrie/honeyfs/...`;
 - `sensors/<name>/cowrie/downloads/`;
+- `sensors/<name>/config/sensor_node.json`;
+- `sensors/<name>/state/`;
 - `sensors/<name>/README.md`;
 - ignored `config/network.yml` и `config/sensors.yml` для совместимости.
 
@@ -235,6 +253,26 @@
 - сохраняет скачанные артефакты в `cowrie/downloads`.
 
 Вывод: `logs/cowrie.json`.
+
+### `sensor-node`
+
+Файл: `sensor/runtime/sensor_node.py`
+
+Ввод:
+
+- `HONEYPOT_PORTS` из generated `.env`;
+- `CONFIG_PATH=/opt/edc/config/sensor_node.json`;
+- `/proc/net/tcp` и `/proc/net/tcp6`;
+- `CENTRAL_URL`.
+
+Что делает:
+
+- отправляет `sensor.status`;
+- пишет локальный `state/sensor_status.json`;
+- сообщает версию runtime, сервисы и managed ports;
+- фиксирует ранние подключения к honeypot-портам как `sensor.connection_seen`.
+
+Вывод: HTTP POST в collector и локальный state-файл.
 
 ### `log-agent`
 
