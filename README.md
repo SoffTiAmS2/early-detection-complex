@@ -62,6 +62,33 @@ tools/validate_policy.py
 
 Валидатор проверяет, что `config/site.example.json` использует только существующие modules/services из `catalog/honeypots.json` и не содержит конфликтов host ports на одном сенсоре.
 
+## MVP Control Loop
+
+Уже есть минимальный живой цикл без Docker и UI:
+
+```sh
+scripts/run_mvp.sh
+```
+
+Что он показывает:
+
+1. Запускает `center/server.py`.
+2. `sensor/agent.py` забирает `GET /api/sensors/sensor1/desired-state`.
+3. Агент строит локальный dry-run plan по Cowrie/OpenCanary.
+4. Агент пишет `var/sensor/applied_state.json`.
+5. Агент отправляет `sensor.status` в `POST /api/events`.
+6. Центр показывает sensor summary через `GET /api/sensors`.
+
+Ручной запуск:
+
+```sh
+python3 center/server.py --host 127.0.0.1 --port 8080
+python3 sensor/agent.py --center http://127.0.0.1:8080 --sensor-id sensor1 --once
+curl http://127.0.0.1:8080/api/sensors
+```
+
+Это пока dry-run, но это уже правильный каркас: центр хранит desired state, сенсор сам его забирает и докладывает результат.
+
 ## Где Старый Код
 
 Проверенный прототип находится здесь:

@@ -29,6 +29,8 @@ Goal: описать реальные модули до реализации UI.
 
 Goal: заменить прямой Ansible runtime на managed sensor node.
 
+Status: MVP skeleton started.
+
 Sensor-agent должен:
 
 - зарегистрироваться в центре;
@@ -39,9 +41,13 @@ Sensor-agent должен:
 - слать normalized events;
 - делать rollback при неудачном применении state.
 
+Сейчас `sensor/agent.py` уже делает polling desired state, dry-run apply, локальный `applied_state.json` и отправку `sensor.status`.
+
 ## Stage 3: Center Control-Plane
 
 Goal: центр должен управлять сенсорами как fleet.
+
+Status: MVP skeleton started.
 
 Нужно:
 
@@ -51,6 +57,8 @@ Goal: центр должен управлять сенсорами как fleet
 - event ingest;
 - job/update history;
 - enrollment/bootstrap endpoint.
+
+Сейчас `center/server.py` уже отдает module catalog, sensor list, desired state и принимает events/enroll events.
 
 ## Stage 4: First Real Modules
 
