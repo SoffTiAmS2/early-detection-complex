@@ -1,0 +1,46 @@
+{
+  "site": {
+    "name": "lab",
+    "management_network": "192.168.0.0/24",
+    "central_url": "http://192.168.0.27:8080"
+  },
+  "sensors": [
+    {
+      "id": "sensor1",
+      "host": "192.168.0.128",
+      "architecture": "armv7",
+      "enrollment": {
+        "method": "ssh-bootstrap",
+        "ssh_user": "root",
+        "ssh_port": 22
+      },
+      "desired_state": {
+        "profile": "linux-backup-server",
+        "modules": [
+          {
+            "id": "cowrie",
+            "enabled": true,
+            "services": [
+              {"id": "ssh", "host_port": 2222},
+              {"id": "telnet", "host_port": 2223}
+            ]
+          },
+          {
+            "id": "opencanary",
+            "enabled": false,
+            "services": [
+              {"id": "http", "host_port": 8081},
+              {"id": "ftp", "host_port": 2121}
+            ]
+          }
+        ],
+        "persona": {
+          "hostname": "office-filesrv-01",
+          "os": "Debian GNU/Linux",
+          "department": "Office",
+          "asset_tag": "OFF-FS-01"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "modules": [
+    {
+      "id": "cowrie",
+      "title": "Cowrie",
+      "source": "https://github.com/cowrie/cowrie",
+      "purpose": "SSH/Telnet high-interaction deception",
+      "priority": 1,
+      "status": "prototype-v0-tested",
+      "runtime": "container-module",
+      "resource_class": "light",
+      "services": [
+        {
+          "id": "ssh",
+          "protocol": "tcp",
+          "container_port": 2222,
+          "default_host_port": 2222,
+          "events": ["connect", "login", "command", "download", "session"]
+        },
+        {
+          "id": "telnet",
+          "protocol": "tcp",
+          "container_port": 2223,
+          "default_host_port": 2223,
+          "events": ["connect", "login", "command", "session"]
+        }
+      ],
+      "config_contract": [
+        "hostname",
+        "ssh_version",
+        "auth_policy",
+        "fake_users",
+        "honeyfs",
+        "download_limit"
+      ]
+    },
+    {
+      "id": "opencanary",
+      "title": "OpenCanary",
+      "source": "https://github.com/thinkst/opencanary",
+      "purpose": "Lightweight multi-protocol early warning honeypot",
+      "priority": 2,
+      "status": "planned-first-class",
+      "runtime": "container-module",
+      "resource_class": "light",
+      "services": [
+        {"id": "http", "protocol": "tcp", "default_host_port": 8081},
+        {"id": "ftp", "protocol": "tcp", "default_host_port": 2121},
+        {"id": "smb", "protocol": "tcp", "default_host_port": 445},
+        {"id": "redis", "protocol": "tcp", "default_host_port": 6379},
+        {"id": "mysql", "protocol": "tcp", "default_host_port": 3306},
+        {"id": "mssql", "protocol": "tcp", "default_host_port": 1433}
+      ],
+      "config_contract": [
+        "enabled_protocols",
+        "device_persona",
+        "banner_profile",
+        "log_output"
+      ]
+    },
+    {
+      "id": "heralding",
+      "title": "Heralding",
+      "source": "https://github.com/johnnykv/heralding",
+      "purpose": "Credential-catching low-interaction services",
+      "priority": 3,
+      "status": "planned",
+      "runtime": "container-module",
+      "resource_class": "light",
+      "services": [
+        {"id": "ftp", "protocol": "tcp", "default_host_port": 2122},
+        {"id": "http", "protocol": "tcp", "default_host_port": 8082},
+        {"id": "pop3", "protocol": "tcp", "default_host_port": 110},
+        {"id": "smtp", "protocol": "tcp", "default_host_port": 25}
+      ],
+      "config_contract": ["enabled_protocols", "credential_event_schema"]
+    },
+    {
+      "id": "conpot",
+      "title": "Conpot",
+      "source": "https://github.com/mushorg/conpot",
+      "purpose": "ICS/SCADA deception",
+      "priority": 4,
+      "status": "planned-after-arm-check",
+      "runtime": "container-module",
+      "resource_class": "medium",
+      "services": [
+        {"id": "modbus", "protocol": "tcp", "default_host_port": 502},
+        {"id": "http", "protocol": "tcp", "default_host_port": 8800}
+      ],
+      "config_contract": ["template", "industrial_persona", "protocol_profile"]
+    },
+    {
+      "id": "dionaea",
+      "title": "Dionaea",
+      "source": "https://github.com/DinoTools/dionaea",
+      "purpose": "Malware/service honeypot",
+      "priority": 5,
+      "status": "planned-heavy",
+      "runtime": "container-module",
+      "resource_class": "heavy",
+      "services": [
+        {"id": "smb", "protocol": "tcp", "default_host_port": 445},
+        {"id": "http", "protocol": "tcp", "default_host_port": 8083},
+        {"id": "ftp", "protocol": "tcp", "default_host_port": 2123}
+      ],
+      "config_contract": ["native_dependencies", "artifact_storage", "event_adapter"]
+    }
+  ]
+}

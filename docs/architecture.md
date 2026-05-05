@@ -1,39 +1,101 @@
 # Architecture
 
-Проект строится как распределенный комплекс раннего выявления подозрительной сетевой активности.
+## Цель
 
-## Компоненты
+Построить легкую deception-платформу раннего обнаружения, где центр управляет множеством сенсоров, а каждый сенсор может запускать несколько honeypot-модулей.
 
-- `center/collector` - прием, хранение и просмотр событий.
-- `center/manager` - API управления, генерации конфигураций и SSH-деплоя сенсоров.
-- `center/ansible` - установка или обновление сенсорной платы с центрального узла.
-- `sensor` - плата или VM с Cowrie и агентами доставки событий.
-- `sensor-node` - управляемый runtime-слой сенсора: статус, версия, список портов и ранние сетевые сигналы.
-- `log-agent` - доставка событий с сенсора в центр.
-- `display-agent` - локальный статус сенсора.
-- `cowrie` - настоящий open-source SSH/Telnet honeypot на сенсоре.
+## Модель
 
-## Поток события
+```text
+center control-plane
+├─ sensor registry
+├─ desired state API
+├─ module registry
+├─ event ingest
+├─ update registry
+└─ operator API/UI
 
-```mermaid
-sequenceDiagram
-    participant A as Attacker
-    participant H as Cowrie
-    participant N as Sensor Node
-    participant L as Log Agent
-    participant C as Central Node
-    participant S as Storage
-    participant D as API Client
+sensor appliance
+├─ enrollment/bootstrap
+├─ polling control-agent
+├─ module runner
+├─ event pipeline
+├─ local health/state
+└─ update/rollback
 
-    A->>H: TCP connection
-    A->>N: TCP appears in /proc/net/tcp
-    N->>C: POST sensor.connection_seen
-    H->>L: JSON event in local log
-    L->>C: POST /api/events
-    C->>S: Append to events.jsonl
-    D->>S: GET /api/events
+honeypot modules
+├─ cowrie
+├─ opencanary
+├─ heralding
+├─ conpot
+└─ dionaea
 ```
 
-## Обоснование
+## Почему Так
 
-Сенсоры остаются легкими: они принимают подключения, пишут локальные события и отправляют их в центр. Центральный узел берет на себя хранение и просмотр, поэтому на Banana Pi Pro не нужно держать тяжелую аналитику.
+Старый вариант через прямой Ansible-запуск удобен для первого стенда, но плохо масштабируется. Правильнее сделать сенсор автономным managed node:
+
+- центр хранит desired state;
+- сенсор сам периодически спрашивает центр, что должно быть запущено;
+- сенсор применяет изменения локально;
+- сенсор сообщает status, health, version и events;
+- центр не обязан держать постоянный SSH-сеанс до каждой платы.
+
+SSH остается только bootstrap-механизмом: поставить sensor-agent первый раз или восстановить сломанную плату.
+
+## Event Flow
+
+```text
+attacker -> honeypot module -> local event adapter -> sensor event pipeline -> center ingest
+```
+
+Каждое событие должно приводиться к общей схеме:
+
+```json
+{
+  "sensor_id": "sensor1",
+  "module": "cowrie",
+  "service": "ssh",
+  "event_type": "login.success",
+  "src_ip": "192.168.0.55",
+  "dst_port": 2222,
+  "severity": "high",
+  "timestamp": "2026-05-05T00:00:00Z"
+}
+```
+
+## Desired State
+
+Desired state - это не generated compose, а декларация:
+
+```json
+{
+  "sensor_id": "sensor1",
+  "version": 12,
+  "modules": [
+    {
+      "id": "cowrie",
+      "enabled": true,
+      "services": [{"id": "ssh", "host_port": 2222}]
+    }
+  ]
+}
+```
+
+Sensor-agent превращает эту декларацию в локальные контейнеры, конфиги, ports и health checks.
+
+## Module Contract
+
+Каждый honeypot-модуль обязан иметь:
+
+- module id;
+- список сервисов и портов;
+- config schema;
+- container/build recipe;
+- event adapter;
+- health check;
+- smoke test;
+- resource class;
+- supported architectures.
+
+Без этого модуль не попадает в рабочий каталог, даже если он красивый в UI.

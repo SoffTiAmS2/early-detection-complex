@@ -1,143 +1,73 @@
 # Early Detection Complex
 
-Распределенный комплекс раннего выявления подозрительной сетевой активности на базе honeypot/deception-сенсоров.
+Новая ветка проекта строится как легкая deception-платформа для раннего обнаружения подозрительной сетевой активности.
 
-Главная идея: центральный узел запускается как Docker stack, а сенсорные платы готовятся центром по SSH. На плате заранее нужны только ОС, сеть и SSH-доступ; Docker, конфигурацию и контейнеры ставит центр.
+Старый рабочий прототип с Cowrie, manager API, Ansible и web-архивом сохранен в `archive/prototype-v0/`. Он больше не считается основной архитектурой, но остается как источник проверенных кусков: сборка Cowrie на ARM, доставка событий, Ansible-деплой и generated-конфигурация.
 
-Web-морда временно убрана в архив. Сейчас основной фокус проекта - надежная установка и настройка honeypot на сенсорах через API/CLI.
+## Новый Вектор
 
-## Что Внутри
+Берем архитектурные идеи из open-source deception-платформ:
 
-```text
-center/              # collector, API-manager, генератор, Ansible и Docker Compose stack центра
-sensor/              # агенты сенсора: доставка логов и локальный статус
-config/              # tracked-конфигурация проекта
-scripts/             # запуск центра и dev helpers
-docs/                # вспомогательная документация
-archive/             # отложенный web-интерфейс
-```
+- HoneySens: центр управляет сенсорами, сенсоры получают конфигурацию и обновления от сервера.
+- T-Pot CE: большой каталог honeypot и sensor/hive-модель как референс, но без тяжелого ELK-комбайна в первом этапе.
+- OpenCanary: легкий multi-protocol honeypot как первый кандидат после Cowrie.
+- Cowrie: качественная SSH/Telnet deception.
+- Honeytrap: модель listeners, services и event channels для внутреннего sensor runtime.
 
-`sensors/` не хранится в git. Он генерируется локально из `config/project.json`.
-
-## Быстрый Запуск Центра
-
-```sh
-scripts/install_central.sh
-```
-
-После запуска:
+## Целевая Структура
 
 ```text
-http://<central-ip>:8090            # manager API
-http://<central-ip>:8080/health     # health API
-http://<central-ip>:8080/api/events # события collector
+center/               # control-plane: API, registry, policies, events
+sensor/               # appliance-agent: polling, module runtime, status, update/rollback
+catalog/              # specs honeypot-модулей и профилей deception
+config/               # пример политики стенда
+docs/                 # новая архитектура и roadmap
+archive/prototype-v0/ # старый рабочий прототип, сохранен без удаления
 ```
 
-`install_central.sh` ставит Docker/Compose на центральный узел и запускает `center/docker-compose.yml`.
+## Принцип
 
-## Подготовка Сенсорной Платы
-
-На плате нужно сделать только базовую подготовку:
-
-- установить Debian/Armbian;
-- подключить плату к сети;
-- включить SSH;
-- иметь пользователя `root` или пользователя с `sudo`;
-- знать IP, SSH port, login и password.
-
-Дальше все делается командой с центрального узла:
-
-```sh
-EDC_CENTER_URL=http://127.0.0.1:8090 scripts/deploy_sensor.sh sensor1 <sensor-ip> root 22
-```
-
-Центр сгенерирует конфигурацию, поставит Docker на плату, скопирует нужные файлы и запустит контейнеры сенсора.
-Прогресс установки, текущий шаг Ansible и последняя строка вывода отображаются прямо в терминале.
-
-## Основные Компоненты
-
-- `center/collector/server.py` принимает события, хранит JSONL и отдает API.
-- `center/manager/backend/server.py` обслуживает API, job-статусы и Ansible-деплой.
-- `center/orchestrator/generate.py` читает `config/project.json` и создает локальные `sensors/<name>/`.
-- `center/ansible/deploy_sensor.yml` устанавливает/обновляет выбранный сенсор по SSH.
-- `sensor/Dockerfile` собирает единый образ `edc-sensor` из Python slim и Cowrie source checkout, чтобы образ работал на ARM-платах без зависимости от amd64-only Docker manifest.
-- внутри `edc-sensor` запускаются Cowrie, sensor-node, log-agent и display-agent.
-- `sensor-node` отправляет `sensor.status`, пишет локальный `state/sensor_status.json` и фиксирует ранние `sensor.connection_seen` события по managed TCP-портам.
-
-## Конфигурация
-
-Основной tracked-файл:
+Сенсорная плата должна требовать минимум ручной работы:
 
 ```text
-config/project.json
+ОС + сеть + SSH + регистрация в центре
 ```
 
-В нем задаются:
+Дальше центр должен:
 
-- сеть и IP центрального узла;
-- список сенсоров;
-- роль сенсора;
-- honeypot: сейчас реально поддержан `cowrie`;
-- сервисы и настройки внутри каждого выбранного honeypot;
-- маскировка: hostname, OS, department, asset tag, notes.
+- зарегистрировать сенсор;
+- выдать ему desired state;
+- подготовить нужные honeypot-модули;
+- управлять портами, профилем и deception-данными;
+- получать события, status heartbeat и health;
+- обновлять sensor runtime и honeypot-модули;
+- откатывать неудачные обновления.
 
-Сгенерировать конфигурации вручную для отладки:
+## Первый MVP Новой Архитектуры
+
+1. Описать каталог модулей: Cowrie, OpenCanary, Heralding, Conpot, Dionaea.
+2. Сделать единый sensor manifest: какие modules включены, какие ports слушают, куда слать события.
+3. Сделать lightweight sensor-agent, который polling-ом забирает desired state с центра.
+4. Поднять Cowrie как первый модуль.
+5. Добавить OpenCanary как легкий multi-service модуль.
+6. После этого возвращаться к UI, уже поверх нормальной модели управления.
+
+## Проверка Новой Политики
+
+Пока это не runtime, но уже есть проверяемая модель каталога и desired state:
 
 ```sh
-scripts/generate_sensor.sh
+tools/validate_policy.py
 ```
 
-## Проверка
+Валидатор проверяет, что `config/site.example.json` использует только существующие modules/services из `catalog/honeypots.json` и не содержит конфликтов host ports на одном сенсоре.
 
-Центр:
+## Где Старый Код
 
-```sh
-curl http://127.0.0.1:8080/health
-curl http://127.0.0.1:8080/api/sensors | python3 -m json.tool
-```
-
-После установки сенсора можно проверить порты-приманки с другой машины в той же сети:
-
-```sh
-printf 'admin\r\n' | nc -w 2 <sensor-ip> 2222
-printf 'admin\r\n' | nc -w 2 <sensor-ip> 2223
-```
-
-События должны появиться в:
+Проверенный прототип находится здесь:
 
 ```text
-http://<central-ip>:8080/api/events
+archive/prototype-v0/
 ```
 
-## Dev Режим
-
-Локальный запуск manager без Docker нужен только для разработки API:
-
-```sh
-scripts/start_manager.sh
-```
-
-Проверка compose-конфигурации центра:
-
-```sh
-cd center
-docker compose config
-```
-
-## Безопасность
-
-- SSH-доступ к платам должен быть в management-сети, не в атакующем сегменте.
-- Пароли, переданные в deploy API или `scripts/deploy_sensor.sh`, используются только для текущего Ansible-запуска и не сохраняются в `config/project.json`.
-- `.env`, `sensors/`, logs и `events.jsonl` игнорируются git.
-
-## Документация
-
-- `docs/deployment.md` - установка и эксплуатация.
-- `docs/architecture.md` - архитектура.
-- `docs/file_map.md` - значение каждого tracked-файла.
-- `docs/honeypot_installation.md` - как центр устанавливает и настраивает honeypot на сенсоре.
-- `docs/deception_masking.md` - логика маскировки.
-- `docs/honeypot_catalog.md` - справочник honeypot, сервисов и настроек.
-- `docs/honeypot_integration_plan.md` - качественный план подключения OpenCanary, Conpot, Dionaea и Heralding без фейковых пунктов в UI.
-- `docs/functions_io.md` - функции, входы и выходы компонентов.
-- `docs/full_report.md` - ссылки на полный отчет ВКР.
+Он нужен как reference implementation, но новый код должен расти в корневых `center/`, `sensor/`, `catalog/`, `config/` и `docs/`.
