@@ -1,6 +1,6 @@
 # Early Detection Complex
 
-Новая ветка проекта строится как легкая deception-платформа для раннего обнаружения подозрительной сетевой активности.
+Новая ветка проекта строится как распределенный комплекс раннего обнаружения подозрительной сетевой активности.
 
 Старый рабочий прототип с Cowrie, manager API, Ansible и web-архивом сохранен в `archive/prototype-v0/`. Он больше не считается основной архитектурой, но остается как источник проверенных кусков: сборка Cowrie на ARM, доставка событий, Ansible-деплой и generated-конфигурация.
 
@@ -12,7 +12,6 @@
 - T-Pot CE: большой каталог honeypot и sensor/hive-модель как референс, но без тяжелого ELK-комбайна в первом этапе.
 - OpenCanary: легкий multi-protocol honeypot как первый кандидат после Cowrie.
 - Cowrie: качественная SSH/Telnet deception.
-- Honeytrap: модель listeners, services и event channels для внутреннего sensor runtime.
 
 ## Целевая Структура
 
@@ -48,8 +47,8 @@ archive/prototype-v0/ # старый рабочий прототип, сохра
 1. Описать каталог модулей: Cowrie, OpenCanary, Heralding, Conpot, Dionaea.
 2. Сделать единый sensor manifest: какие modules включены, какие ports слушают, куда слать события.
 3. Сделать lightweight sensor-agent, который polling-ом забирает desired state с центра.
-4. Поднять Cowrie как первый модуль.
-5. Добавить OpenCanary как легкий multi-service модуль.
+4. Поднять lightweight listener-runtime для нескольких модулей.
+5. Заменять lightweight listeners настоящими module runners: Cowrie, OpenCanary, Heralding, Conpot, Dionaea.
 6. После этого возвращаться к UI, уже поверх нормальной модели управления.
 
 ## Проверка Новой Политики
@@ -64,7 +63,7 @@ tools/validate_policy.py
 
 ## MVP Control Loop
 
-Уже есть минимальный живой цикл без Docker и UI:
+Уже есть минимальный живой цикл без Docker и UI. Это базовая HoneySens-like модель: центр хранит desired state, а сенсор сам его забирает, применяет локально и докладывает состояние.
 
 ```sh
 scripts/run_mvp.sh
@@ -73,11 +72,12 @@ scripts/run_mvp.sh
 Что он показывает:
 
 1. Запускает `center/server.py`.
-2. `sensor/agent.py` забирает `GET /api/sensors/sensor1/desired-state`.
-3. Агент строит локальный dry-run plan по Cowrie/OpenCanary.
-4. Агент пишет `var/sensor/applied_state.json`.
-5. Агент отправляет `sensor.status` в `POST /api/events`.
-6. Центр показывает sensor summary через `GET /api/sensors`.
+2. `sensor/agent.py` регистрируется через `POST /api/enroll`.
+3. `sensor/agent.py` забирает `GET /api/sensors/sensor1/desired-state`.
+4. Агент строит локальный dry-run plan по Cowrie/OpenCanary.
+5. Агент пишет `var/sensor/applied_state.json`.
+6. Агент отправляет `sensor.status` в `POST /api/events`.
+7. Центр показывает обзор через `GET /api/overview` и sensor summary через `GET /api/sensors`.
 
 Ручной запуск:
 
@@ -87,7 +87,66 @@ python3 sensor/agent.py --center http://127.0.0.1:8080 --sensor-id sensor1 --onc
 curl http://127.0.0.1:8080/api/sensors
 ```
 
-Это пока dry-run, но это уже правильный каркас: центр хранит desired state, сенсор сам его забирает и докладывает результат.
+`--once` показывает control loop без открытия портов. Для реального раннего обнаружения sensor-agent запускается в режиме listener-runtime:
+
+```sh
+python3 sensor/agent.py --center http://192.168.0.196:8080 --sensor-id sensor1 --serve
+```
+
+В этом режиме сенсор открывает порты включенных модулей, фиксирует подключения и отправляет события в центр. Это легкий runtime на Python stdlib: он нужен для проверки распределенной модели до подключения полноценных контейнеров Cowrie/OpenCanary/Conpot.
+
+## Текущий Тестовый Стенд
+
+`config/site.example.json` настроен под текущую лабораторную пару:
+
+```text
+center  - 192.168.0.196:8080
+sensor1 - 192.168.0.176
+```
+
+Проверка на двух машинах описана в `docs/test_stand.md`.
+
+Основные API центра:
+
+```text
+GET  /
+GET  /honeypots/<module_id>
+GET  /health
+GET  /api/overview
+GET  /api/modules
+GET  /api/sensors
+POST /api/sensors
+GET  /api/sensors/<id>/desired-state
+PUT  /api/policy
+PATCH /api/sensors/<id>/modules/<module_id>
+PATCH /api/sensors/<id>/modules/<module_id>/services/<service_id>
+POST /api/enroll
+POST /api/events
+GET  /api/events
+```
+
+`GET /` открывает живой dashboard центра: состояние сенсоров, running-модули, severity/module/service counters, последние события раннего обнаружения и список реально прописанных honeypot-модулей.
+Отдельная страница `GET /honeypots/<module_id>?sensor_id=sensor1` настраивает конкретный honeypot: включение модуля, включение сервисов, host-порты и schema-driven settings. Для Cowrie покрыты fake filesystem metadata (`filesystem` / fs.pickle), `honeyfs`, `txtcmds`, userdb, auth class, downloads, tty logs, shell persona, SSH banner и proxy backend. У каждого модуля есть advanced raw override для будущего полноценного runner. Изменения сохраняются через manager API, версия policy увеличивается, а sensor-agent применяет ее на следующем polling loop без ручного рестарта.
+
+Проверка живого reconfigure:
+
+```sh
+tools/e2e_reconfigure_test.py
+```
+
+Тест поднимает временный центр и sensor-agent, проверяет открытие порта, выключение модуля через manager API и повторное включение.
+
+Текущая политика включает несколько модулей одновременно:
+
+```text
+Cowrie:     ssh 2222, telnet 2223
+OpenCanary: http 8081, ftp 2121, redis 6379, mysql 3306
+Heralding:  ftp 2122, http 8082, pop3 1110, smtp 2525
+Conpot:     modbus 1502, http 8800
+Dionaea:    smb 1445, http 8083, ftp 2123
+```
+
+В каталоге больше нет “витринных” honeypot-пунктов. Там остаются только модули, которые реально описаны в текущей policy и могут быть применены sensor-agent: Cowrie, OpenCanary, Heralding, Conpot и Dionaea.
 
 ## Где Старый Код
 
