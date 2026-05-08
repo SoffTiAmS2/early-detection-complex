@@ -11,22 +11,30 @@ sensor1 192.168.0.173  user: banana
 
 Текущие пароли стенда: `centre / 1` и `banana / 1`. Их нельзя сохранять в tracked-конфигурации проекта.
 
-## Что Проверяет Текущий MVP
+## Что Проверяет Текущий Runtime
 
-Текущая версия проверяет distributed control loop и реальные lightweight listeners:
+Текущая версия проверяет distributed control loop и реальные Docker-контейнеры honeypot:
 
 1. Центр публикует каталог honeypot-модулей.
 2. Центр хранит desired state сенсора.
 3. Sensor-agent регистрируется через `POST /api/enroll`.
 4. Sensor-agent забирает `GET /api/sensors/sensor1/desired-state`.
-5. Sensor-agent поднимает TCP listeners для включенных модулей.
-6. Любая попытка подключения к listener превращается в normalized event.
+5. Sensor-agent генерирует Docker Compose из desired state.
+6. Sensor-agent удаляет старые контейнеры комплекса и запускает реальные images.
 7. Sensor-agent отправляет `sensor.status` и suspicious events в `POST /api/events`.
 8. Центр показывает состояние через `/api/overview` и `/api/sensors`.
 
 Центр сохраняет события в SQLite `var/center/events.sqlite3`: нормализованные поля используются для фильтрации, а исходное событие сохраняется целиком в `raw_event`.
 
-Это lightweight runtime, а не полноценные upstream-контейнеры Cowrie/OpenCanary/Conpot. Его задача - дать проверяемое раннее обнаружение и контракт событий до подключения тяжелых модулей.
+Контейнеры запускаются не как заглушки, а из upstream/community images:
+
+```text
+Cowrie     cowrie/cowrie:latest
+OpenCanary thinkst/opencanary:latest
+Dionaea    dinotools/dionaea:latest
+Conpot     honeynet/conpot:latest
+Heralding  dtagdevsec/heralding:24.04.1
+```
 
 ## Запуск Центра
 
@@ -63,7 +71,7 @@ http://192.168.0.196:8080/honeypots/dionaea?sensor_id=sensor1
 ```
 
 На этой странице можно включать/отключать конкретный honeypot, включать сервисы, менять host-порты и settings.
-Settings строятся из `config_schema` в `catalog/honeypots.json`, поэтому Cowrie уже содержит fake filesystem (`filesystem`/fs.pickle), `honeyfs`, `txtcmds`, `userdb`, auth, downloads, tty logs, shell persona, SSH banner и proxy backend, а не только пару поверхностных полей.
+Settings строятся из `config_schema` в `catalog/honeypots.json`. На первом Docker-runtime этапе они используются для host-портов, включения сервисов, базовых env/config-файлов и логирования. Глубокая настройка fake filesystem Cowrie, Dionaea service overlays и Conpot templates будет расширяться поверх этого runtime, уже без Python-заглушек.
 
 Добавить еще один сенсор в policy можно API-запросом. Desired state будет скопирован с `sensor1`, после чего новый агент сможет стартовать со своим `--sensor-id`:
 
@@ -106,9 +114,9 @@ curl 'http://192.168.0.196:8080/api/events?limit=10' | python3 -m json.tool
 
 - `sensor1.status = online`;
 - `sensor1.applied_version` равен текущей версии policy;
-- `agent_mode = listener-runtime`;
-- активны listeners для Cowrie, OpenCanary, Heralding, Conpot и Dionaea;
-- в events есть `sensor.enroll`, `sensor.runtime.started`, `sensor.status` и события подключений.
+- `agent_mode = docker-runtime`;
+- активны контейнеры Cowrie, OpenCanary, Heralding, Conpot и Dionaea;
+- в events есть `sensor.enroll`, `sensor.docker_runtime.started`, `sensor.status` и raw log events из контейнеров.
 
 ## Проверка Менеджера Политики
 
@@ -120,7 +128,7 @@ curl -X PATCH http://192.168.0.196:8080/api/sensors/sensor1/modules/opencanary \
   -d '{"enabled": false}' | python3 -m json.tool
 ```
 
-Через несколько секунд порт OpenCanary HTTP должен закрыться:
+Через несколько секунд контейнеры будут пересозданы, а порт OpenCanary HTTP должен закрыться:
 
 ```sh
 timeout 2 bash -c '</dev/tcp/192.168.0.173/8081' && echo open || echo closed
@@ -135,6 +143,14 @@ curl -X PATCH http://192.168.0.196:8080/api/sensors/sensor1/modules/opencanary \
 ```
 
 Порт должен снова открыться, а `applied_version` в `/api/sensors` должен догнать версию policy.
+
+Проверить, что это реальные контейнеры:
+
+```sh
+ssh banana@192.168.0.173
+docker ps --filter label=edc.sensor_id=sensor1
+cat ~/edc-mvp/var/sensor/docker-runtime/docker-compose.yml
+```
 
 ## Быстрая Проверка Детекта
 

@@ -133,7 +133,7 @@
         {"key": "ip.ignorelist", "label": "Ignore IPs/CIDRs", "type": "list", "group": "Device", "default": "192.168.0.196", "help": "Comma or newline separated ignore list."},
         {"key": "ftp.banner", "label": "FTP banner", "type": "string", "group": "Service Banners", "default": "FTP server ready"},
         {"key": "http.banner", "label": "HTTP server banner", "type": "string", "group": "Service Banners", "default": "nginx/1.18.0"},
-        {"key": "http.skin", "label": "HTTP skin", "type": "select", "group": "Service Banners", "default": "basicLogin", "options": ["basicLogin", "nasLogin"]},
+        {"key": "http.skin", "label": "HTTP skin", "type": "select", "group": "Service Banners", "default": "nasLogin", "options": ["basicLogin", "nasLogin"]},
         {"key": "https.skin", "label": "HTTPS skin", "type": "select", "group": "Service Banners", "default": "nasLogin", "options": ["basicLogin", "nasLogin"]},
         {"key": "https.certificate", "label": "HTTPS certificate path", "type": "string", "group": "TLS", "default": "/etc/ssl/opencanary/opencanary.pem"},
         {"key": "https.key", "label": "HTTPS key path", "type": "string", "group": "TLS", "default": "/etc/ssl/opencanary/opencanary.key"},

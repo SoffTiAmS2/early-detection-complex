@@ -84,7 +84,7 @@
               "device.node_id": "opencanary-sensor1",
               "ftp.banner": "FTP server ready",
               "http.banner": "nginx/1.18.0",
-              "http.skin": "basicLogin",
+              "http.skin": "nasLogin",
               "httpproxy.skin": "squid",
               "https.certificate": "/etc/ssl/opencanary/opencanary.pem",
               "https.key": "/etc/ssl/opencanary/opencanary.key",

@@ -42,14 +42,14 @@ archive/prototype-v0/ # старый рабочий прототип, сохра
 - обновлять sensor runtime и honeypot-модули;
 - откатывать неудачные обновления.
 
-## Первый MVP Новой Архитектуры
+## Первый Рабочий Runtime
 
 1. Описать каталог модулей: Cowrie, OpenCanary, Heralding, Conpot, Dionaea.
 2. Сделать единый sensor manifest: какие modules включены, какие ports слушают, куда слать события.
 3. Сделать lightweight sensor-agent, который polling-ом забирает desired state с центра.
-4. Поднять lightweight listener-runtime для нескольких модулей.
-5. Заменять lightweight listeners настоящими module runners: Cowrie, OpenCanary, Heralding, Conpot, Dionaea.
-6. После этого возвращаться к UI, уже поверх нормальной модели управления.
+4. Запускать реальные upstream Docker images через sensor Docker runtime.
+5. Удалять старые контейнеры комплекса перед применением новой конфигурации.
+6. Собирать raw logs контейнеров и отправлять их в центр.
 
 ## Проверка Новой Политики
 
@@ -61,9 +61,9 @@ tools/validate_policy.py
 
 Валидатор проверяет, что `config/site.example.json` использует только существующие modules/services из `catalog/honeypots.json` и не содержит конфликтов host ports на одном сенсоре.
 
-## MVP Control Loop
+## Control Loop
 
-Уже есть минимальный живой цикл без Docker и UI. Это базовая HoneySens-like модель: центр хранит desired state, а сенсор сам его забирает, применяет локально и докладывает состояние.
+Уже есть базовая HoneySens-like модель: центр хранит desired state, а сенсор сам его забирает, применяет локально и докладывает состояние.
 
 ```sh
 scripts/run_mvp.sh
@@ -87,13 +87,23 @@ python3 sensor/agent.py --center http://127.0.0.1:8080 --sensor-id sensor1 --onc
 curl http://127.0.0.1:8080/api/sensors
 ```
 
-`--once` показывает control loop без открытия портов. Для реального раннего обнаружения sensor-agent запускается в режиме listener-runtime:
+`--once` показывает control loop без открытия портов. Для реального раннего обнаружения sensor-agent запускается в Docker runtime:
 
 ```sh
 python3 sensor/agent.py --center http://192.168.0.196:8080 --sensor-id sensor1 --serve
 ```
 
-В этом режиме сенсор открывает порты включенных модулей, фиксирует подключения и отправляет события в центр. Это легкий runtime на Python stdlib: он нужен для проверки распределенной модели до подключения полноценных контейнеров Cowrie/OpenCanary/Conpot.
+В этом режиме сенсор создает `var/sensor/docker-runtime/docker-compose.yml`, удаляет старые контейнеры с label `edc.sensor_id=<sensor_id>` и запускает реальные Docker images:
+
+```text
+Cowrie     cowrie/cowrie:latest
+OpenCanary thinkst/opencanary:latest
+Dionaea    dinotools/dionaea:latest
+Conpot     honeynet/conpot:latest
+Heralding  dtagdevsec/heralding:24.04.1
+```
+
+Sensor-agent не эмулирует протоколы сам. Он только оркестрирует контейнеры, читает `docker logs` и отправляет сырые события контейнеров в центр.
 
 События центра хранятся в SQLite (`var/center/events.sqlite3`). Для каждого события сохраняются нормализованные поля для фильтрации и dashboard, а полный оригинальный JSON лежит в поле `raw_event`. MITRE-поля в логи не добавляются: они должны вычисляться отдельным аналитическим слоем, а не портить исходную телеметрию honeypot.
 
@@ -128,7 +138,7 @@ GET  /api/events
 ```
 
 `GET /` открывает живой dashboard центра: состояние сенсоров, running-модули, severity/module/service counters, последние события раннего обнаружения и список реально прописанных honeypot-модулей.
-Отдельная страница `GET /honeypots/<module_id>?sensor_id=sensor1` настраивает конкретный honeypot: включение модуля, включение сервисов, host-порты и schema-driven settings. Для Cowrie покрыты fake filesystem metadata (`filesystem` / fs.pickle), `honeyfs`, `txtcmds`, userdb, auth class, downloads, tty logs, shell persona, SSH banner и proxy backend. У каждого модуля есть advanced raw override для будущего полноценного runner. Изменения сохраняются через manager API, версия policy увеличивается, а sensor-agent применяет ее на следующем polling loop без ручного рестарта.
+Отдельная страница `GET /honeypots/<module_id>?sensor_id=sensor1` настраивает конкретный honeypot: включение модуля, включение сервисов, host-порты и schema-driven settings. Изменения сохраняются через manager API, версия policy увеличивается, а sensor-agent применяет ее на следующем polling loop без ручного рестарта.
 
 Проверка живого reconfigure:
 
@@ -136,7 +146,7 @@ GET  /api/events
 tools/e2e_reconfigure_test.py
 ```
 
-Тест поднимает временный центр и sensor-agent, проверяет открытие порта, выключение модуля через manager API и повторное включение.
+Тест поднимает временный центр, проверяет PATCH API и материализацию Docker Compose без запуска тяжелых upstream images.
 
 Текущая политика включает несколько модулей одновременно:
 

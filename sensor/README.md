@@ -7,7 +7,9 @@
 - enrollment в центре;
 - polling desired state;
 - установка/обновление honeypot-модулей;
-- запуск module runner;
+- запуск реальных Docker honeypot-модулей;
+- очистка старых контейнеров комплекса перед применением новой политики;
+- сбор raw container logs и доставка их в центр;
 - local health;
 - normalized event pipeline;
 - rollback при неудачном обновлении.
@@ -17,8 +19,8 @@
 ```text
 edc-sensor-agent
 ├─ control loop
-├─ module runner
-├─ event adapters
+├─ Docker Compose runtime
+├─ raw log collectors
 ├─ local state
 └─ updater
 ```

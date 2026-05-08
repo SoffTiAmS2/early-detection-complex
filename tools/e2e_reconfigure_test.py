@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke-test the center manager API and live sensor reconfiguration loop."""
+"""Smoke-test the center manager API and Docker runtime materialization."""
 
 from __future__ import annotations
 
@@ -16,6 +16,8 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "sensor"))
+from runtime import DockerRuntime  # noqa: E402
 
 
 def free_port() -> int:
@@ -44,20 +46,6 @@ def patch_json(url: str, payload: dict[str, Any], timeout: float = 2) -> dict[st
     if not isinstance(parsed, dict):
         raise RuntimeError(f"{url} returned non-object json")
     return parsed
-
-
-def port_open(port: int) -> bool:
-    try:
-        with socket.create_connection(("127.0.0.1", port), timeout=0.4):
-            return True
-    except OSError:
-        return False
-
-
-def tcp_sample(port: int) -> str:
-    with socket.create_connection(("127.0.0.1", port), timeout=1) as sock:
-        sock.sendall(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
-        return sock.recv(2048).decode("utf-8", errors="replace")
 
 
 def patch_expect_error(url: str, payload: dict[str, Any]) -> int:
@@ -101,9 +89,30 @@ def wait_process_exit(proc: subprocess.Popen[str], name: str) -> None:
         raise RuntimeError(f"{name} exited with {proc.returncode}\n{output}")
 
 
+def assert_compose_materializes(desired: dict[str, Any], state_dir: Path) -> None:
+    runtime = DockerRuntime(
+        sensor_id="sensor1",
+        center_url="http://127.0.0.1:1",
+        desired=desired,
+        sender=lambda event: True,
+        state_dir=state_dir,
+    )
+    runtime.runtime_dir.mkdir(parents=True, exist_ok=True)
+    runtime.prepare_module_dirs()
+    runtime.write_compose()
+    compose = runtime.compose_path.read_text(encoding="utf-8")
+    expected = ["cowrie/cowrie:latest", "thinkst/opencanary:latest", "2222:2222", "8081:80"]
+    missing = [item for item in expected if item not in compose]
+    if missing:
+        raise RuntimeError(f"compose missing expected real runtime entries: {missing}\n{compose}")
+    forbidden = ["lightweight-listener", "HoneypotTCPServer"]
+    present = [item for item in forbidden if item in compose]
+    if present:
+        raise RuntimeError(f"compose contains listener-runtime leftovers: {present}")
+
+
 def main() -> int:
     center_port = free_port()
-    honeypot_port = free_port()
     with tempfile.TemporaryDirectory(prefix="edc-e2e-") as tmp:
         tmp_path = Path(tmp)
         policy_path = tmp_path / "policy.json"
@@ -124,8 +133,14 @@ def main() -> int:
                             {
                                 "id": "opencanary",
                                 "enabled": True,
-                                "services": [{"id": "http", "host_port": honeypot_port}],
+                                "services": [{"id": "http", "host_port": 8081}],
                                 "settings": {"http.banner": "Apache/2.4.57", "portscan.synrate": 5},
+                            },
+                            {
+                                "id": "cowrie",
+                                "enabled": True,
+                                "services": [{"id": "ssh", "host_port": 2222}],
+                                "settings": {"hostname": "e2e-filesrv"},
                             }
                         ],
                     },
@@ -133,6 +148,7 @@ def main() -> int:
             ],
         }
         write_json(policy_path, policy)
+        assert_compose_materializes(policy["sensors"][0]["desired_state"], state_dir)
 
         center = subprocess.Popen(
             [
@@ -156,65 +172,30 @@ def main() -> int:
         )
         try:
             wait_for("center health", lambda: get_json(f"http://127.0.0.1:{center_port}/health")["status"] == "ok")
-            sensor = subprocess.Popen(
-                [
-                    sys.executable,
-                    str(ROOT / "sensor" / "agent.py"),
-                    "--center",
-                    f"http://127.0.0.1:{center_port}",
-                    "--sensor-id",
-                    "sensor1",
-                    "--state-dir",
-                    str(state_dir),
-                    "--serve",
-                    "--interval",
-                    "0.5",
-                    "--duration",
-                    "16",
-                ],
-                cwd=ROOT / "sensor",
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
+            bad_status = patch_expect_error(
+                f"http://127.0.0.1:{center_port}/api/sensors/sensor1/modules/opencanary",
+                {"settings": {"portscan.synrate": "wrong"}},
             )
-            try:
-                wait_for("initial listener open", lambda: port_open(honeypot_port))
-                wait_for("initial configured http banner", lambda: "Server: Apache/2.4.57" in tcp_sample(honeypot_port))
-                bad_status = patch_expect_error(
-                    f"http://127.0.0.1:{center_port}/api/sensors/sensor1/modules/opencanary",
-                    {"settings": {"portscan.synrate": "wrong"}},
-                )
-                if bad_status != 400:
-                    raise RuntimeError(f"invalid settings returned {bad_status}, expected 400")
-                disabled = patch_json(
-                    f"http://127.0.0.1:{center_port}/api/sensors/sensor1/modules/opencanary",
-                    {"enabled": False},
-                )
-                if disabled.get("status") != "saved":
-                    raise RuntimeError(f"disable patch failed: {disabled}")
-                wait_for("listener closed after disable", lambda: not port_open(honeypot_port))
-                enabled = patch_json(
-                    f"http://127.0.0.1:{center_port}/api/sensors/sensor1/modules/opencanary",
-                    {"enabled": True, "settings": {"http.banner": "lighttpd/1.4.76", "portscan.synrate": 7}},
-                )
-                if enabled.get("status") != "saved":
-                    raise RuntimeError(f"enable patch failed: {enabled}")
-                wait_for("listener open after enable", lambda: port_open(honeypot_port))
-                wait_for("updated configured http banner", lambda: "Server: lighttpd/1.4.76" in tcp_sample(honeypot_port))
-                wait_for(
-                    "sensor applies latest version",
-                    lambda: any(
-                        sensor.get("applied_version") == enabled["policy"]["version"]
-                        for sensor in get_json(f"http://127.0.0.1:{center_port}/api/sensors")["sensors"]
-                    ),
-                )
-            finally:
-                wait_process_exit(sensor, "sensor-agent")
+            if bad_status != 400:
+                raise RuntimeError(f"invalid settings returned {bad_status}, expected 400")
+            disabled = patch_json(
+                f"http://127.0.0.1:{center_port}/api/sensors/sensor1/modules/opencanary",
+                {"enabled": False},
+            )
+            if disabled.get("status") != "saved":
+                raise RuntimeError(f"disable patch failed: {disabled}")
+            enabled = patch_json(
+                f"http://127.0.0.1:{center_port}/api/sensors/sensor1/modules/opencanary",
+                {"enabled": True, "settings": {"http.banner": "lighttpd/1.4.76", "portscan.synrate": 7}},
+            )
+            if enabled.get("status") != "saved":
+                raise RuntimeError(f"enable patch failed: {enabled}")
+            assert_compose_materializes(enabled["policy"]["sensors"][0]["desired_state"], state_dir)
         finally:
             center.terminate()
             wait_process_exit(center, "center")
 
-    print("ok: manager PATCH API and live sensor reconfigure passed")
+    print("ok: manager PATCH API and Docker runtime materialization passed")
     return 0
 
 

@@ -2,7 +2,7 @@
 """Managed sensor-agent for the distributed early-detection complex.
 
 The agent polls desired state from the center, writes local applied state,
-reports status and can run lightweight honeypot listeners for early detection.
+reports status and runs real honeypot containers with Docker Compose.
 """
 
 from __future__ import annotations
@@ -17,11 +17,11 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from runtime import ListenerRuntime
+from runtime import DockerRuntime
 
 
 DEFAULT_STATE_DIR = Path("var") / "sensor"
-AGENT_VERSION = "0.3.0"
+AGENT_VERSION = "0.4.0"
 
 
 def now_ts() -> float:
@@ -226,19 +226,20 @@ def fetch_desired_with_retry(base_url: str, sensor_id: str, retries: int = 30, d
     raise RuntimeError(f"desired-state unavailable after {retries} retries: {last_error}")
 
 
-def start_runtime(
+def start_docker_runtime(
     sensor_id: str,
     base_url: str,
     desired: dict[str, Any],
     send_event: Any,
-) -> tuple[ListenerRuntime, list[dict[str, Any]], list[dict[str, Any]]]:
-    runtime = ListenerRuntime(sensor_id=sensor_id, center_url=base_url, desired=desired, sender=send_event)
+    state_dir: Path,
+) -> tuple[DockerRuntime, list[dict[str, Any]], list[dict[str, Any]]]:
+    runtime = DockerRuntime(sensor_id=sensor_id, center_url=base_url, desired=desired, sender=send_event, state_dir=state_dir)
     runtime.start()
     active_services = runtime.active_services()
     plan = runtime_plan(module_plan(desired), active_services, runtime.errors)
     send_event(
         {
-            "event_type": "sensor.runtime.started",
+            "event_type": "sensor.docker_runtime.started",
             "timestamp": now_ts(),
             "sensor_id": sensor_id,
             "agent_version": AGENT_VERSION,
@@ -266,7 +267,7 @@ def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: floa
 
     desired = fetch_desired_with_retry(base_url, sensor_id)
     signature = desired_signature(desired)
-    runtime, active_services, plan = start_runtime(sensor_id, base_url, desired, send_event)
+    runtime, active_services, plan = start_docker_runtime(sensor_id, base_url, desired, send_event, state_dir)
     started_at = now_ts()
     state = {
         "sensor_id": sensor_id,
@@ -302,7 +303,7 @@ def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: floa
                     runtime.stop()
                     desired = latest_desired
                     signature = latest_signature
-                    runtime, active_services, plan = start_runtime(sensor_id, base_url, desired, send_event)
+                    runtime, active_services, plan = start_docker_runtime(sensor_id, base_url, desired, send_event, state_dir)
             except Exception as exc:  # noqa: BLE001 - keep current runtime while center is unavailable.
                 print(f"sensor-agent: desired-state refresh failed: {exc}", flush=True)
 
@@ -312,7 +313,7 @@ def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: floa
                 sensor_id,
                 desired,
                 plan,
-                agent_mode="listener-runtime",
+                agent_mode="docker-runtime",
                 active_services=active_services,
                 listener_errors=runtime.errors,
             )
@@ -341,14 +342,14 @@ def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: floa
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run EDC sensor-agent MVP")
+    parser = argparse.ArgumentParser(description="Run EDC sensor-agent")
     parser.add_argument("--center", default="http://127.0.0.1:8080")
     parser.add_argument("--sensor-id", default="sensor1")
     parser.add_argument("--state-dir", type=Path, default=DEFAULT_STATE_DIR)
     parser.add_argument("--interval", type=float, default=30)
     parser.add_argument("--duration", type=float, default=0, help="Runtime duration in seconds; 0 means forever")
     parser.add_argument("--once", action="store_true")
-    parser.add_argument("--serve", action="store_true", help="Run lightweight honeypot listeners from desired state")
+    parser.add_argument("--serve", action="store_true", help="Run real honeypot containers from desired state")
     parser.add_argument("--no-enroll", action="store_true", help="Skip POST /api/enroll before polling desired state")
     return parser.parse_args()
 

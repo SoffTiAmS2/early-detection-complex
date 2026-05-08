@@ -11,14 +11,14 @@
 - `center/README.md` - назначение будущего control-plane.
 - `center/server.py` - минимальный MVP control-plane: modules, sensors, desired-state, events; хранит события в SQLite с сохранением полного `raw_event`.
 - `sensor/README.md` - назначение будущего managed sensor appliance.
-- `sensor/agent.py` - минимальный MVP sensor-agent: polling desired-state, dry-run apply, status event.
-- `sensor/runtime.py` - lightweight TCP listener-runtime для раннего обнаружения подключений к включенным honeypot-сервисам.
+- `sensor/agent.py` - managed sensor-agent: polling desired-state, Docker runtime apply, status event.
+- `sensor/runtime.py` - Docker Compose runtime: запускает реальные honeypot images, чистит старые контейнеры комплекса и собирает raw container logs.
 - `catalog/README.md` - правила добавления honeypot-модулей.
 - `catalog/honeypots.json` - первичный registry модулей: Cowrie, OpenCanary, Heralding, Conpot, Dionaea.
 - `config/site.example.json` - пример политики стенда и desired state сенсора.
 - `tools/validate_policy.py` - проверяет, что site-policy ссылается только на существующие modules/services и не конфликтует по host ports.
 - `scripts/run_mvp.sh` - запускает локальную демонстрацию center + sensor-agent.
-- `scripts/run_sensor_runtime.sh` - запускает sensor-agent в режиме real listener-runtime.
+- `scripts/run_sensor_runtime.sh` - запускает sensor-agent в режиме Docker honeypot runtime.
 
 ## Docs
 
