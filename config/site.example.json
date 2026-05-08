@@ -226,7 +226,7 @@
         "ssh_port": 22,
         "ssh_user": "banana"
       },
-      "host": "192.168.0.176",
+      "host": "192.168.0.173",
       "id": "sensor1"
     }
   ],

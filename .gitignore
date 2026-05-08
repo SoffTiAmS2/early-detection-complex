@@ -2,7 +2,6 @@ __pycache__/
 *.py[cod]
 .env
 logs/
-center/storage/
 var/
 sensors/
 sensors/*/logs/

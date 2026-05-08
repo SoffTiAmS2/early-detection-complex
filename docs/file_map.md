@@ -9,7 +9,7 @@
 ## New Architecture
 
 - `center/README.md` - назначение будущего control-plane.
-- `center/server.py` - минимальный MVP control-plane: modules, sensors, desired-state, events.
+- `center/server.py` - минимальный MVP control-plane: modules, sensors, desired-state, events; хранит события в SQLite с сохранением полного `raw_event`.
 - `sensor/README.md` - назначение будущего managed sensor appliance.
 - `sensor/agent.py` - минимальный MVP sensor-agent: polling desired-state, dry-run apply, status event.
 - `sensor/runtime.py` - lightweight TCP listener-runtime для раннего обнаружения подключений к включенным honeypot-сервисам.

@@ -60,9 +60,12 @@ attacker -> honeypot module -> local event adapter -> sensor event pipeline -> c
   "src_ip": "192.168.0.55",
   "dst_port": 2222,
   "severity": "high",
-  "timestamp": "2026-05-05T00:00:00Z"
+  "timestamp": "2026-05-05T00:00:00Z",
+  "raw_event": {}
 }
 ```
+
+Центр хранит события в SQLite. Нормализованные поля (`sensor_id`, `module`, `service`, `event_type`, `src_ip`, `dst_port`, `severity`) используются для фильтрации и dashboard, а полный исходный JSON события сохраняется в `raw_event`. В сами логи не добавляются `mitre_techniques`: сопоставление с MITRE и корреляция должны быть отдельным аналитическим слоем поверх сохраненных оригинальных событий.
 
 ## Desired State
 

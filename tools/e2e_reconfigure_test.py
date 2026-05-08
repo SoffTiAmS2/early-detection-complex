@@ -107,7 +107,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="edc-e2e-") as tmp:
         tmp_path = Path(tmp)
         policy_path = tmp_path / "policy.json"
-        store_path = tmp_path / "events.jsonl"
+        store_path = tmp_path / "events.sqlite3"
         state_dir = tmp_path / "sensor-state"
         policy = {
             "version": 1,

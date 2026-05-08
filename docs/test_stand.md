@@ -4,10 +4,12 @@
 
 ```text
 center  192.168.0.196  user: centre
-sensor1 192.168.0.176  user: banana
+sensor1 192.168.0.173  user: banana
 ```
 
 Пароли и приватные SSH-ключи не хранятся в репозитории.
+
+Текущие пароли стенда: `centre / 1` и `banana / 1`. Их нельзя сохранять в tracked-конфигурации проекта.
 
 ## Что Проверяет Текущий MVP
 
@@ -21,6 +23,8 @@ sensor1 192.168.0.176  user: banana
 6. Любая попытка подключения к listener превращается в normalized event.
 7. Sensor-agent отправляет `sensor.status` и suspicious events в `POST /api/events`.
 8. Центр показывает состояние через `/api/overview` и `/api/sensors`.
+
+Центр сохраняет события в SQLite `var/center/events.sqlite3`: нормализованные поля используются для фильтрации, а исходное событие сохраняется целиком в `raw_event`.
 
 Это lightweight runtime, а не полноценные upstream-контейнеры Cowrie/OpenCanary/Conpot. Его задача - дать проверяемое раннее обнаружение и контракт событий до подключения тяжелых модулей.
 
@@ -74,7 +78,7 @@ curl -X POST http://192.168.0.196:8080/api/sensors \
 Если нужно принудительно перезапустить агент вручную:
 
 ```sh
-ssh banana@192.168.0.176
+ssh banana@192.168.0.173
 cd ~/edc-mvp
 kill $(cat var/sensor.pid) 2>/dev/null || true
 nohup python3 sensor/agent.py --center http://192.168.0.196:8080 --sensor-id sensor1 --serve --interval 10 > var/sensor/agent.log 2>&1 &
@@ -119,7 +123,7 @@ curl -X PATCH http://192.168.0.196:8080/api/sensors/sensor1/modules/opencanary \
 Через несколько секунд порт OpenCanary HTTP должен закрыться:
 
 ```sh
-timeout 2 bash -c '</dev/tcp/192.168.0.176/8081' && echo open || echo closed
+timeout 2 bash -c '</dev/tcp/192.168.0.173/8081' && echo open || echo closed
 ```
 
 Включить обратно:
@@ -137,18 +141,18 @@ curl -X PATCH http://192.168.0.196:8080/api/sensors/sensor1/modules/opencanary \
 С любой машины в сети:
 
 ```sh
-curl -i http://192.168.0.176:8081/
-curl -i http://192.168.0.176:8082/
-printf 'USER admin\r\nPASS admin\r\n' | nc -w 2 192.168.0.176 2121
-printf 'USER backup\r\nPASS backup123\r\n' | nc -w 2 192.168.0.176 2223
-printf '*1\r\n$4\r\nPING\r\n' | nc -w 2 192.168.0.176 6379
+curl -i http://192.168.0.173:8081/
+curl -i http://192.168.0.173:8082/
+printf 'USER admin\r\nPASS admin\r\n' | nc -w 2 192.168.0.173 2121
+printf 'USER backup\r\nPASS backup123\r\n' | nc -w 2 192.168.0.173 2223
+printf '*1\r\n$4\r\nPING\r\n' | nc -w 2 192.168.0.173 6379
 ```
 
 Если `nc` не установлен, можно проверить TCP из bash:
 
 ```sh
-timeout 2 bash -c '</dev/tcp/192.168.0.176/2222' && echo open
-timeout 2 bash -c '</dev/tcp/192.168.0.176/8081' && echo open
+timeout 2 bash -c '</dev/tcp/192.168.0.173/2222' && echo open
+timeout 2 bash -c '</dev/tcp/192.168.0.173/8081' && echo open
 ```
 
 После проверок:
