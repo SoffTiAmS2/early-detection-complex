@@ -12,4 +12,4 @@ COPY sensor ./sensor
 COPY scripts ./scripts
 
 EXPOSE 8080
-CMD ["python3", "center/server.py", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["python3", "-m", "center.main", "--host", "0.0.0.0", "--port", "8080"]

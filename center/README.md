@@ -1,6 +1,19 @@
 # Центр
 
-`center/server.py` - единый control-plane комплекса.
+Центр оформлен как отдельное Python-приложение. Основная точка входа: `center/main.py`.
+
+Структура:
+
+- `main.py` - CLI entrypoint.
+- `app.py` - создание HTTP-сервера.
+- `handler.py` - REST API и маршруты веб-интерфейса.
+- `views.py`, `templates/` - HTML-интерфейс.
+- `policy.py` - политика сенсоров и desired-state.
+- `events.py` - SQLite-события.
+- `overview.py` - сводка состояния для dashboard.
+- `installer.py` - SSH-установка сенсора и журнал прогресса.
+- `paths.py`, `utils.py` - общие пути и утилиты.
+- `server.py` - совместимый wrapper для старой команды запуска.
 
 Функции:
 
@@ -36,5 +49,5 @@ GET  /api/events
 Запуск:
 
 ```sh
-python3 center/server.py --host 0.0.0.0 --port 8080
+python3 -m center.main --host 0.0.0.0 --port 8080
 ```

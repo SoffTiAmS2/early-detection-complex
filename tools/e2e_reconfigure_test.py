@@ -153,7 +153,8 @@ def main() -> int:
         center = subprocess.Popen(
             [
                 sys.executable,
-                str(ROOT / "center" / "server.py"),
+                "-m",
+                "center.main",
                 "--host",
                 "127.0.0.1",
                 "--port",

@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$ROOT"
 
-python3 center/server.py --host 127.0.0.1 --port 8080 &
+python3 -m center.main --host 127.0.0.1 --port 8080 &
 center_pid=$!
 trap 'kill "$center_pid" 2>/dev/null || true' EXIT
 

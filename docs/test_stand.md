@@ -42,7 +42,7 @@ Heralding  dtagdevsec/heralding:24.04.1
 
 ```sh
 cd ~/edc-mvp
-python3 center/server.py --host 0.0.0.0 --port 8080
+python3 -m center.main --host 0.0.0.0 --port 8080
 ```
 
 Проверка:

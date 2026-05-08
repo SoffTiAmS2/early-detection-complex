@@ -8,7 +8,18 @@
 
 ## Центр
 
-- `center/server.py` - единая точка входа: веб-интерфейс, REST API, SQLite-события, установка сенсора по SSH.
+- `center/main.py` - основная точка входа центра: парсит CLI-аргументы и запускает приложение.
+- `center/app.py` - собирает настроенный HTTP-сервер.
+- `center/handler.py` - HTTP routes: веб-страницы, REST API, sensor enroll/status/events, install jobs.
+- `center/views.py` - рендеринг HTML-шаблонов.
+- `center/templates/` - русскоязычный минималистичный UI центра.
+- `center/policy.py` - чтение, запись и валидация политики сенсоров.
+- `center/events.py` - SQLite-хранилище событий и выборки для API.
+- `center/overview.py` - агрегированное состояние сенсоров, модулей и последних событий.
+- `center/installer.py` - установка/обновление сенсора по SSH с журналом прогресса.
+- `center/paths.py` - общие пути проекта и значения по умолчанию.
+- `center/utils.py` - маленькие общие функции.
+- `center/server.py` - совместимый wrapper для старой команды запуска; новая команда использует `center/main.py`.
 - `center/Dockerfile` - образ центра с Python, `openssh-client` и `sshpass`.
 - `center/README.md` - краткое описание API.
 

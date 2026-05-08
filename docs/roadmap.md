@@ -58,7 +58,7 @@ Status: MVP skeleton started.
 - job/update history;
 - enrollment/bootstrap endpoint.
 
-Сейчас `center/server.py` уже отдает module catalog, sensor list, desired state и принимает events/enroll events.
+Сейчас `center/main.py` запускает центр, а `center/handler.py` отдает module catalog, sensor list, desired state и принимает events/enroll events.
 
 ## Stage 4: First Real Modules
 
