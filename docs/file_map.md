@@ -1,34 +1,37 @@
-# File Map
+# Карта Файлов
 
-## Root
+## Корень
 
-- `README.md` - новый главный вход в проект.
-- `.gitignore` - исключает runtime, generated и секреты.
-- `.dockerignore` - исключает архивы и runtime из будущих Docker build contexts.
+- `README.md` - короткая инструкция по запуску центра и установке сенсора.
+- `compose.yml` - контейнерный запуск центра.
+- `.gitignore`, `.dockerignore` - исключают runtime, секреты, кэши и старые локальные outputs.
 
-## New Architecture
+## Центр
 
-- `center/README.md` - назначение будущего control-plane.
-- `center/server.py` - минимальный MVP control-plane: modules, sensors, desired-state, events; хранит события в SQLite с сохранением полного `raw_event`.
-- `sensor/README.md` - назначение будущего managed sensor appliance.
-- `sensor/agent.py` - managed sensor-agent: polling desired-state, Docker runtime apply, status event.
-- `sensor/runtime.py` - Docker Compose runtime: запускает реальные honeypot images, чистит старые контейнеры комплекса и собирает raw container logs.
-- `catalog/README.md` - правила добавления honeypot-модулей.
-- `catalog/honeypots.json` - первичный registry модулей: Cowrie, OpenCanary, Heralding, Conpot, Dionaea.
-- `config/site.example.json` - пример политики стенда и desired state сенсора.
-- `tools/validate_policy.py` - проверяет, что site-policy ссылается только на существующие modules/services и не конфликтует по host ports.
-- `scripts/run_mvp.sh` - запускает локальную демонстрацию center + sensor-agent.
-- `scripts/run_sensor_runtime.sh` - запускает sensor-agent в режиме Docker honeypot runtime.
+- `center/server.py` - единая точка входа: веб-интерфейс, REST API, SQLite-события, установка сенсора по SSH.
+- `center/Dockerfile` - образ центра с Python, `openssh-client` и `sshpass`.
+- `center/README.md` - краткое описание API.
 
-## Docs
+## Сенсор
 
-- `docs/architecture.md` - целевая архитектура.
-- `docs/references.md` - open-source reference systems.
-- `docs/roadmap.md` - порядок реализации.
-- `docs/test_stand.md` - проверка текущего стенда center/sensor1 в сети `192.168.0.0/24`.
-- `docs/file_map.md` - этот файл.
+- `sensor/agent.py` - агент сенсора: регистрируется в центре, забирает desired-state, докладывает status.
+- `sensor/runtime.py` - Docker runtime: materialize compose, удаление старых контейнеров, запуск реальных honeypot images, отправка raw logs.
+- `sensor/README.md` - детали работы агента.
 
-## Archive
+## Конфигурация
 
-- `archive/prototype-v0/` - старый рабочий прототип Cowrie/Ansible/API.
-- `archive/prototype-v0/README.md` - что сохранено и почему.
+- `catalog/honeypots.json` - каталог Cowrie, OpenCanary, Heralding, Conpot, Dionaea: сервисы, порты, настройки.
+- `catalog/README.md` - пояснение каталога.
+- `config/site.example.json` - текущая политика стенда: сенсоры, модули, порты, persona.
+
+## Инструменты
+
+- `scripts/run_mvp.sh` - быстрый локальный dry-run.
+- `scripts/run_sensor_runtime.sh` - запуск агента сенсора в runtime-режиме.
+- `tools/validate_policy.py` - проверка каталога и политики.
+- `tools/e2e_reconfigure_test.py` - проверка PATCH API и генерации Docker Compose без запуска тяжёлых образов.
+
+## Runtime
+
+- `var/` - локальное состояние, SQLite-события, applied state. Не хранится в git.
+- `central-node/`, `sensors/`, `logs/`, `__pycache__/` - старые или runtime outputs, игнорируются.

@@ -3,6 +3,7 @@ __pycache__/
 .env
 logs/
 var/
+central-node/
 sensors/
 sensors/*/logs/
 config/network.yml

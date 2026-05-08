@@ -1,2 +1,0 @@
-"""Central node Python package."""
-

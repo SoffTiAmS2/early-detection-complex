@@ -1,29 +1,40 @@
-# Center Control-Plane
+# Центр
 
-Новая версия центра должна быть control-plane, а не просто web/API-оберткой над Ansible.
+`center/server.py` - единый control-plane комплекса.
 
-## Responsibilities
+Функции:
 
-- sensor registry;
-- module registry;
-- desired state API;
-- event ingest API;
-- update history;
-- enrollment/bootstrap;
-- future operator UI.
+- веб-интерфейс на русском языке;
+- установка/обновление сенсора по SSH из формы в центре;
+- хранение политики `config/site.example.json`;
+- выдача desired-state сенсорам;
+- приём enroll/status/raw events;
+- хранение событий в SQLite `var/center/events.sqlite3`;
+- настройка honeypot-модулей, сервисов и host-портов.
 
-## API Sketch
+Основные API:
 
 ```text
-POST /api/enroll
-GET  /api/sensors
-GET  /api/sensors/<id>/desired-state
-PUT  /api/sensors/<id>/desired-state
-POST /api/events
+GET  /
+GET  /health
+GET  /api/overview
 GET  /api/modules
-GET  /api/updates
+GET  /api/policy
+GET  /api/sensors
+POST /api/sensors
+GET  /api/sensors/<id>/desired-state
+PATCH /api/sensors/<id>/modules/<module_id>
+POST /api/install-sensor
+GET  /api/install-sensor
+GET  /api/install-sensor/<job_id>
+POST /api/install-sensor/<job_id>/cancel
+POST /api/enroll
+POST /api/events
+GET  /api/events
 ```
 
-## Rule
+Запуск:
 
-Центр хранит желаемое состояние. Сенсор сам применяет это состояние и сообщает результат.
+```sh
+python3 center/server.py --host 0.0.0.0 --port 8080
+```

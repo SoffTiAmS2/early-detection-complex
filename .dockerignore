@@ -4,6 +4,7 @@ __pycache__/
 .env
 logs/
 center/storage/
+central-node/
 sensors/
 sensors/*/.env
 sensors/*/logs/

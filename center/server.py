@@ -10,8 +10,15 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import os
+import shutil
 import sqlite3
+import subprocess
+import tarfile
+import tempfile
+import threading
 import time
+import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -25,6 +32,227 @@ DEFAULT_POLICY = ROOT / "config" / "site.example.json"
 DEFAULT_STORE = ROOT / "var" / "center" / "events.sqlite3"
 MAX_EVENT_LIMIT = 1000
 STALE_AFTER_SECONDS = 45
+INSTALL_JOBS: dict[str, dict[str, Any]] = {}
+
+
+def shell_quote(value: str) -> str:
+    return "'" + value.replace("'", "'\"'\"'") + "'"
+
+
+def public_center_url(policy: dict[str, Any], headers: Any | None = None) -> str:
+    configured = str(policy.get("site", {}).get("central_url") or "").strip()
+    if configured:
+        return configured.rstrip("/")
+    host = headers.get("Host") if headers else "127.0.0.1:8080"
+    return f"http://{host}".rstrip("/")
+
+
+def new_job(sensor_id: str, host: str) -> dict[str, Any]:
+    job = {
+        "id": uuid.uuid4().hex[:12],
+        "sensor_id": sensor_id,
+        "host": host,
+        "status": "queued",
+        "step": "Ожидание запуска",
+        "progress": 0,
+        "logs": [],
+        "started_at": now_ts(),
+        "updated_at": now_ts(),
+        "cancel_requested": False,
+        "process": None,
+    }
+    INSTALL_JOBS[job["id"]] = job
+    return job
+
+
+def job_log(job: dict[str, Any], message: str, progress: int | None = None, step: str | None = None) -> None:
+    job["updated_at"] = now_ts()
+    if progress is not None:
+        job["progress"] = max(0, min(100, progress))
+    if step:
+        job["step"] = step
+    job.setdefault("logs", []).append(f"{time.strftime('%H:%M:%S')} {message}")
+    job["logs"] = job["logs"][-160:]
+
+
+def public_job(job: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in job.items() if key not in {"process", "ssh_password"}}
+
+
+def run_checked(job: dict[str, Any], args: list[str], input_text: str | None = None, timeout: int = 600) -> subprocess.CompletedProcess[str]:
+    if job.get("cancel_requested"):
+        raise RuntimeError("Установка отменена пользователем")
+    process = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    job["process"] = process
+    try:
+        output, _ = process.communicate(input_text, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        output, _ = process.communicate()
+        raise RuntimeError(f"Команда превысила таймаут: {' '.join(args[:2])}\n{output[-4000:]}")
+    finally:
+        job["process"] = None
+    if output:
+        for line in output.splitlines()[-30:]:
+            if line.strip():
+                job_log(job, line.strip())
+    if process.returncode != 0:
+        raise RuntimeError(f"Команда завершилась с кодом {process.returncode}: {' '.join(args[:2])}\n{output[-4000:]}")
+    return subprocess.CompletedProcess(args, process.returncode, output, "")
+
+
+def make_sensor_bundle() -> Path:
+    temp = Path(tempfile.mkdtemp(prefix="edc-sensor-bundle-"))
+    bundle = temp / "sensor.tar.gz"
+    with tarfile.open(bundle, "w:gz") as archive:
+        for relative in (Path("sensor/agent.py"), Path("sensor/runtime.py"), Path("scripts/run_sensor_runtime.sh")):
+            archive.add(ROOT / relative, arcname=str(relative))
+    return bundle
+
+
+def ensure_sensor_policy(policy_path: Path, catalog_path: Path, sensor_id: str, host: str, ssh_user: str, ssh_port: int) -> dict[str, Any]:
+    policy = load_json(policy_path)
+    catalog = load_json(catalog_path)
+    sensor = find_sensor(policy, sensor_id)
+    if sensor:
+        sensor["host"] = host
+        sensor["enrollment"] = {"method": "ssh-bootstrap", "ssh_user": ssh_user, "ssh_port": ssh_port}
+    else:
+        source = find_sensor(policy, "sensor1") or (policy.get("sensors") or [None])[0]
+        if not source:
+            raise RuntimeError("В политике нет сенсора-образца для копирования профиля")
+        sensor = {
+            "id": sensor_id,
+            "host": host,
+            "architecture": source.get("architecture", ""),
+            "enrollment": {"method": "ssh-bootstrap", "ssh_user": ssh_user, "ssh_port": ssh_port},
+            "desired_state": json.loads(json.dumps(source.get("desired_state", {}))),
+        }
+        policy.setdefault("sensors", []).append(sensor)
+    errors = policy_errors(policy, catalog)
+    if errors:
+        raise RuntimeError("; ".join(errors))
+    policy = bump_policy_version(policy)
+    write_json(policy_path, policy)
+    return policy
+
+
+def remote_install_script(sensor_id: str, center_url: str, ssh_password: str, remote_dir: str) -> str:
+    password = shell_quote(ssh_password)
+    return f"""set -eu
+PASS={password}
+REMOTE_DIR={shell_quote(remote_dir)}
+SENSOR_ID={shell_quote(sensor_id)}
+CENTER_URL={shell_quote(center_url)}
+if [ "$(id -u)" = "0" ]; then
+  SUDO=""
+else
+  SUDO="sudo -S"
+fi
+run_sudo() {{
+  if [ -z "$SUDO" ]; then
+    "$@"
+  else
+    printf '%s\\n' "$PASS" | $SUDO "$@"
+  fi
+}}
+cd "$REMOTE_DIR"
+if ! command -v python3 >/dev/null 2>&1; then
+  run_sudo apt-get update
+  run_sudo apt-get install -y python3
+fi
+if ! command -v docker >/dev/null 2>&1; then
+  run_sudo apt-get update
+  run_sudo apt-get install -y docker.io docker-compose-v2
+fi
+run_sudo systemctl enable --now docker
+run_sudo docker rm -f $(run_sudo docker ps -aq --filter "label=edc.sensor_id=$SENSOR_ID") 2>/dev/null || true
+SERVICE=/etc/systemd/system/edc-sensor.service
+cat > /tmp/edc-sensor.service <<EOF
+[Unit]
+Description=EDC managed honeypot sensor
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+Type=simple
+WorkingDirectory=$REMOTE_DIR
+ExecStart=/usr/bin/python3 $REMOTE_DIR/sensor/agent.py --center $CENTER_URL --sensor-id $SENSOR_ID --serve --interval 20
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+run_sudo mv /tmp/edc-sensor.service "$SERVICE"
+run_sudo systemctl daemon-reload
+run_sudo systemctl enable edc-sensor.service
+run_sudo systemctl restart edc-sensor.service
+run_sudo systemctl --no-pager --full status edc-sensor.service || true
+"""
+
+
+def install_sensor_job(job: dict[str, Any], payload: dict[str, Any], policy_path: Path, catalog_path: Path, headers: Any | None = None) -> None:
+    try:
+        job["status"] = "running"
+        sensor_id = str(payload.get("sensor_id") or "").strip()
+        host = str(payload.get("host") or "").strip()
+        ssh_user = str(payload.get("ssh_user") or "").strip()
+        ssh_password = str(payload.get("ssh_password") or "")
+        ssh_port = int(payload.get("ssh_port") or 22)
+        remote_dir = str(payload.get("remote_dir") or "~/edc-mvp").strip() or "~/edc-mvp"
+        if not sensor_id or not host or not ssh_user or not ssh_password:
+            raise RuntimeError("Нужны sensor_id, IP, SSH-логин и SSH-пароль")
+        if shutil.which("sshpass") is None:
+            raise RuntimeError("На центре не установлен sshpass. Установите пакет sshpass или запускайте центр из Docker-образа проекта.")
+
+        policy = ensure_sensor_policy(policy_path, catalog_path, sensor_id, host, ssh_user, ssh_port)
+        center_url = str(payload.get("center_url") or public_center_url(policy, headers)).rstrip("/")
+        job_log(job, "Сенсор добавлен/обновлён в политике центра", 10, "Политика центра")
+
+        ssh_base = [
+            "sshpass",
+            "-p",
+            ssh_password,
+            "ssh",
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "UserKnownHostsFile=/dev/null",
+            "-p",
+            str(ssh_port),
+            f"{ssh_user}@{host}",
+        ]
+        scp_base = [
+            "sshpass",
+            "-p",
+            ssh_password,
+            "scp",
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "UserKnownHostsFile=/dev/null",
+            "-P",
+            str(ssh_port),
+        ]
+
+        job_log(job, "Проверяю SSH-доступ", 18, "SSH")
+        run_checked(job, [*ssh_base, "printf connected"], timeout=45)
+
+        bundle = make_sensor_bundle()
+        job_log(job, "Копирую sensor-agent на плату", 32, "Копирование файлов")
+        run_checked(job, [*ssh_base, f"mkdir -p {shell_quote(remote_dir)}"], timeout=60)
+        run_checked(job, [*scp_base, str(bundle), f"{ssh_user}@{host}:/tmp/edc-sensor.tar.gz"], timeout=180)
+        run_checked(job, [*ssh_base, f"tar -xzf /tmp/edc-sensor.tar.gz -C {shell_quote(remote_dir)} && rm -f /tmp/edc-sensor.tar.gz"], timeout=120)
+
+        job_log(job, "Устанавливаю Docker и systemd-сервис сенсора", 58, "Установка runtime")
+        run_checked(job, [*ssh_base, "sh -s"], input_text=remote_install_script(sensor_id, center_url, ssh_password, remote_dir), timeout=1200)
+
+        job["status"] = "completed"
+        job_log(job, "Готово: sensor-agent запущен, дальше он сам скачает и поднимет honeypot-контейнеры", 100, "Готово")
+    except Exception as exc:  # noqa: BLE001 - job errors must be returned to UI.
+        job["status"] = "failed" if not job.get("cancel_requested") else "cancelled"
+        job_log(job, str(exc), job.get("progress", 0), "Ошибка" if job["status"] == "failed" else "Отменено")
 
 
 def now_ts() -> float:
@@ -540,7 +768,7 @@ def render_dashboard(policy: dict[str, Any]) -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{site_name} - Early Detection Center</title>
+  <title>{site_name} - Центр раннего обнаружения</title>
   <style>
     :root {{
       color-scheme: light;
@@ -587,17 +815,41 @@ def render_dashboard(policy: dict[str, Any]) -> str:
     .event:first-child {{ border-top: 0; }}
     .event-head {{ display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }}
     .sample {{ margin-top: 6px; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 96px; overflow: auto; }}
-    @media (max-width: 1100px) {{ .grid, .honeypots {{ grid-template-columns: repeat(2, minmax(150px, 1fr)); }} .layout {{ grid-template-columns: 1fr; }} }}
-    @media (max-width: 640px) {{ header, main {{ padding-left: 16px; padding-right: 16px; }} .grid, .honeypots {{ grid-template-columns: 1fr; }} }}
+    .install-grid {{ display: grid; grid-template-columns: repeat(6, minmax(120px, 1fr)); gap: 10px; align-items: end; }}
+    .install-grid label {{ display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 13px; }}
+    .install-grid input {{ border: 1px solid var(--line); border-radius: 6px; padding: 7px 8px; font: inherit; background: #fff; }}
+    button {{ border: 1px solid #0f766e; background: #0f766e; color: white; border-radius: 6px; padding: 8px 12px; font: inherit; cursor: pointer; }}
+    button.secondary {{ color: var(--text); background: #fff; border-color: var(--line); }}
+    progress {{ width: 100%; height: 14px; }}
+    .logbox {{ margin-top: 10px; max-height: 160px; overflow: auto; white-space: pre-wrap; background: #0f172a; color: #dbeafe; border-radius: 6px; padding: 10px; font-size: 12px; }}
+    @media (max-width: 1100px) {{ .grid, .honeypots, .install-grid {{ grid-template-columns: repeat(2, minmax(150px, 1fr)); }} .layout {{ grid-template-columns: 1fr; }} }}
+    @media (max-width: 640px) {{ header, main {{ padding-left: 16px; padding-right: 16px; }} .grid, .honeypots, .install-grid {{ grid-template-columns: 1fr; }} }}
   </style>
 </head>
 <body>
   <header>
-    <h1>Early Detection Center</h1>
-    <div class="sub">{site_name} · distributed suspicious network activity detection</div>
+    <h1>Центр раннего обнаружения</h1>
+    <div class="sub">{site_name} · управление сенсорами и honeypot-сервисами</div>
   </header>
   <main>
     <section class="grid" id="metrics"></section>
+    <section class="panel">
+      <h2>Установка сенсора</h2>
+      <div class="install-grid">
+        <label>Имя сенсора<input id="installSensorId" value="sensor1"></label>
+        <label>IP адрес<input id="installHost" placeholder="192.168.0.173"></label>
+        <label>SSH порт<input id="installPort" type="number" min="1" max="65535" value="22"></label>
+        <label>Логин<input id="installUser" placeholder="banana"></label>
+        <label>Пароль<input id="installPassword" type="password" autocomplete="new-password"></label>
+        <button id="installStart">Установить / обновить</button>
+      </div>
+      <div style="margin-top:10px">
+        <progress id="installProgress" value="0" max="100"></progress>
+        <div class="muted" id="installStatus">Введите IP и SSH-доступ. Центр сам установит Docker, sensor-agent и systemd-сервис.</div>
+        <button class="secondary" id="installCancel" style="display:none;margin-top:8px">Отменить</button>
+        <div class="logbox" id="installLogs" style="display:none"></div>
+      </div>
+    </section>
     <section class="layout">
       <div class="panel">
         <h2>Сенсоры</h2>
@@ -612,23 +864,24 @@ def render_dashboard(policy: dict[str, Any]) -> str:
     <section class="panel manager">
       <div class="manager-head">
         <div>
-          <h2>Honeypot modules</h2>
-          <div class="muted">Здесь только модули, реально описанные в текущей политике выбранного сенсора.</div>
+          <h2>Honeypot-модули</h2>
+          <div class="muted">Выберите сенсор, включайте модули, сервисы и порты. Сенсор сам применит новую конфигурацию.</div>
         </div>
-        <label class="muted">Sensor<br><select id="sensorSelect"></select></label>
+        <label class="muted">Сенсор<br><select id="sensorSelect"></select></label>
       </div>
       <div class="honeypots" id="honeypots"></div>
     </section>
   </main>
   <script>
     let managedSensorId = new URLSearchParams(location.search).get('sensor_id') || 'sensor1';
+    let installJobId = null;
     const el = (id) => document.getElementById(id);
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({{ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }}[ch]));
-    const age = (ts) => ts ? Math.round(Date.now() / 1000 - ts) + 's ago' : 'never';
+    const age = (ts) => ts ? Math.round(Date.now() / 1000 - ts) + ' сек. назад' : 'никогда';
     function metric(label, value, cls='') {{ return `<div class="panel metric"><div class="label">${{esc(label)}}</div><div class="value ${{cls}}">${{esc(value)}}</div></div>`; }}
     function renderCounts(title, data) {{
       const parts = Object.entries(data || {{}}).map(([k, v]) => `<span class="pill">${{esc(k)}}: ${{esc(v)}}</span>`);
-      return `<div class="muted">${{esc(title)}}</div><div class="counts">${{parts.join('') || '<span class="muted">none</span>'}}</div>`;
+      return `<div class="muted">${{esc(title)}}</div><div class="counts">${{parts.join('') || '<span class="muted">нет данных</span>'}}</div>`;
     }}
     function renderSensor(sensor) {{
       const healthClass = sensor.health === 'online' ? 'ok' : (sensor.health === 'stale' ? 'warn' : 'bad');
@@ -637,7 +890,7 @@ def render_dashboard(policy: dict[str, Any]) -> str:
         <td><strong>${{esc(sensor.sensor_id)}}</strong><br><span class="muted">${{esc(sensor.host)}} · ${{esc(sensor.node_hostname || '')}}</span></td>
         <td><span class="${{healthClass}}">${{esc(sensor.health || sensor.status)}}</span><br><span class="muted">${{esc(sensor.agent_mode || '')}}</span></td>
         <td>${{esc(sensor.events)}}<br><span class="muted">${{age(sensor.last_seen)}}</span></td>
-        <td>${{esc((sensor.modules || []).filter((m) => m.status === 'running').length)}} running<br><span class="muted">${{esc(services)}}</span></td>
+        <td>${{esc((sensor.modules || []).filter((m) => m.status === 'running').length)}} запущено<br><span class="muted">${{esc(services)}}</span></td>
       </tr>`;
     }}
     function renderEvent(event) {{
@@ -646,7 +899,7 @@ def render_dashboard(policy: dict[str, Any]) -> str:
         <span class="pill ${{severityClass}}">${{esc(event.severity || 'unknown')}}</span>
         <strong>${{esc(event.event_type)}}</strong>
         <span>${{esc(event.module)}}/${{esc(event.service)}}:${{esc(event.dst_port)}}</span>
-        <span class="muted">from ${{esc(event.src_ip)}} · ${{age(event.received_at || event.timestamp)}}</span>
+        <span class="muted">источник ${{esc(event.src_ip)}} · ${{age(event.received_at || event.timestamp)}}</span>
       </div><code class="sample">${{esc(event.raw_sample || '')}}</code></div>`;
     }}
     function renderHoneypots(policy, catalog, sensors) {{
@@ -666,7 +919,7 @@ def render_dashboard(policy: dict[str, Any]) -> str:
           <div class="honeypot-head"><strong>${{esc(cat.title || desired.id)}}</strong><span class="pill ${{stateClass}}">${{esc(state)}}</span></div>
           <div class="muted">${{esc(cat.purpose || '')}}</div>
           <p><code>${{esc(desired.id)}}</code></p>
-          <p class="muted">${{esc(services || 'no enabled services')}}</p>
+          <p class="muted">${{esc(services || 'нет включённых сервисов')}}</p>
           <a class="button" href="/honeypots/${{encodeURIComponent(desired.id)}}?sensor_id=${{encodeURIComponent(managedSensorId)}}">Настроить</a>
         </div>`;
       }}).join('');
@@ -678,6 +931,53 @@ def render_dashboard(policy: dict[str, Any]) -> str:
       history.replaceState(null, '', url);
       refresh();
     }});
+    async function startInstall() {{
+      const payload = {{
+        sensor_id: el('installSensorId').value.trim(),
+        host: el('installHost').value.trim(),
+        ssh_port: Number(el('installPort').value || 22),
+        ssh_user: el('installUser').value.trim(),
+        ssh_password: el('installPassword').value
+      }};
+      el('installStatus').textContent = 'Запускаю установку...';
+      el('installLogs').style.display = 'block';
+      const response = await fetch('/api/install-sensor', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify(payload)
+      }});
+      const result = await response.json();
+      if (!response.ok) {{
+        el('installStatus').textContent = result.error || 'Не удалось запустить установку';
+        return;
+      }}
+      installJobId = result.job.id;
+      el('installCancel').style.display = 'inline-block';
+      pollInstall();
+    }}
+    async function pollInstall() {{
+      if (!installJobId) return;
+      const response = await fetch(`/api/install-sensor/${{encodeURIComponent(installJobId)}}`, {{ cache: 'no-store' }});
+      const result = await response.json();
+      const job = result.job;
+      el('installProgress').value = job.progress || 0;
+      el('installStatus').textContent = `${{job.step}} · ${{job.status}} · ${{job.progress || 0}}%`;
+      el('installLogs').textContent = (job.logs || []).join('\\n');
+      el('installLogs').scrollTop = el('installLogs').scrollHeight;
+      if (['completed', 'failed', 'cancelled'].includes(job.status)) {{
+        el('installCancel').style.display = 'none';
+        refresh();
+        return;
+      }}
+      setTimeout(pollInstall, 1500);
+    }}
+    async function cancelInstall() {{
+      if (!installJobId) return;
+      await fetch(`/api/install-sensor/${{encodeURIComponent(installJobId)}}/cancel`, {{ method: 'POST' }});
+      pollInstall();
+    }}
+    el('installStart').addEventListener('click', startInstall);
+    el('installCancel').addEventListener('click', cancelInstall);
     async function refresh() {{
       const [overviewResponse, policyResponse, catalogResponse] = await Promise.all([
         fetch('/api/overview', {{ cache: 'no-store' }}),
@@ -688,15 +988,15 @@ def render_dashboard(policy: dict[str, Any]) -> str:
       const policy = (await policyResponse.json()).policy;
       const catalog = await catalogResponse.json();
       el('metrics').innerHTML = [
-        metric('Sensors', `${{data.healthy_sensors}}/${{data.sensor_count}}`, data.healthy_sensors === data.sensor_count ? 'ok' : 'warn'),
-        metric('Suspicious Events', data.suspicious_event_count_window),
-        metric('High Severity', (data.severity_counts || {{}}).high || 0, 'bad'),
-        metric('Active Modules', (data.planned_modules || []).length),
-        metric('Policy Version', data.policy_version)
+        metric('Сенсоры', `${{data.healthy_sensors}}/${{data.sensor_count}}`, data.healthy_sensors === data.sensor_count ? 'ok' : 'warn'),
+        metric('События', data.suspicious_event_count_window),
+        metric('Высокая важность', (data.severity_counts || {{}}).high || 0, 'bad'),
+        metric('Активные модули', (data.planned_modules || []).length),
+        metric('Версия политики', data.policy_version)
       ].join('');
-      el('counts').innerHTML = renderCounts('Severity', data.severity_counts) + renderCounts('Modules', data.module_counts) + renderCounts('Services', data.service_counts);
-      el('sensors').innerHTML = `<table><thead><tr><th>Sensor</th><th>Health</th><th>Events</th><th>Services</th></tr></thead><tbody>${{(data.sensors || []).map(renderSensor).join('')}}</tbody></table>`;
-      el('events').innerHTML = (data.recent_suspicious_events || []).slice().reverse().map(renderEvent).join('') || '<p class="muted">No suspicious events yet.</p>';
+      el('counts').innerHTML = renderCounts('Важность', data.severity_counts) + renderCounts('Модули', data.module_counts) + renderCounts('Сервисы', data.service_counts);
+      el('sensors').innerHTML = `<table><thead><tr><th>Сенсор</th><th>Состояние</th><th>События</th><th>Сервисы</th></tr></thead><tbody>${{(data.sensors || []).map(renderSensor).join('')}}</tbody></table>`;
+      el('events').innerHTML = (data.recent_suspicious_events || []).slice().reverse().map(renderEvent).join('') || '<p class="muted">Подозрительных событий пока нет.</p>';
       renderHoneypots(policy, catalog, data.sensors);
     }}
     refresh();
@@ -718,7 +1018,7 @@ def render_honeypot_page(policy: dict[str, Any], catalog: dict[str, Any], sensor
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{title} - Honeypot Config</title>
+  <title>{title} - настройка honeypot</title>
   <style>
     :root {{ color-scheme: light; --bg: #f6f7f9; --panel: #ffffff; --text: #17202a; --muted: #637083; --line: #d9dee7; --ok: #147a3d; --bad: #b42318; }}
     * {{ box-sizing: border-box; }}
@@ -752,9 +1052,9 @@ def render_honeypot_page(policy: dict[str, Any], catalog: dict[str, Any], sensor
 </head>
 <body>
   <header>
-    <a href="/">← Dashboard</a>
+    <a href="/">← Центр</a>
     <h1>{title}</h1>
-    <div class="muted">sensor <code>{safe_sensor_id}</code> · module <code>{safe_module_id}</code></div>
+    <div class="muted">сенсор <code>{safe_sensor_id}</code> · модуль <code>{safe_module_id}</code></div>
   </header>
   <main>
     <section class="panel">
@@ -767,7 +1067,7 @@ def render_honeypot_page(policy: dict[str, Any], catalog: dict[str, Any], sensor
       <div id="services"></div>
     </section>
     <section class="panel">
-      <h2>Settings</h2>
+      <h2>Настройки</h2>
       <div class="form-grid" id="settings"></div>
     </section>
     <section class="panel">
@@ -790,7 +1090,7 @@ def render_honeypot_page(policy: dict[str, Any], catalog: dict[str, Any], sensor
     let desiredModule = null;
     const el = (id) => document.getElementById(id);
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({{ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }}[ch]));
-    const age = (ts) => ts ? Math.round(Date.now() / 1000 - ts) + 's ago' : 'never';
+      const age = (ts) => ts ? Math.round(Date.now() / 1000 - ts) + ' сек. назад' : 'никогда';
     function sensorPolicy() {{ return (policy?.sensors || []).find((sensor) => sensor.id === sensorId); }}
     function ensureDesired() {{
       const sensor = sensorPolicy();
@@ -847,7 +1147,7 @@ def render_honeypot_page(policy: dict[str, Any], catalog: dict[str, Any], sensor
       ensureDesired();
       el('modulePurpose').textContent = catalogModule.purpose || '';
       el('moduleEnabled').checked = desiredModule.enabled !== false;
-      el('services').innerHTML = `<table><thead><tr><th>Enabled</th><th>Service</th><th>Protocol</th><th>Host port</th><th>Default</th></tr></thead><tbody>${{(catalogModule.services || []).map((service) => {{
+      el('services').innerHTML = `<table><thead><tr><th>Вкл.</th><th>Сервис</th><th>Протокол</th><th>Порт сенсора</th><th>Порт контейнера</th></tr></thead><tbody>${{(catalogModule.services || []).map((service) => {{
         const current = desiredModule.services.find((item) => item.id === service.id);
         return `<tr>
           <td><input type="checkbox" data-service-enabled="${{esc(service.id)}}" ${{current.enabled !== false ? 'checked' : ''}}></td>
@@ -866,7 +1166,7 @@ def render_honeypot_page(policy: dict[str, Any], catalog: dict[str, Any], sensor
       el('settings').innerHTML = Object.entries(fieldsByGroup).map(([group, fields]) => `
         <div class="field wide"><h3>${{esc(group)}}</h3></div>
         ${{fields.map(inputForField).join('')}}
-      `).join('') || '<p class="muted">No settings schema for this module.</p>';
+      `).join('') || '<p class="muted">Для этого модуля нет схемы настроек.</p>';
       document.querySelectorAll('[data-service-enabled]').forEach((input) => input.addEventListener('change', () => {{
         desiredModule.services.find((item) => item.id === input.dataset.serviceEnabled).enabled = input.checked;
       }}));
@@ -878,9 +1178,9 @@ def render_honeypot_page(policy: dict[str, Any], catalog: dict[str, Any], sensor
     }}
     function renderEvents(events) {{
       el('events').innerHTML = events.map((event) => `<div>
-        <strong>${{esc(event.event_type)}}</strong> <span class="muted">${{esc(event.service)}}:${{esc(event.dst_port)}} · from ${{esc(event.src_ip)}} · ${{age(event.received_at || event.timestamp)}}</span>
+        <strong>${{esc(event.event_type)}}</strong> <span class="muted">${{esc(event.service)}}:${{esc(event.dst_port)}} · источник ${{esc(event.src_ip)}} · ${{age(event.received_at || event.timestamp)}}</span>
         <pre><code>${{esc(event.raw_sample || '')}}</code></pre>
-      </div>`).join('') || '<p class="muted">No events yet.</p>';
+      </div>`).join('') || '<p class="muted">Событий пока нет.</p>';
     }}
     async function load() {{
       const [policyResponse, catalogResponse, eventResponse] = await Promise.all([
@@ -895,7 +1195,7 @@ def render_honeypot_page(policy: dict[str, Any], catalog: dict[str, Any], sensor
       renderEvents((await eventResponse.json()).events || []);
     }}
     async function save() {{
-      el('status').textContent = 'saving...';
+      el('status').textContent = 'сохраняю...';
       readSettingsFromInputs();
       desiredModule.enabled = el('moduleEnabled').checked;
       const payload = {{ enabled: desiredModule.enabled, services: desiredModule.services, settings: desiredModule.settings }};
@@ -906,12 +1206,12 @@ def render_honeypot_page(policy: dict[str, Any], catalog: dict[str, Any], sensor
       }});
       const result = await response.json();
       if (!response.ok) {{
-        el('status').textContent = (result.errors || [result.error || 'save failed']).join('; ');
+        el('status').textContent = (result.errors || [result.error || 'сохранение не удалось']).join('; ');
         el('status').className = 'bad';
         return;
       }}
       policy = result.policy;
-      el('status').textContent = `saved. policy version ${{policy.version}}`;
+      el('status').textContent = `сохранено, версия политики ${{policy.version}}`;
       el('status').className = 'ok';
       render();
     }}
@@ -1003,6 +1303,17 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/sensors":
             events = read_events(self.store_path, limit=MAX_EVENT_LIMIT)
             self.send_json(sensors_payload(policy, events))
+            return
+        if parsed.path == "/api/install-sensor":
+            self.send_json({"jobs": [public_job(job) for job in INSTALL_JOBS.values()]})
+            return
+        if parsed.path.startswith("/api/install-sensor/"):
+            job_id = parsed.path.split("/")[3]
+            job = INSTALL_JOBS.get(job_id)
+            if not job:
+                self.send_json({"error": "installation job not found"}, HTTPStatus.NOT_FOUND)
+                return
+            self.send_json({"job": public_job(job)})
             return
         if parsed.path.startswith("/api/sensors/") and parsed.path.endswith("/desired-state"):
             sensor_id = parsed.path.split("/")[3]
@@ -1107,7 +1418,21 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
-        if parsed.path not in ("/api/events", "/api/enroll", "/api/sensors"):
+        if parsed.path.startswith("/api/install-sensor/") and parsed.path.endswith("/cancel"):
+            job_id = parsed.path.split("/")[3]
+            job = INSTALL_JOBS.get(job_id)
+            if not job:
+                self.send_json({"error": "installation job not found"}, HTTPStatus.NOT_FOUND)
+                return
+            job["cancel_requested"] = True
+            process = job.get("process")
+            if process and process.poll() is None:
+                process.terminate()
+            job["status"] = "cancelled"
+            job_log(job, "Отмена запрошена пользователем", step="Отменено")
+            self.send_json({"job": public_job(job)})
+            return
+        if parsed.path not in ("/api/events", "/api/enroll", "/api/sensors", "/api/install-sensor"):
             self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
             return
         payload, error = self.read_body()
@@ -1119,6 +1444,21 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         catalog = load_json(self.catalog_path)
         policy = load_json(self.policy_path)
+        if parsed.path == "/api/install-sensor":
+            sensor_id = str(payload.get("sensor_id") or "").strip()
+            host = str(payload.get("host") or "").strip()
+            if not sensor_id or not host:
+                self.send_json({"error": "Укажите имя сенсора и IP адрес"}, HTTPStatus.BAD_REQUEST)
+                return
+            job = new_job(sensor_id, host)
+            thread = threading.Thread(
+                target=install_sensor_job,
+                args=(job, payload, self.policy_path, self.catalog_path, dict(self.headers)),
+                daemon=True,
+            )
+            thread.start()
+            self.send_json({"job": public_job(job)}, HTTPStatus.ACCEPTED)
+            return
         if parsed.path == "/api/sensors":
             sensor_id = str(payload.get("id") or "").strip()
             if not sensor_id:

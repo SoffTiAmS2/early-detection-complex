@@ -1,0 +1,12 @@
+services:
+  center:
+    build:
+      context: .
+      dockerfile: center/Dockerfile
+    container_name: edc-center
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config:/app/config
+      - ./var/center:/app/var/center
