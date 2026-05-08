@@ -154,7 +154,7 @@
               }
             ],
             "settings": {
-              "fetch_public_ip.enabled": true,
+              "fetch_public_ip.enabled": false,
               "fetch_public_ip.url": "http://api-sth01.exip.org/?call=ip",
               "hpfriends.channels": "conpot.events",
               "hpfriends.enabled": false,

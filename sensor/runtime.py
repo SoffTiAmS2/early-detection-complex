@@ -37,6 +37,25 @@ MODULE_LOG_HINTS = {
     "heralding": "container stdout",
 }
 
+HERALDING_CAPABILITIES = {
+    "ftp": 21,
+    "telnet": 23,
+    "pop3": 110,
+    "pop3s": 995,
+    "postgresql": 5432,
+    "imap": 143,
+    "imaps": 993,
+    "ssh": 22,
+    "http": 80,
+    "https": 443,
+    "smtp": 25,
+    "smtps": 465,
+    "vnc": 5900,
+    "socks5": 1080,
+    "mysql": 3306,
+    "rdp": 3389,
+}
+
 
 def now_ts() -> float:
     return time.time()
@@ -74,6 +93,20 @@ def selected_services(module: dict[str, Any]) -> list[dict[str, Any]]:
     if not module_enabled(module):
         return []
     return [service for service in module.get("services", []) if service.get("enabled", True) is not False]
+
+
+def selected_service_ids(module: dict[str, Any]) -> set[str]:
+    return {str(service.get("id")) for service in selected_services(module)}
+
+
+def as_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def compose_service_name(module_id: str) -> str:
@@ -132,18 +165,22 @@ class DockerRuntime:
 
     def active_services(self) -> list[dict[str, Any]]:
         active_containers = self.container_rows()
-        active_modules = {container.get("LabelModule") for container in active_containers}
+        active_modules = {container.get("LabelModule"): container for container in active_containers}
         items: list[dict[str, Any]] = []
         for module in self.desired.get("modules", []):
             module_id = str(module.get("id"))
             state = "running" if module_id in active_modules else "planned"
             for service in selected_services(module):
+                service_id = str(service.get("id"))
                 items.append(
                     {
                         "module": module_id,
-                        "service": service.get("id"),
+                        "service": service_id,
                         "host_port": service.get("host_port"),
+                        "container_port": int(service.get("container_port") or self.container_port(module_id, service_id)),
                         "state": state,
+                        "container": active_modules.get(module_id, {}).get("Names"),
+                        "container_status": active_modules.get(module_id, {}).get("Status"),
                     }
                 )
         return items
@@ -164,6 +201,8 @@ class DockerRuntime:
                 path.chmod(0o777)
         self.write_cowrie_config()
         self.write_opencanary_config()
+        self.write_heralding_config()
+        self.write_conpot_config()
 
     def write_cowrie_config(self) -> None:
         module = self.module_by_id("cowrie")
@@ -183,11 +222,11 @@ class DockerRuntime:
             f"idle_timeout = {int(settings.get('idle_timeout', 180))}",
             "",
             "[ssh]",
-            "enabled = yes",
+            f"enabled = {'yes' if 'ssh' in selected_service_ids(module) else 'no'}",
             f"version = {settings.get('ssh_version', 'SSH-2.0-OpenSSH_8.4')}",
             "",
             "[telnet]",
-            "enabled = yes",
+            f"enabled = {'yes' if 'telnet' in selected_service_ids(module) else 'no'}",
             "",
         ]
         raw = str(settings.get("raw_cowrie_cfg") or "").strip()
@@ -234,6 +273,119 @@ class DockerRuntime:
                 self.errors.append({"module": "opencanary", "stage": "config", "error": str(exc)})
         config_dir = self.runtime_dir / "opencanary" / "config"
         (config_dir / "opencanary.conf").write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    def write_heralding_config(self) -> None:
+        module = self.module_by_id("heralding")
+        if not module:
+            return
+        settings = module.get("settings", {})
+        enabled = selected_service_ids(module)
+        lines = [
+            "public_ip_as_destination_ip: false",
+            f"bind_host: {yaml_scalar(settings.get('listen_addr', '0.0.0.0'))}",
+            "activity_logging:",
+            "  file:",
+            "    enabled: true",
+            f"    session_csv_log_file: {yaml_scalar('/logs/' + str(settings.get('session_csv_logfile', 'log_session.csv')))}",
+            f"    session_json_log_file: {yaml_scalar('/logs/' + str(settings.get('session_json_logfile', 'log_session.json')))}",
+            f"    authentication_log_file: {yaml_scalar('/logs/' + str(settings.get('auth_logfile', 'log_auth.csv')))}",
+            "  syslog:",
+            "    enabled: false",
+            "  hpfeeds:",
+            "    enabled: false",
+            "  curiosum:",
+            "    enabled: false",
+            "hash_cracker:",
+            "  enabled: true",
+            "  wordlist_file: '/usr/lib/python3.12/site-packages/heralding/wordlist.txt'",
+            "capabilities:",
+        ]
+        for capability, port in HERALDING_CAPABILITIES.items():
+            lines.extend(
+                [
+                    f"  {capability}:",
+                    f"    enabled: {'true' if capability in enabled else 'false'}",
+                    f"    port: {port}",
+                    "    timeout: 30",
+                ]
+            )
+            if capability in {"ftp", "pop3", "smtp", "http", "ssh"}:
+                lines.append("    protocol_specific_data:")
+                if capability == "ftp":
+                    lines.extend(["      max_attempts: 3", "      banner: \"Microsoft FTP Server\"", "      syst_type: \"Windows-NT\""])
+                elif capability == "pop3":
+                    lines.extend(["      max_attempts: 3", "      banner: \"+OK POP3 server ready\""])
+                elif capability == "smtp":
+                    lines.extend(["      banner: \"Microsoft ESMTP MAIL service ready\"", "      fqdn: \"\""])
+                elif capability == "http":
+                    lines.append("      banner: \"\"")
+                elif capability == "ssh":
+                    lines.append("      banner: \"SSH-2.0-OpenSSH_6.6.1p1 Ubuntu-2ubuntu2.8\"")
+        raw = str(settings.get("raw_heralding_yml") or "").strip()
+        if raw:
+            lines.extend(["", "# raw_heralding_yml", raw])
+        config_dir = self.runtime_dir / "heralding" / "config"
+        (config_dir / "heralding.yml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def write_conpot_config(self) -> None:
+        module = self.module_by_id("conpot")
+        if not module:
+            return
+        settings = module.get("settings", {})
+        fetch_public_ip = as_bool(settings.get("fetch_public_ip.enabled"), False)
+        hpfriends_enabled = as_bool(settings.get("hpfriends.enabled"), False)
+        sqlite_enabled = as_bool(settings.get("sqlite.enabled"), False)
+        channels = settings.get("hpfriends.channels", "conpot.events")
+        if isinstance(channels, str):
+            channel_items = [item.strip() for item in channels.replace("\n", ",").split(",") if item.strip()]
+        else:
+            channel_items = [str(item) for item in channels]
+        lines = [
+            "[common]",
+            f"sensorid = {self.sensor_id}",
+            "",
+            "[virtual_file_system]",
+            "data_fs_url = osfs:///data",
+            "fs_url = tar:///home/conpot/.local/lib/python3.6/site-packages/conpot-0.6.0-py3.6.egg/conpot/data.tar",
+            "",
+            "[session]",
+            "timeout = 30",
+            "",
+            "[json]",
+            "enabled = True",
+            "filename = /logs/conpot.json",
+            "",
+            "[sqlite]",
+            f"enabled = {'True' if sqlite_enabled else 'False'}",
+            "filename = /data/conpot.sqlite",
+            "",
+            "[mysql]",
+            "enabled = False",
+            "",
+            "[syslog]",
+            "enabled = False",
+            "",
+            "[hpfriends]",
+            f"enabled = {'True' if hpfriends_enabled else 'False'}",
+            f"host = {settings.get('hpfriends.host', 'hpfriends.honeycloud.net')}",
+            f"port = {int(settings.get('hpfriends.port', 20000))}",
+            f"channels = {json.dumps(channel_items)}",
+            "",
+            "[taxii]",
+            "enabled = False",
+            "",
+            "[fetch_public_ip]",
+            f"enabled = {'True' if fetch_public_ip else 'False'}",
+            f"urls = {json.dumps([settings.get('fetch_public_ip.url', 'http://whatismyip.akamai.com/')])}",
+            "",
+            "[change_mac_addr]",
+            "enabled = False",
+        ]
+        raw = str(settings.get("raw_conpot_cfg") or "").strip()
+        if raw:
+            lines.extend(["", raw])
+        config_dir = self.runtime_dir / "conpot" / "config"
+        (config_dir / "conpot.cfg").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def write_compose(self) -> None:
         lines = ["services:"]
@@ -305,6 +457,8 @@ class DockerRuntime:
         base = (self.runtime_dir / module_id).resolve()
         if module_id == "cowrie":
             return [
+                f"{base / 'config' / 'cowrie.cfg'}:/cowrie/cowrie-git/etc/cowrie.cfg:ro",
+                f"{base / 'config' / 'userdb.txt'}:/cowrie/cowrie-git/etc/userdb.txt:ro",
                 f"{base / 'data'}:/cowrie/cowrie-git/var/lib/cowrie",
                 f"{base / 'logs'}:/cowrie/cowrie-git/var/log/cowrie",
             ]
@@ -315,6 +469,10 @@ class DockerRuntime:
                 f"{base / 'data'}:/opt/dionaea/var/lib",
                 f"{base / 'logs'}:/opt/dionaea/var/log",
             ]
+        if module_id == "conpot":
+            return [f"{base / 'config' / 'conpot.cfg'}:/etc/conpot/conpot.cfg:ro", f"{base / 'data'}:/data", f"{base / 'logs'}:/logs"]
+        if module_id == "heralding":
+            return [f"{base / 'config' / 'heralding.yml'}:/etc/heralding/heralding.yml:ro", f"{base / 'data'}:/data", f"{base / 'logs'}:/logs"]
         if module_id in {"conpot", "heralding"}:
             return [f"{base / 'data'}:/data", f"{base / 'logs'}:/logs"]
         return []
@@ -335,7 +493,12 @@ class DockerRuntime:
     def compose_command(self, module: dict[str, Any]) -> str:
         module_id = str(module.get("id"))
         if module_id == "heralding":
-            return yaml_scalar("heralding")
+            return yaml_scalar("heralding -c /etc/heralding/heralding.yml -l /logs/heralding.log")
+        if module_id == "conpot":
+            template = module.get("settings", {}).get("template", "default")
+            return yaml_scalar(
+                f"/home/conpot/.local/bin/conpot --template {template} --config /etc/conpot/conpot.cfg --logfile /logs/conpot.log --temp_dir /tmp"
+            )
         return ""
 
     def compose_working_dir(self, module: dict[str, Any]) -> str:

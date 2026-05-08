@@ -108,7 +108,7 @@ def runtime_plan(
     active_services: list[dict[str, Any]],
     listener_errors: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    active = {(item["module"], item["service"], item["host_port"]) for item in active_services}
+    active = {(item["module"], item["service"], item["host_port"]): item for item in active_services}
     failed = {(item["module"], item["service"], item["host_port"]) for item in listener_errors}
     updated: list[dict[str, Any]] = []
     for module in plan:
@@ -119,6 +119,10 @@ def runtime_plan(
             service_copy = {**service}
             if key in active:
                 service_copy["state"] = "listening"
+                if active[key].get("container_port") is not None:
+                    service_copy["container_port"] = active[key]["container_port"]
+                if active[key].get("container_status"):
+                    service_copy["container_status"] = active[key]["container_status"]
             elif key in failed:
                 service_copy["state"] = "failed"
             else:
@@ -333,7 +337,13 @@ def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: floa
                 }
             )
             write_state(state_dir / "applied_state.json", state)
-            print(json.dumps(event, ensure_ascii=False, sort_keys=True), flush=True)
+            print(
+                "sensor-agent: status "
+                f"sensor={sensor_id} profile={desired.get('profile')} "
+                f"modules={','.join(event['enabled_modules'])} "
+                f"active_services={len(active_services)} delivered={delivered}",
+                flush=True,
+            )
             if duration > 0 and now_ts() - started_at >= duration:
                 return
             time.sleep(interval)

@@ -236,7 +236,7 @@
         {"key": "hpfriends.ident_env", "label": "HPFriends ident env var", "type": "string", "group": "HPFriends", "default": "CONPOT_HPFRIENDS_IDENT"},
         {"key": "hpfriends.secret_env", "label": "HPFriends secret env var", "type": "string", "group": "HPFriends", "default": "CONPOT_HPFRIENDS_SECRET"},
         {"key": "hpfriends.channels", "label": "HPFriends channels", "type": "list", "group": "HPFriends", "default": "conpot.events"},
-        {"key": "fetch_public_ip.enabled", "label": "Fetch public IP", "type": "boolean", "group": "Network", "default": true},
+        {"key": "fetch_public_ip.enabled", "label": "Fetch public IP", "type": "boolean", "group": "Network", "default": false},
         {"key": "fetch_public_ip.url", "label": "Public IP API URL", "type": "string", "group": "Network", "default": "http://api-sth01.exip.org/?call=ip"},
         {"key": "raw_conpot_cfg", "label": "Advanced conpot.cfg", "type": "textarea", "group": "Advanced", "default": ""}
       ]
