@@ -101,6 +101,18 @@ def run_checked(job: dict[str, Any], args: list[str], input_text: str | None = N
     return subprocess.CompletedProcess(args, process.returncode, output, "")
 
 
+def normalize_remote_dir(remote_dir: str, remote_home: str) -> str:
+    value = (remote_dir or "~/edc-mvp").strip() or "~/edc-mvp"
+    home = remote_home.rstrip("/") or "/root"
+    if value == "~":
+        return home
+    if value.startswith("~/"):
+        return f"{home}/{value[2:]}"
+    if value.startswith("/"):
+        return value
+    return f"{home}/{value}"
+
+
 def make_sensor_bundle() -> Path:
     temp = Path(tempfile.mkdtemp(prefix="edc-sensor-bundle-"))
     bundle = temp / "sensor.tar.gz"
@@ -219,6 +231,8 @@ def install_sensor_job(job: dict[str, Any], payload: dict[str, Any], policy_path
             "StrictHostKeyChecking=no",
             "-o",
             "UserKnownHostsFile=/dev/null",
+            "-o",
+            "LogLevel=ERROR",
             "-p",
             str(ssh_port),
             f"{ssh_user}@{host}",
@@ -232,12 +246,18 @@ def install_sensor_job(job: dict[str, Any], payload: dict[str, Any], policy_path
             "StrictHostKeyChecking=no",
             "-o",
             "UserKnownHostsFile=/dev/null",
+            "-o",
+            "LogLevel=ERROR",
             "-P",
             str(ssh_port),
         ]
 
         job_log(job, "Проверяю SSH-доступ", 18, "SSH")
         run_checked(job, [*ssh_base, "printf connected"], timeout=45)
+        home_output = run_checked(job, [*ssh_base, "printf '%s\n' \"$HOME\""], timeout=45).stdout.strip()
+        remote_home = home_output.splitlines()[-1].strip() if home_output else ""
+        remote_dir = normalize_remote_dir(remote_dir, remote_home)
+        job_log(job, f"Рабочий каталог сенсора: {remote_dir}")
 
         bundle = make_sensor_bundle()
         job_log(job, "Копирую sensor-agent на плату", 32, "Копирование файлов")
