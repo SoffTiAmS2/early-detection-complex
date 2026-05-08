@@ -11,6 +11,12 @@
 Проще всего:
 
 ```sh
+make up
+```
+
+Если `make` не установлен:
+
+```sh
 docker compose up -d --build
 ```
 
@@ -27,6 +33,8 @@ python3 -m center.main --host 0.0.0.0 --port 8080
 ```
 
 Для установки сенсоров из локального запуска на центре должны быть пакеты `openssh-client` и `sshpass`. Docker-образ центра уже содержит их.
+
+Для первого знакомства смотри [docs/beginner_guide.md](docs/beginner_guide.md).
 
 ## Что Нужно На Плате
 
@@ -49,6 +57,7 @@ scripts/    # локальные helper-скрипты
 tools/      # проверки политики и e2e reconfigure-тест
 docs/       # архитектура, карта файлов, стенд, roadmap
 compose.yml # контейнер центра
+Makefile    # короткие команды запуска и проверки
 ```
 
 Старые прототипы и сгенерированные runtime-файлы больше не хранятся в git.
@@ -70,8 +79,6 @@ Sensor-agent удаляет старые контейнеры комплекса
 ## Проверки
 
 ```sh
-python3 -m compileall center sensor tools
-python3 tools/validate_policy.py
+make check
 python3 tools/e2e_reconfigure_test.py
-docker compose config
 ```

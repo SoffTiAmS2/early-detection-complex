@@ -4,7 +4,7 @@ import html
 from pathlib import Path
 from typing import Any
 
-from .policy import modules_by_id
+from center.core.policy import modules_by_id
 
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 

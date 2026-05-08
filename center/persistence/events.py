@@ -5,8 +5,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from .paths import MAX_EVENT_LIMIT
-from .utils import now_ts
+from center.core.paths import MAX_EVENT_LIMIT
+from center.core.utils import now_ts
 
 def connect_store(store: Path) -> sqlite3.Connection:
     store.parent.mkdir(parents=True, exist_ok=True)

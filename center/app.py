@@ -5,7 +5,7 @@ from __future__ import annotations
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
-from .handler import ControlPlaneHandler
+from .api.handler import ControlPlaneHandler
 
 
 def create_server(

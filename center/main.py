@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 
 from .app import create_server
-from .paths import DEFAULT_CATALOG, DEFAULT_POLICY, DEFAULT_STORE
+from .core.paths import DEFAULT_CATALOG, DEFAULT_POLICY, DEFAULT_STORE
 
 
 def parse_args() -> argparse.Namespace:

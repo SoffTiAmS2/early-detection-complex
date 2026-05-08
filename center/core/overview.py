@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from .events import count_by, is_sensor_event
 from .paths import STALE_AFTER_SECONDS
 from .utils import now_ts
+from center.persistence.events import count_by, is_sensor_event
 
 def sensor_summary(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     sensors: dict[str, dict[str, Any]] = {}

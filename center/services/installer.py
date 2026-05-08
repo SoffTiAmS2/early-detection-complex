@@ -10,9 +10,9 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from .paths import ROOT
-from .policy import bump_policy_version, find_sensor, policy_errors
-from .utils import load_json, now_ts, write_json
+from center.core.paths import ROOT
+from center.core.policy import bump_policy_version, find_sensor, policy_errors
+from center.core.utils import load_json, now_ts, write_json
 
 INSTALL_JOBS: dict[str, dict[str, Any]] = {}
 

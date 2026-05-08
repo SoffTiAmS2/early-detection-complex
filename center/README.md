@@ -1,18 +1,18 @@
 # Центр
 
-Центр оформлен как отдельное Python-приложение. Основная точка входа: `center/main.py`.
+Центр оформлен как отдельное серверное Python-приложение. Основная точка входа: `center/main.py`.
 
 Структура:
 
 - `main.py` - CLI entrypoint.
 - `app.py` - создание HTTP-сервера.
-- `handler.py` - REST API и маршруты веб-интерфейса.
-- `views.py`, `templates/` - HTML-интерфейс.
-- `policy.py` - политика сенсоров и desired-state.
-- `events.py` - SQLite-события.
-- `overview.py` - сводка состояния для dashboard.
-- `installer.py` - SSH-установка сенсора и журнал прогресса.
-- `paths.py`, `utils.py` - общие пути и утилиты.
+- `api/handler.py` - REST API и маршруты веб-интерфейса.
+- `core/policy.py` - политика сенсоров и desired-state.
+- `core/overview.py` - сводка состояния для dashboard.
+- `core/paths.py`, `core/utils.py` - общие пути и утилиты.
+- `persistence/events.py` - SQLite-события.
+- `services/installer.py` - SSH-установка сенсора и журнал прогресса.
+- `web/views.py`, `web/templates/` - HTML-интерфейс.
 - `server.py` - совместимый wrapper для старой команды запуска.
 
 Функции:
@@ -50,4 +50,10 @@ GET  /api/events
 
 ```sh
 python3 -m center.main --host 0.0.0.0 --port 8080
+```
+
+Также доступен короткий запуск:
+
+```sh
+python3 -m center --host 0.0.0.0 --port 8080
 ```
