@@ -19,7 +19,7 @@
 
 - веб-интерфейс на русском языке;
 - установка/обновление сенсора по SSH из формы в центре;
-- хранение политики `config/site.example.json`;
+- хранение рабочей политики `config/site.local.json`;
 - выдача desired-state сенсорам;
 - приём enroll/status/raw events;
 - хранение событий в SQLite `var/center/events.sqlite3`;
@@ -51,6 +51,9 @@ GET  /api/events
 ```sh
 python3 -m center.main --host 0.0.0.0 --port 8080
 ```
+
+При первом запуске `config/site.local.json` создаётся из `config/site.example.json`.
+Административную авторизацию можно включить переменными `CENTER_AUTH_USER` и `CENTER_AUTH_PASSWORD` или `CENTER_AUTH_TOKEN`.
 
 Также доступен короткий запуск:
 

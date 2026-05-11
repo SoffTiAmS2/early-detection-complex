@@ -1,21 +1,21 @@
-# Roadmap
+# Дорожная Карта
 
-## Stage 0: Archive Prototype
+## Этап 0: Архивировать Прототип
 
-Status: in progress.
+Статус: в работе.
 
 - Старый Cowrie/Ansible/API prototype сохранен в `archive/prototype-v0/`.
-- Новый корень проекта освобожден под architecture-first реализацию.
+- Новый корень проекта освобожден под реализацию от архитектуры.
 
-## Stage 1: Module Catalog
+## Этап 1: Каталог Модулей
 
-Goal: описать реальные модули до реализации UI.
+Цель: описать реальные модули до реализации UI.
 
 - `catalog/honeypots.json`;
-- module contract;
-- resource classes;
-- service/port model;
-- supported architecture model.
+- контракт модуля;
+- классы ресурсов;
+- модель сервисов и портов;
+- модель поддержанных архитектур.
 
 Первый порядок:
 
@@ -25,44 +25,44 @@ Goal: описать реальные модули до реализации UI.
 4. Conpot.
 5. Dionaea.
 
-## Stage 2: Sensor Agent
+## Этап 2: Агент Сенсора
 
-Goal: заменить прямой Ansible runtime на managed sensor node.
+Цель: заменить прямой Ansible runtime на управляемый сенсор.
 
-Status: MVP skeleton started.
+Статус: MVP-каркас начат.
 
 Sensor-agent должен:
 
 - зарегистрироваться в центре;
 - polling-ом получать desired state;
-- ставить/обновлять modules;
+- ставить/обновлять модули;
 - запускать module runner;
 - слать `sensor.status`;
-- слать normalized events;
+- слать нормализованные события;
 - делать rollback при неудачном применении state.
 
 Сейчас `sensor/agent.py` уже делает polling desired state, dry-run apply, локальный `applied_state.json` и отправку `sensor.status`.
 
-## Stage 3: Center Control-Plane
+## Этап 3: Control Plane Центра
 
-Goal: центр должен управлять сенсорами как fleet.
+Цель: центр должен управлять сенсорами как парком узлов.
 
-Status: MVP skeleton started.
+Статус: MVP-каркас начат.
 
 Нужно:
 
-- sensor registry;
-- desired state storage;
+- реестр сенсоров;
+- хранение desired state;
 - module registry API;
-- event ingest;
-- job/update history;
+- приём событий;
+- история задач и обновлений;
 - enrollment/bootstrap endpoint.
 
 Сейчас `center/main.py` запускает центр, а `center/api/handler.py` отдает module catalog, sensor list, desired state и принимает events/enroll events.
 
-## Stage 4: First Real Modules
+## Этап 4: Первые Реальные Модули
 
-Goal: не добавлять fake пункты.
+Цель: не добавлять фиктивные пункты.
 
 Для Cowrie:
 
@@ -73,18 +73,18 @@ Goal: не добавлять fake пункты.
 Для OpenCanary:
 
 - проверить официальный способ установки;
-- сделать config template;
+- сделать шаблон конфига;
 - включить HTTP/FTP/Redis/MySQL как первые легкие сервисы;
 - написать event adapter.
 
-## Stage 5: Operator UI
+## Этап 5: Операторский UI
 
 UI возвращается только после того, как есть нормальная модель:
 
-- sensors;
+- сенсоры;
 - desired state;
-- modules;
-- services;
+- модули;
+- сервисы;
 - status;
-- events;
+- события;
 - updates/rollback.

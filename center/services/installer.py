@@ -13,6 +13,7 @@ from typing import Any
 from center.core.paths import ROOT
 from center.core.policy import bump_policy_version, find_sensor, policy_errors
 from center.core.utils import load_json, now_ts, write_json
+from center.persistence.install_jobs import mark_finished, save_install_job
 
 INSTALL_JOBS: dict[str, dict[str, Any]] = {}
 
@@ -28,7 +29,7 @@ def public_center_url(policy: dict[str, Any], headers: Any | None = None) -> str
     return f"http://{host}".rstrip("/")
 
 
-def new_job(sensor_id: str, host: str) -> dict[str, Any]:
+def new_job(sensor_id: str, host: str, store_path: Path | None = None) -> dict[str, Any]:
     job = {
         "id": uuid.uuid4().hex[:12],
         "sensor_id": sensor_id,
@@ -42,7 +43,11 @@ def new_job(sensor_id: str, host: str) -> dict[str, Any]:
         "cancel_requested": False,
         "process": None,
     }
+    if store_path:
+        job["_store_path"] = store_path
     INSTALL_JOBS[job["id"]] = job
+    if store_path:
+        save_install_job(store_path, job)
     return job
 
 
@@ -54,10 +59,13 @@ def job_log(job: dict[str, Any], message: str, progress: int | None = None, step
         job["step"] = step
     job.setdefault("logs", []).append(f"{time.strftime('%H:%M:%S')} {message}")
     job["logs"] = job["logs"][-160:]
+    store_path = job.get("_store_path")
+    if isinstance(store_path, Path):
+        save_install_job(store_path, job)
 
 
 def public_job(job: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in job.items() if key not in {"process", "ssh_password"}}
+    return {key: value for key, value in job.items() if key not in {"process", "ssh_password", "_store_path"}}
 
 
 def run_checked(job: dict[str, Any], args: list[str], input_text: str | None = None, timeout: int = 600) -> subprocess.CompletedProcess[str]:
@@ -98,17 +106,39 @@ def make_sensor_bundle() -> Path:
     temp = Path(tempfile.mkdtemp(prefix="edc-sensor-bundle-"))
     bundle = temp / "sensor.tar.gz"
     with tarfile.open(bundle, "w:gz") as archive:
-        for relative in (Path("sensor/agent.py"), Path("sensor/runtime.py"), Path("scripts/run_sensor_runtime.sh")):
+        for relative in (
+            Path("sensor/agent.py"),
+            Path("sensor/agent_state.py"),
+            Path("sensor/native_runtime.py"),
+            Path("sensor/runtime.py"),
+            Path("sensor/runtime_configs.py"),
+            Path("sensor/runtime_helpers.py"),
+            Path("sensor/runtime_status.py"),
+            Path("scripts/run_sensor_runtime.sh"),
+        ):
             archive.add(ROOT / relative, arcname=str(relative))
     return bundle
 
 
-def ensure_sensor_policy(policy_path: Path, catalog_path: Path, sensor_id: str, host: str, ssh_user: str, ssh_port: int) -> dict[str, Any]:
+def ensure_sensor_policy(
+    policy_path: Path,
+    catalog_path: Path,
+    sensor_id: str,
+    host: str,
+    ssh_user: str,
+    ssh_port: int,
+    architecture: str = "",
+    os_name: str = "",
+) -> dict[str, Any]:
     policy = load_json(policy_path)
     catalog = load_json(catalog_path)
     sensor = find_sensor(policy, sensor_id)
     if sensor:
         sensor["host"] = host
+        if architecture:
+            sensor["architecture"] = architecture
+        if os_name:
+            sensor["os"] = os_name
         sensor["enrollment"] = {"method": "ssh-bootstrap", "ssh_user": ssh_user, "ssh_port": ssh_port}
     else:
         source = find_sensor(policy, "sensor1") or (policy.get("sensors") or [None])[0]
@@ -117,7 +147,8 @@ def ensure_sensor_policy(policy_path: Path, catalog_path: Path, sensor_id: str, 
         sensor = {
             "id": sensor_id,
             "host": host,
-            "architecture": source.get("architecture", ""),
+            "architecture": architecture or source.get("architecture", ""),
+            "os": os_name,
             "enrollment": {"method": "ssh-bootstrap", "ssh_user": ssh_user, "ssh_port": ssh_port},
             "desired_state": json.loads(json.dumps(source.get("desired_state", {}))),
         }
@@ -133,10 +164,13 @@ def ensure_sensor_policy(policy_path: Path, catalog_path: Path, sensor_id: str, 
 def remote_install_script(sensor_id: str, center_url: str, ssh_password: str, remote_dir: str) -> str:
     password = shell_quote(ssh_password)
     return f"""set -eu
+export DEBIAN_FRONTEND=noninteractive
 PASS={password}
 REMOTE_DIR={shell_quote(remote_dir)}
 SENSOR_ID={shell_quote(sensor_id)}
 CENTER_URL={shell_quote(center_url)}
+ARCH="$(uname -m 2>/dev/null || echo unknown)"
+OS_NAME="$(. /etc/os-release 2>/dev/null && echo "${{PRETTY_NAME:-unknown}}" || echo unknown)"
 if [ "$(id -u)" = "0" ]; then
   SUDO=""
 else
@@ -149,16 +183,46 @@ run_sudo() {{
     printf '%s\\n' "$PASS" | $SUDO "$@"
   fi
 }}
+apt_install() {{
+  run_sudo apt-get update
+  run_sudo apt-get install -y "$@"
+}}
+ensure_python() {{
+  if ! command -v python3 >/dev/null 2>&1; then
+    apt_install python3
+  fi
+}}
+ensure_docker() {{
+  if ! command -v docker >/dev/null 2>&1; then
+    apt_install ca-certificates curl gnupg lsb-release tar python3
+    if ! run_sudo apt-get install -y docker.io docker-compose-plugin; then
+      if ! run_sudo apt-get install -y docker.io docker-compose; then
+        curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+        run_sudo sh /tmp/get-docker.sh
+      fi
+    fi
+  fi
+  if ! docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
+    run_sudo apt-get install -y docker-compose-plugin || run_sudo apt-get install -y docker-compose
+  fi
+  run_sudo modprobe overlay 2>/dev/null || true
+  run_sudo modprobe br_netfilter 2>/dev/null || true
+  run_sudo systemctl enable --now docker 2>/dev/null || run_sudo service docker start
+  if ! run_sudo docker info >/dev/null 2>&1; then
+    sleep 3
+    run_sudo docker info >/dev/null
+  fi
+}}
+echo "EDC remote OS: $OS_NAME"
+echo "EDC remote architecture: $ARCH"
+case "$ARCH" in
+  armv7l|armv6l|armhf)
+    echo "EDC notice: detected 32-bit ARM board. Banana Pi Pro / Armbian is supported for agent installation; heavy honeypot images may be skipped by Docker/runtime if the image has no ARM build."
+    ;;
+esac
 cd "$REMOTE_DIR"
-if ! command -v python3 >/dev/null 2>&1; then
-  run_sudo apt-get update
-  run_sudo apt-get install -y python3
-fi
-if ! command -v docker >/dev/null 2>&1; then
-  run_sudo apt-get update
-  run_sudo apt-get install -y docker.io docker-compose-v2
-fi
-run_sudo systemctl enable --now docker
+ensure_python
+ensure_docker
 run_sudo docker rm -f $(run_sudo docker ps -aq --filter "label=edc.sensor_id=$SENSOR_ID") 2>/dev/null || true
 SERVICE=/etc/systemd/system/edc-sensor.service
 cat > /tmp/edc-sensor.service <<EOF
@@ -170,6 +234,8 @@ Wants=network-online.target docker.service
 [Service]
 Type=simple
 WorkingDirectory=$REMOTE_DIR
+Environment=PYTHONUNBUFFERED=1
+Environment=EDC_SENSOR_ARCH=$ARCH
 ExecStart=/usr/bin/python3 $REMOTE_DIR/sensor/agent.py --center $CENTER_URL --sensor-id $SENSOR_ID --serve --interval 20
 Restart=always
 RestartSec=5
@@ -198,10 +264,6 @@ def install_sensor_job(job: dict[str, Any], payload: dict[str, Any], policy_path
             raise RuntimeError("Нужны sensor_id, IP, SSH-логин и SSH-пароль")
         if shutil.which("sshpass") is None:
             raise RuntimeError("На центре не установлен sshpass. Установите пакет sshpass или запускайте центр из Docker-образа проекта.")
-
-        policy = ensure_sensor_policy(policy_path, catalog_path, sensor_id, host, ssh_user, ssh_port)
-        center_url = str(payload.get("center_url") or public_center_url(policy, headers)).rstrip("/")
-        job_log(job, "Сенсор добавлен/обновлён в политике центра", 10, "Политика центра")
 
         ssh_base = [
             "sshpass",
@@ -236,9 +298,23 @@ def install_sensor_job(job: dict[str, Any], payload: dict[str, Any], policy_path
         job_log(job, "Проверяю SSH-доступ", 18, "SSH")
         run_checked(job, [*ssh_base, "printf connected"], timeout=45)
         home_output = run_checked(job, [*ssh_base, "printf '%s\n' \"$HOME\""], timeout=45).stdout.strip()
+        arch_output = run_checked(job, [*ssh_base, "uname -m"], timeout=45).stdout.strip()
+        os_output = run_checked(
+            job,
+            [*ssh_base, ". /etc/os-release 2>/dev/null && printf '%s\n' \"${PRETTY_NAME:-Linux}\" || printf Linux"],
+            timeout=45,
+        ).stdout.strip()
         remote_home = home_output.splitlines()[-1].strip() if home_output else ""
+        remote_arch = arch_output.splitlines()[-1].strip() if arch_output else ""
+        remote_os = os_output.splitlines()[-1].strip() if os_output else ""
         remote_dir = normalize_remote_dir(remote_dir, remote_home)
         job_log(job, f"Рабочий каталог сенсора: {remote_dir}")
+        if remote_arch or remote_os:
+            job_log(job, f"Платформа сенсора: {remote_os or 'Linux'} / {remote_arch or 'unknown'}")
+
+        policy = ensure_sensor_policy(policy_path, catalog_path, sensor_id, host, ssh_user, ssh_port, remote_arch, remote_os)
+        center_url = str(payload.get("center_url") or public_center_url(policy, headers)).rstrip("/")
+        job_log(job, "Сенсор добавлен/обновлён в политике центра", 25, "Политика центра")
 
         bundle = make_sensor_bundle()
         job_log(job, "Копирую sensor-agent на плату", 32, "Копирование файлов")
@@ -250,7 +326,9 @@ def install_sensor_job(job: dict[str, Any], payload: dict[str, Any], policy_path
         run_checked(job, [*ssh_base, "sh -s"], input_text=remote_install_script(sensor_id, center_url, ssh_password, remote_dir), timeout=1200)
 
         job["status"] = "completed"
+        mark_finished(job)
         job_log(job, "Готово: sensor-agent запущен, дальше он сам скачает и поднимет honeypot-контейнеры", 100, "Готово")
     except Exception as exc:  # noqa: BLE001 - job errors must be returned to UI.
         job["status"] = "failed" if not job.get("cancel_requested") else "cancelled"
+        mark_finished(job)
         job_log(job, str(exc), job.get("progress", 0), "Ошибка" if job["status"] == "failed" else "Отменено")

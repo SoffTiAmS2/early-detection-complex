@@ -7,7 +7,8 @@ import argparse
 from pathlib import Path
 
 from .app import create_server
-from .core.paths import DEFAULT_CATALOG, DEFAULT_POLICY, DEFAULT_STORE
+from .core.paths import DEFAULT_CATALOG, DEFAULT_POLICY, DEFAULT_STORE, EXAMPLE_POLICY
+from .core.utils import ensure_file_from_example
 
 
 def parse_args() -> argparse.Namespace:
@@ -22,6 +23,8 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    if args.policy == DEFAULT_POLICY:
+        ensure_file_from_example(DEFAULT_POLICY, EXAMPLE_POLICY)
     server = create_server(
         host=args.host,
         port=args.port,

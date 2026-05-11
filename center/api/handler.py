@@ -5,8 +5,9 @@ import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
+from center.core.auth import auth_required_response, is_admin_route, is_authorized
 from center.core.overview import overview_payload, sensors_payload
 from center.core.paths import DEFAULT_CATALOG, DEFAULT_POLICY, DEFAULT_STORE, MAX_EVENT_LIMIT
 from center.core.policy import (
@@ -17,10 +18,12 @@ from center.core.policy import (
     find_sensor,
     modules_by_id,
     policy_errors,
+    remove_sensor,
     services_by_id,
 )
 from center.core.utils import load_json, now_ts, write_json
 from center.persistence.events import filter_events, read_events, write_event
+from center.persistence.install_jobs import get_install_job, list_install_jobs, mark_finished
 from center.services.installer import INSTALL_JOBS, install_sensor_job, job_log, new_job, public_job
 from center.web.views import render_dashboard, render_honeypot_page
 
@@ -42,6 +45,19 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def require_admin_auth(self, method: str, path: str) -> bool:
+        if not is_admin_route(method, path) or is_authorized(self.headers):
+            return True
+        payload, status = auth_required_response()
+        data = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("WWW-Authenticate", 'Basic realm="EDC center"')
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+        return False
 
     def send_html(self, payload: str, status: HTTPStatus = HTTPStatus.OK) -> None:
         data = payload.encode("utf-8")
@@ -86,6 +102,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
+        if not self.require_admin_auth("GET", parsed.path):
+            return
         catalog, policy, errors = self.load_catalog_and_policy()
         if errors and parsed.path not in POLICY_SAFE_GET_PATHS:
             self.send_json({"status": "invalid_policy", "errors": errors}, HTTPStatus.CONFLICT)
@@ -158,18 +176,21 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         self.send_json(sensors_payload(policy, events))
 
     def handle_install_jobs(self) -> None:
-        self.send_json({"jobs": [public_job(job) for job in INSTALL_JOBS.values()]})
+        jobs_by_id = {job["id"]: job for job in list_install_jobs(self.store_path)}
+        jobs_by_id.update({job_id: public_job(job) for job_id, job in INSTALL_JOBS.items()})
+        jobs = sorted(jobs_by_id.values(), key=lambda item: item.get("updated_at", 0), reverse=True)
+        self.send_json({"jobs": jobs})
 
     def handle_install_job(self, path: str) -> None:
         parts = [part for part in path.split("/") if part]
         if len(parts) != 3:
             self.send_json({"error": "installation job not found"}, HTTPStatus.NOT_FOUND)
             return
-        job = INSTALL_JOBS.get(parts[2])
+        job = public_job(INSTALL_JOBS[parts[2]]) if parts[2] in INSTALL_JOBS else get_install_job(self.store_path, parts[2])
         if not job:
             self.send_json({"error": "installation job not found"}, HTTPStatus.NOT_FOUND)
             return
-        self.send_json({"job": public_job(job)})
+        self.send_json({"job": job})
 
     def handle_desired_state(self, path: str, policy: dict[str, Any], catalog: dict[str, Any]) -> None:
         sensor_id = path.split("/")[3]
@@ -193,6 +214,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def do_PUT(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
+        if not self.require_admin_auth("PUT", parsed.path):
+            return
         if parsed.path != "/api/policy":
             self.send_not_found()
             return
@@ -211,6 +234,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def do_PATCH(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
+        if not self.require_admin_auth("PATCH", parsed.path):
+            return
         parts = [part for part in parsed.path.split("/") if part]
         if len(parts) not in {5, 7} or parts[:2] != ["api", "sensors"] or parts[3] != "modules":
             self.send_not_found()
@@ -261,8 +286,35 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         policy = self.save_policy(policy)
         self.send_json({"status": "saved", "policy": policy})
 
+    def do_DELETE(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        if not self.require_admin_auth("DELETE", parsed.path):
+            return
+        parts = [part for part in parsed.path.split("/") if part]
+        if len(parts) != 3 or parts[:2] != ["api", "sensors"]:
+            self.send_not_found()
+            return
+        sensor_id = unquote(parts[2])
+        catalog = load_json(self.catalog_path)
+        policy = load_json(self.policy_path)
+        if not find_sensor(policy, sensor_id):
+            self.send_json({"error": "sensor not found"}, HTTPStatus.NOT_FOUND)
+            return
+        if len(policy.get("sensors", [])) <= 1:
+            self.send_json({"error": "cannot delete the last sensor from policy"}, HTTPStatus.BAD_REQUEST)
+            return
+        remove_sensor(policy, sensor_id)
+        errors = policy_errors(policy, catalog)
+        if errors:
+            self.send_json({"status": "invalid_policy", "errors": errors}, HTTPStatus.BAD_REQUEST)
+            return
+        policy = self.save_policy(policy)
+        self.send_json({"status": "deleted", "sensor_id": sensor_id, "policy": policy})
+
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
+        if not self.require_admin_auth("POST", parsed.path):
+            return
         if parsed.path.startswith("/api/install-sensor/") and parsed.path.endswith("/cancel"):
             self.handle_install_cancel(parsed.path)
             return
@@ -297,6 +349,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if process and process.poll() is None:
             process.terminate()
         job["status"] = "cancelled"
+        mark_finished(job)
         job_log(job, "Отмена запрошена пользователем", step="Отменено")
         self.send_json({"job": public_job(job)})
 
@@ -306,7 +359,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if not sensor_id or not host:
             self.send_json({"error": "Укажите имя сенсора и IP адрес"}, HTTPStatus.BAD_REQUEST)
             return
-        job = new_job(sensor_id, host)
+        job = new_job(sensor_id, host, self.store_path)
         thread = threading.Thread(
             target=install_sensor_job,
             args=(job, payload, self.policy_path, self.catalog_path, dict(self.headers)),

@@ -1,31 +1,28 @@
 #!/usr/bin/env python3
-"""Managed sensor-agent for the distributed early-detection complex.
+"""Управляемый sensor-agent распределённого комплекса раннего обнаружения.
 
-The agent polls desired state from the center, writes local applied state,
-reports status and runs real honeypot containers with Docker Compose.
+Агент получает desired state из центра, пишет локальный applied state,
+отправляет status и запускает реальные honeypot-контейнеры через Docker Compose.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import platform
-import socket
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
 
+from agent_state import desired_signature, enroll_event, module_plan, now_ts, runtime_plan, status_event, write_state
+from native_runtime import NativeRuntime
 from runtime import DockerRuntime
+from runtime_helpers import ARM32_ARCHES, sensor_architecture
 
 
 DEFAULT_STATE_DIR = Path("var") / "sensor"
 AGENT_VERSION = "0.4.0"
-
-
-def now_ts() -> float:
-    return time.time()
 
 
 def get_json(url: str, timeout: int = 10) -> dict[str, Any]:
@@ -49,142 +46,6 @@ def post_json(url: str, payload: dict[str, Any], timeout: int = 10) -> tuple[boo
         return False, None
 
 
-def host_facts() -> dict[str, Any]:
-    return {
-        "hostname": socket.gethostname(),
-        "architecture": platform.machine(),
-        "platform": platform.platform(),
-        "python": platform.python_version(),
-    }
-
-
-def enroll_event(sensor_id: str) -> dict[str, Any]:
-    facts = host_facts()
-    return {
-        "event_type": "sensor.enroll",
-        "timestamp": now_ts(),
-        "sensor_id": sensor_id,
-        "status": "enrolling",
-        "agent_version": AGENT_VERSION,
-        "node_hostname": facts["hostname"],
-        "architecture": facts["architecture"],
-        "facts": facts,
-    }
-
-
-def module_plan(desired: dict[str, Any]) -> list[dict[str, Any]]:
-    plan = []
-    for module in desired.get("modules", []):
-        enabled = module.get("enabled", True) is not False
-        services = []
-        for service in module.get("services", []):
-            service_enabled = enabled and service.get("enabled", True) is not False
-            services.append(
-                {
-                    "id": service.get("id"),
-                    "protocol": service.get("protocol", "tcp"),
-                    "host_port": service.get("host_port"),
-                    "container_port": service.get("container_port", service.get("host_port")),
-                    "state": "planned" if service_enabled else "disabled",
-                }
-            )
-        plan.append(
-            {
-                "id": module.get("id"),
-                "title": module.get("title"),
-                "enabled": enabled,
-                "status": "planned" if enabled else "disabled",
-                "runtime": module.get("runtime"),
-                "resource_class": module.get("resource_class"),
-                "settings": module.get("settings", {}),
-                "services": services,
-            }
-        )
-    return plan
-
-
-def runtime_plan(
-    plan: list[dict[str, Any]],
-    active_services: list[dict[str, Any]],
-    listener_errors: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    active = {(item["module"], item["service"], item["host_port"]): item for item in active_services}
-    failed = {(item["module"], item["service"], item["host_port"]) for item in listener_errors}
-    updated: list[dict[str, Any]] = []
-    for module in plan:
-        module_copy = {**module, "services": []}
-        service_states = []
-        for service in module["services"]:
-            key = (module["id"], service["id"], service["host_port"])
-            service_copy = {**service}
-            if key in active:
-                service_copy["state"] = "listening"
-                if active[key].get("container_port") is not None:
-                    service_copy["container_port"] = active[key]["container_port"]
-                if active[key].get("container_status"):
-                    service_copy["container_status"] = active[key]["container_status"]
-            elif key in failed:
-                service_copy["state"] = "failed"
-            else:
-                service_copy["state"] = "disabled" if not module["enabled"] else "pending"
-            service_states.append(service_copy["state"])
-            module_copy["services"].append(service_copy)
-        if not module["enabled"]:
-            module_copy["status"] = "disabled"
-        elif service_states and all(state == "listening" for state in service_states):
-            module_copy["status"] = "running"
-        elif any(state == "failed" for state in service_states):
-            module_copy["status"] = "degraded"
-        else:
-            module_copy["status"] = "pending"
-        updated.append(module_copy)
-    return updated
-
-
-def write_state(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-
-
-def desired_signature(desired: dict[str, Any]) -> str:
-    return json.dumps(desired, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-
-
-def status_event(
-    sensor_id: str,
-    desired: dict[str, Any],
-    plan: list[dict[str, Any]],
-    agent_mode: str,
-    active_services: list[dict[str, Any]] | None = None,
-    listener_errors: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    enabled_modules = [module for module in plan if module["enabled"]]
-    planned_ports = [
-        service["host_port"]
-        for module in enabled_modules
-        for service in module["services"]
-        if service.get("host_port") is not None
-    ]
-    return {
-        "event_type": "sensor.status",
-        "timestamp": now_ts(),
-        "sensor_id": sensor_id,
-        "status": "online",
-        "agent_mode": agent_mode,
-        "agent_version": AGENT_VERSION,
-        "applied_version": desired.get("version"),
-        "profile": desired.get("profile"),
-        "persona": desired.get("persona", {}),
-        "host": desired.get("host"),
-        "architecture": desired.get("architecture"),
-        "enabled_modules": [module["id"] for module in enabled_modules],
-        "planned_ports": planned_ports,
-        "active_services": active_services or [],
-        "listener_errors": listener_errors or [],
-        "modules": plan,
-    }
-
-
 def run_once(center_url: str, sensor_id: str, state_dir: Path, enroll: bool = True) -> dict[str, Any]:
     base_url = center_url.rstrip("/")
     enroll_url = f"{base_url}/api/enroll"
@@ -193,7 +54,7 @@ def run_once(center_url: str, sensor_id: str, state_dir: Path, enroll: bool = Tr
     enrollment_delivered = False
     enrollment_response = None
     if enroll:
-        enrollment_delivered, enrollment_response = post_json(enroll_url, enroll_event(sensor_id))
+        enrollment_delivered, enrollment_response = post_json(enroll_url, enroll_event(sensor_id, AGENT_VERSION))
 
     desired = get_json(desired_url)
     plan = module_plan(desired)
@@ -208,7 +69,7 @@ def run_once(center_url: str, sensor_id: str, state_dir: Path, enroll: bool = Tr
         "plan": plan,
     }
     write_state(state_dir / "applied_state.json", state)
-    event = status_event(sensor_id, desired, plan, agent_mode="dry-run")
+    event = status_event(sensor_id, desired, plan, agent_mode="dry-run", agent_version=AGENT_VERSION)
     delivered, status_response = post_json(event_url, event)
     state["last_status_delivered"] = delivered
     state["last_status_response"] = status_response
@@ -236,23 +97,30 @@ def start_docker_runtime(
     desired: dict[str, Any],
     send_event: Any,
     state_dir: Path,
-) -> tuple[DockerRuntime, list[dict[str, Any]], list[dict[str, Any]]]:
-    runtime = DockerRuntime(sensor_id=sensor_id, center_url=base_url, desired=desired, sender=send_event, state_dir=state_dir)
+) -> tuple[Any, list[dict[str, Any]], list[dict[str, Any]], str]:
+    architecture = str(desired.get("architecture") or sensor_architecture())
+    if architecture in ARM32_ARCHES:
+        runtime = NativeRuntime(sensor_id=sensor_id, center_url=base_url, desired=desired, sender=send_event, state_dir=state_dir)
+        mode = "native-runtime"
+    else:
+        runtime = DockerRuntime(sensor_id=sensor_id, center_url=base_url, desired=desired, sender=send_event, state_dir=state_dir)
+        mode = "docker-runtime"
     runtime.start()
     active_services = runtime.active_services()
     plan = runtime_plan(module_plan(desired), active_services, runtime.errors)
     send_event(
         {
-            "event_type": "sensor.docker_runtime.started",
+            "event_type": f"sensor.{mode}.started",
             "timestamp": now_ts(),
             "sensor_id": sensor_id,
             "agent_version": AGENT_VERSION,
             "applied_version": desired.get("version"),
+            "agent_mode": mode,
             "active_services": active_services,
             "listener_errors": runtime.errors,
         }
     )
-    return runtime, active_services, plan
+    return runtime, active_services, plan, mode
 
 
 def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: float, duration: float = 0) -> None:
@@ -260,7 +128,7 @@ def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: floa
     enroll_url = f"{base_url}/api/enroll"
     event_url = f"{base_url}/api/events"
     while True:
-        delivered, _ = post_json(enroll_url, enroll_event(sensor_id))
+        delivered, _ = post_json(enroll_url, enroll_event(sensor_id, AGENT_VERSION))
         if delivered:
             break
         print("sensor-agent: enrollment failed, retrying", flush=True)
@@ -271,7 +139,7 @@ def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: floa
 
     desired = fetch_desired_with_retry(base_url, sensor_id)
     signature = desired_signature(desired)
-    runtime, active_services, plan = start_docker_runtime(sensor_id, base_url, desired, send_event, state_dir)
+    runtime, active_services, plan, agent_mode = start_docker_runtime(sensor_id, base_url, desired, send_event, state_dir)
     started_at = now_ts()
     state = {
         "sensor_id": sensor_id,
@@ -285,6 +153,7 @@ def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: floa
         "active_services": active_services,
         "active_service_count": len(active_services),
         "listener_errors": runtime.errors,
+        "agent_mode": agent_mode,
     }
     write_state(state_dir / "applied_state.json", state)
 
@@ -307,7 +176,7 @@ def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: floa
                     runtime.stop()
                     desired = latest_desired
                     signature = latest_signature
-                    runtime, active_services, plan = start_docker_runtime(sensor_id, base_url, desired, send_event, state_dir)
+                    runtime, active_services, plan, agent_mode = start_docker_runtime(sensor_id, base_url, desired, send_event, state_dir)
             except Exception as exc:  # noqa: BLE001 - keep current runtime while center is unavailable.
                 print(f"sensor-agent: desired-state refresh failed: {exc}", flush=True)
 
@@ -317,7 +186,8 @@ def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: floa
                 sensor_id,
                 desired,
                 plan,
-                agent_mode="docker-runtime",
+                agent_mode=agent_mode,
+                agent_version=AGENT_VERSION,
                 active_services=active_services,
                 listener_errors=runtime.errors,
             )
@@ -332,6 +202,7 @@ def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: floa
                     "active_service_count": len(active_services),
                     "uptime_seconds": round(now_ts() - started_at, 1),
                     "listener_errors": runtime.errors,
+                    "agent_mode": agent_mode,
                     "last_status_delivered": delivered,
                     "last_status_response": response,
                 }

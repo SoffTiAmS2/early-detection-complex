@@ -1,9 +1,8 @@
-"""Docker based honeypot runtime for the EDC sensor-agent.
+"""Docker runtime для honeypot-модулей EDC sensor-agent.
 
-The runtime intentionally does not emulate honeypot protocols itself. It
-materializes the desired state as Docker Compose, removes old EDC containers,
-starts real open-source honeypot images and forwards their raw container logs
-to the center.
+Runtime не имитирует протоколы сам: он превращает desired state в Docker
+Compose, удаляет старые контейнеры EDC, запускает реальные open-source
+honeypot images и отправляет сырые container logs в центр.
 """
 
 from __future__ import annotations
@@ -12,105 +11,26 @@ import json
 import shutil
 import subprocess
 import threading
-import time
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-
-EventSender = Callable[[dict[str, Any]], bool]
-
-
-RUNTIME_VERSION = "docker-runtime-v1"
-PROJECT_PREFIX = "edc"
-SUPPORTED_IMAGES = {
-    "cowrie": "cowrie/cowrie:latest",
-    "opencanary": "thinkst/opencanary:latest",
-    "dionaea": "dinotools/dionaea:latest",
-    "conpot": "honeynet/conpot:latest",
-    "heralding": "dtagdevsec/heralding:24.04.1",
-}
-MODULE_LOG_HINTS = {
-    "cowrie": "/cowrie/cowrie-git/var/log/cowrie/cowrie.json",
-    "opencanary": "/var/tmp/opencanary.log",
-    "dionaea": "/opt/dionaea/var/log/dionaea",
-    "conpot": "container stdout",
-    "heralding": "container stdout",
-}
-
-HERALDING_CAPABILITIES = {
-    "ftp": 21,
-    "telnet": 23,
-    "pop3": 110,
-    "pop3s": 995,
-    "postgresql": 5432,
-    "imap": 143,
-    "imaps": 993,
-    "ssh": 22,
-    "http": 80,
-    "https": 443,
-    "smtp": 25,
-    "smtps": 465,
-    "vnc": 5900,
-    "socks5": 1080,
-    "mysql": 3306,
-    "rdp": 3389,
-}
-
-
-def now_ts() -> float:
-    return time.time()
-
-
-def safe_name(value: str) -> str:
-    return "".join(char if char.isalnum() or char in "-_" else "-" for char in value).strip("-") or "sensor"
-
-
-def yaml_scalar(value: Any) -> str:
-    if value is None:
-        return "null"
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, (int, float)):
-        return str(value)
-    text = str(value)
-    return json.dumps(text, ensure_ascii=False)
-
-
-def service_lookup(module: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    return {str(service.get("id")): service for service in module.get("services", [])}
-
-
-def selected_host_port(module: dict[str, Any], service_id: str, default: int) -> int:
-    service = service_lookup(module).get(service_id, {})
-    return int(service.get("host_port") or service.get("default_host_port") or default)
-
-
-def module_enabled(module: dict[str, Any]) -> bool:
-    return module.get("enabled", True) is not False
-
-
-def selected_services(module: dict[str, Any]) -> list[dict[str, Any]]:
-    if not module_enabled(module):
-        return []
-    return [service for service in module.get("services", []) if service.get("enabled", True) is not False]
-
-
-def selected_service_ids(module: dict[str, Any]) -> set[str]:
-    return {str(service.get("id")) for service in selected_services(module)}
-
-
-def as_bool(value: Any, default: bool = False) -> bool:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value != 0
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def compose_service_name(module_id: str) -> str:
-    return f"honeypot-{safe_name(module_id)}"
+from runtime_configs import prepare_module_dirs
+from runtime_helpers import (
+    MODULE_LOG_HINTS,
+    PROJECT_PREFIX,
+    RUNTIME_VERSION,
+    SUPPORTED_IMAGES,
+    EventSender,
+    compose_service_name,
+    module_enabled,
+    module_supported_on_arch,
+    now_ts,
+    safe_name,
+    selected_host_port,
+    selected_services,
+    yaml_scalar,
+)
+from runtime_status import container_rows, inspect_labels
 
 
 class DockerRuntimeError(RuntimeError):
@@ -164,12 +84,18 @@ class DockerRuntime:
             self.run_compose("down", "--remove-orphans", check=False)
 
     def active_services(self) -> list[dict[str, Any]]:
-        active_containers = self.container_rows()
+        active_containers = container_rows(self.sensor_id)
         active_modules = {container.get("LabelModule"): container for container in active_containers}
         items: list[dict[str, Any]] = []
         for module in self.desired.get("modules", []):
             module_id = str(module.get("id"))
-            state = "running" if module_id in active_modules else "planned"
+            container = active_modules.get(module_id, {})
+            if not container:
+                continue
+            if container.get("Running") is True:
+                state = "running"
+            else:
+                state = str(container.get("ContainerState") or "exited")
             for service in selected_services(module):
                 service_id = str(service.get("id"))
                 items.append(
@@ -179,8 +105,14 @@ class DockerRuntime:
                         "host_port": service.get("host_port"),
                         "container_port": int(service.get("container_port") or self.container_port(module_id, service_id)),
                         "state": state,
-                        "container": active_modules.get(module_id, {}).get("Names"),
-                        "container_status": active_modules.get(module_id, {}).get("Status"),
+                        "container": container.get("Names"),
+                        "container_status": container.get("Status"),
+                        "image": container.get("Image"),
+                        "container_state": container.get("ContainerState"),
+                        "running": container.get("Running"),
+                        "restart_count": container.get("RestartCount"),
+                        "last_error": container.get("LastError"),
+                        "port_bindings": container.get("PortBindings", []),
                     }
                 )
         return items
@@ -188,204 +120,21 @@ class DockerRuntime:
     def ensure_docker(self) -> None:
         if shutil.which("docker") is None:
             raise DockerRuntimeError("docker executable not found on sensor")
-        result = subprocess.run(["docker", "compose", "version"], text=True, capture_output=True, check=False)
-        if result.returncode != 0:
-            raise DockerRuntimeError("docker compose plugin is not available on sensor")
+        if self.compose_base() is None:
+            raise DockerRuntimeError("docker compose plugin or docker-compose executable is not available on sensor")
+
+    def compose_base(self) -> list[str] | None:
+        plugin = subprocess.run(["docker", "compose", "version"], text=True, capture_output=True, check=False)
+        if plugin.returncode == 0:
+            return ["docker", "compose"]
+        if shutil.which("docker-compose"):
+            legacy = subprocess.run(["docker-compose", "version"], text=True, capture_output=True, check=False)
+            if legacy.returncode == 0:
+                return ["docker-compose"]
+        return None
 
     def prepare_module_dirs(self) -> None:
-        for module_id in SUPPORTED_IMAGES:
-            base = self.runtime_dir / module_id
-            for child in ("config", "data", "logs"):
-                path = base / child
-                path.mkdir(parents=True, exist_ok=True)
-                path.chmod(0o777)
-        self.write_cowrie_config()
-        self.write_opencanary_config()
-        self.write_heralding_config()
-        self.write_conpot_config()
-
-    def write_cowrie_config(self) -> None:
-        module = self.module_by_id("cowrie")
-        if not module:
-            return
-        settings = module.get("settings", {})
-        etc_dir = self.runtime_dir / "cowrie" / "config"
-        userdb = str(settings.get("userdb_entries") or "root:x:!root\nadmin:x:admin")
-        (etc_dir / "userdb.txt").write_text(userdb.rstrip() + "\n", encoding="utf-8")
-        hostname = settings.get("hostname") or self.desired.get("persona", {}).get("hostname") or self.sensor_id
-        cowrie_cfg = [
-            "[honeypot]",
-            f"hostname = {hostname}",
-            f"logtype = {settings.get('logtype', 'rotating')}",
-            f"download_limit_size = {int(settings.get('download_limit_size', 10485760))}",
-            f"authentication_timeout = {int(settings.get('authentication_timeout', 120))}",
-            f"idle_timeout = {int(settings.get('idle_timeout', 180))}",
-            "",
-            "[ssh]",
-            f"enabled = {'yes' if 'ssh' in selected_service_ids(module) else 'no'}",
-            f"version = {settings.get('ssh_version', 'SSH-2.0-OpenSSH_8.4')}",
-            "",
-            "[telnet]",
-            f"enabled = {'yes' if 'telnet' in selected_service_ids(module) else 'no'}",
-            "",
-        ]
-        raw = str(settings.get("raw_cowrie_cfg") or "").strip()
-        if raw:
-            cowrie_cfg.extend(["", raw])
-        (etc_dir / "cowrie.cfg").write_text("\n".join(cowrie_cfg) + "\n", encoding="utf-8")
-
-    def write_opencanary_config(self) -> None:
-        module = self.module_by_id("opencanary")
-        if not module:
-            return
-        settings = module.get("settings", {})
-        enabled = {str(service.get("id")) for service in selected_services(module)}
-        config = {
-            "device.node_id": settings.get("device.node_id", f"opencanary-{self.sensor_id}"),
-            "ip.ignorelist": [item.strip() for item in str(settings.get("ip.ignorelist", "")).replace("\n", ",").split(",") if item.strip()],
-            "logger": {
-                "class": "PyLogger",
-                "kwargs": {
-                    "formatters": {"plain": {"format": "%(message)s"}},
-                    "handlers": {"console": {"class": "logging.StreamHandler", "stream": "ext://sys.stdout"}},
-                },
-            },
-        }
-        for service_id in ("ftp", "http", "redis", "mysql", "mssql", "ssh", "telnet", "smb"):
-            config[f"{service_id}.enabled"] = service_id in enabled
-        config.update(
-            {
-                "ftp.banner": settings.get("ftp.banner", "FTP server ready"),
-                "http.banner": settings.get("http.banner", "nginx/1.18.0"),
-                "http.skin": settings.get("http.skin", "nasLogin"),
-                "mysql.banner": settings.get("mysql.banner", "5.5.43-0ubuntu0.14.04.1"),
-                "ssh.version": settings.get("ssh.version", "SSH-2.0-OpenSSH_5.1p1 Debian-4"),
-                "telnet.banner": settings.get("telnet.banner", ""),
-            }
-        )
-        raw = str(settings.get("raw_opencanary_conf") or "").strip()
-        if raw:
-            try:
-                overlay = json.loads(raw)
-                if isinstance(overlay, dict):
-                    config.update(overlay)
-            except json.JSONDecodeError as exc:
-                self.errors.append({"module": "opencanary", "stage": "config", "error": str(exc)})
-        config_dir = self.runtime_dir / "opencanary" / "config"
-        (config_dir / "opencanary.conf").write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-    def write_heralding_config(self) -> None:
-        module = self.module_by_id("heralding")
-        if not module:
-            return
-        settings = module.get("settings", {})
-        enabled = selected_service_ids(module)
-        lines = [
-            "public_ip_as_destination_ip: false",
-            f"bind_host: {yaml_scalar(settings.get('listen_addr', '0.0.0.0'))}",
-            "activity_logging:",
-            "  file:",
-            "    enabled: true",
-            f"    session_csv_log_file: {yaml_scalar('/logs/' + str(settings.get('session_csv_logfile', 'log_session.csv')))}",
-            f"    session_json_log_file: {yaml_scalar('/logs/' + str(settings.get('session_json_logfile', 'log_session.json')))}",
-            f"    authentication_log_file: {yaml_scalar('/logs/' + str(settings.get('auth_logfile', 'log_auth.csv')))}",
-            "  syslog:",
-            "    enabled: false",
-            "  hpfeeds:",
-            "    enabled: false",
-            "  curiosum:",
-            "    enabled: false",
-            "hash_cracker:",
-            "  enabled: true",
-            "  wordlist_file: '/usr/lib/python3.12/site-packages/heralding/wordlist.txt'",
-            "capabilities:",
-        ]
-        for capability, port in HERALDING_CAPABILITIES.items():
-            lines.extend(
-                [
-                    f"  {capability}:",
-                    f"    enabled: {'true' if capability in enabled else 'false'}",
-                    f"    port: {port}",
-                    "    timeout: 30",
-                ]
-            )
-            if capability in {"ftp", "pop3", "smtp", "http", "ssh"}:
-                lines.append("    protocol_specific_data:")
-                if capability == "ftp":
-                    lines.extend(["      max_attempts: 3", "      banner: \"Microsoft FTP Server\"", "      syst_type: \"Windows-NT\""])
-                elif capability == "pop3":
-                    lines.extend(["      max_attempts: 3", "      banner: \"+OK POP3 server ready\""])
-                elif capability == "smtp":
-                    lines.extend(["      banner: \"Microsoft ESMTP MAIL service ready\"", "      fqdn: \"\""])
-                elif capability == "http":
-                    lines.append("      banner: \"\"")
-                elif capability == "ssh":
-                    lines.append("      banner: \"SSH-2.0-OpenSSH_6.6.1p1 Ubuntu-2ubuntu2.8\"")
-        raw = str(settings.get("raw_heralding_yml") or "").strip()
-        if raw:
-            lines.extend(["", "# raw_heralding_yml", raw])
-        config_dir = self.runtime_dir / "heralding" / "config"
-        (config_dir / "heralding.yml").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-    def write_conpot_config(self) -> None:
-        module = self.module_by_id("conpot")
-        if not module:
-            return
-        settings = module.get("settings", {})
-        fetch_public_ip = as_bool(settings.get("fetch_public_ip.enabled"), False)
-        hpfriends_enabled = as_bool(settings.get("hpfriends.enabled"), False)
-        sqlite_enabled = as_bool(settings.get("sqlite.enabled"), False)
-        channels = settings.get("hpfriends.channels", "conpot.events")
-        if isinstance(channels, str):
-            channel_items = [item.strip() for item in channels.replace("\n", ",").split(",") if item.strip()]
-        else:
-            channel_items = [str(item) for item in channels]
-        lines = [
-            "[common]",
-            f"sensorid = {self.sensor_id}",
-            "",
-            "[virtual_file_system]",
-            "data_fs_url = osfs:///data",
-            "fs_url = tar:///home/conpot/.local/lib/python3.6/site-packages/conpot-0.6.0-py3.6.egg/conpot/data.tar",
-            "",
-            "[session]",
-            "timeout = 30",
-            "",
-            "[json]",
-            "enabled = True",
-            "filename = /logs/conpot.json",
-            "",
-            "[sqlite]",
-            f"enabled = {'True' if sqlite_enabled else 'False'}",
-            "filename = /data/conpot.sqlite",
-            "",
-            "[mysql]",
-            "enabled = False",
-            "",
-            "[syslog]",
-            "enabled = False",
-            "",
-            "[hpfriends]",
-            f"enabled = {'True' if hpfriends_enabled else 'False'}",
-            f"host = {settings.get('hpfriends.host', 'hpfriends.honeycloud.net')}",
-            f"port = {int(settings.get('hpfriends.port', 20000))}",
-            f"channels = {json.dumps(channel_items)}",
-            "",
-            "[taxii]",
-            "enabled = False",
-            "",
-            "[fetch_public_ip]",
-            f"enabled = {'True' if fetch_public_ip else 'False'}",
-            f"urls = {json.dumps([settings.get('fetch_public_ip.url', 'http://whatismyip.akamai.com/')])}",
-            "",
-            "[change_mac_addr]",
-            "enabled = False",
-        ]
-        raw = str(settings.get("raw_conpot_cfg") or "").strip()
-        if raw:
-            lines.extend(["", raw])
-        config_dir = self.runtime_dir / "conpot" / "config"
-        (config_dir / "conpot.cfg").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        prepare_module_dirs(self.runtime_dir, self.desired, self.sensor_id, self.errors)
 
     def write_compose(self) -> None:
         lines = ["services:"]
@@ -396,6 +145,10 @@ class DockerRuntime:
             module_id = str(module.get("id"))
             if module_id not in SUPPORTED_IMAGES:
                 self.errors.append({"module": module_id, "stage": "compose", "error": "unsupported module"})
+                continue
+            supported, reason = module_supported_on_arch(module_id)
+            if not supported:
+                self.errors.append({"module": module_id, "stage": "architecture", "error": reason})
                 continue
             block = self.compose_block(module)
             if block:
@@ -538,8 +291,11 @@ class DockerRuntime:
         return None
 
     def run_compose(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+        compose = self.compose_base()
+        if compose is None:
+            raise DockerRuntimeError("docker compose plugin or docker-compose executable is not available on sensor")
         result = subprocess.run(
-            ["docker", "compose", "-p", self.project_name, "-f", str(self.compose_path), *args],
+            [*compose, "-p", self.project_name, "-f", str(self.compose_path), *args],
             text=True,
             capture_output=True,
             check=False,
@@ -559,50 +315,10 @@ class DockerRuntime:
         if ids:
             subprocess.run(["docker", "rm", "-f", *ids], text=True, capture_output=True, check=False)
 
-    def container_rows(self) -> list[dict[str, Any]]:
-        result = subprocess.run(
-            [
-                "docker",
-                "ps",
-                "--filter",
-                f"label=edc.sensor_id={self.sensor_id}",
-                "--format",
-                "{{json .}}",
-            ],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        rows: list[dict[str, Any]] = []
-        for line in result.stdout.splitlines():
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            labels = self.inspect_labels(row.get("ID", ""))
-            row["LabelModule"] = labels.get("edc.module")
-            rows.append(row)
-        return rows
-
-    def inspect_labels(self, container_id: str) -> dict[str, str]:
-        if not container_id:
-            return {}
-        result = subprocess.run(
-            ["docker", "inspect", container_id, "--format", "{{json .Config.Labels}}"],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        try:
-            labels = json.loads(result.stdout)
-        except json.JSONDecodeError:
-            return {}
-        return labels if isinstance(labels, dict) else {}
-
     def start_log_collectors(self) -> None:
-        for row in self.container_rows():
+        for row in container_rows(self.sensor_id):
             container_id = row.get("ID")
-            labels = self.inspect_labels(container_id)
+            labels = inspect_labels(container_id)
             module_id = labels.get("edc.module", "unknown")
             thread = threading.Thread(target=self.collect_container_logs, args=(container_id, module_id), daemon=True)
             thread.start()

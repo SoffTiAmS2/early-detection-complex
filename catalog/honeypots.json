@@ -6,7 +6,7 @@
       "title": "Cowrie",
       "source": "https://github.com/cowrie/cowrie",
       "documentation": "https://docs.cowrie.org/en/stable/",
-      "purpose": "SSH/Telnet high-interaction deception with fake filesystem, shell, downloads and session logging",
+      "purpose": "SSH/Telnet honeypot с высокой интерактивностью: fake filesystem, shell, загрузки и журналирование сессий",
       "priority": 1,
       "status": "prototype-v0-tested",
       "runtime": "container-module",
@@ -17,14 +17,25 @@
           "protocol": "tcp",
           "container_port": 2222,
           "default_host_port": 2222,
-          "events": ["connect", "login", "command", "download", "session"]
+          "events": [
+            "connect",
+            "login",
+            "command",
+            "download",
+            "session"
+          ]
         },
         {
           "id": "telnet",
           "protocol": "tcp",
           "container_port": 2223,
           "default_host_port": 2223,
-          "events": ["connect", "login", "command", "session"]
+          "events": [
+            "connect",
+            "login",
+            "command",
+            "session"
+          ]
         }
       ],
       "config_contract": [
@@ -55,44 +66,308 @@
         "raw_cowrie_cfg"
       ],
       "config_schema": [
-        {"key": "sensor_name", "label": "Sensor name", "type": "string", "group": "General", "default": "office-filesrv-01", "help": "Cowrie sensor name used in logs and output integrations."},
-        {"key": "hostname", "label": "Shell hostname", "type": "string", "group": "General", "default": "office-filesrv-01", "help": "Hostname shown in the emulated shell prompt."},
-        {"key": "backend", "label": "Backend", "type": "select", "group": "General", "default": "shell", "options": ["shell", "proxy", "llm"], "help": "Cowrie backend: emulated shell, SSH/Telnet proxy or LLM backend."},
-        {"key": "logtype", "label": "Log type", "type": "select", "group": "General", "default": "rotating", "options": ["rotating", "plain"]},
-        {"key": "timezone", "label": "Timezone", "type": "string", "group": "General", "default": "UTC"},
-        {"key": "prompt", "label": "Custom shell prompt", "type": "string", "group": "General", "default": "", "help": "Optional prompt override; empty keeps Cowrie default path-aware prompt."},
-        {"key": "auth_class", "label": "Auth class", "type": "select", "group": "Authentication", "default": "UserDB", "options": ["UserDB", "AuthRandom"], "help": "UserDB uses configured credentials; AuthRandom allows login after a random attempt window."},
-        {"key": "auth_class_parameters", "label": "AuthRandom parameters", "type": "string", "group": "Authentication", "default": "2, 5, 10", "help": "min attempts, max attempts, credential cache size."},
-        {"key": "userdb_entries", "label": "userdb.txt entries", "type": "textarea", "group": "Authentication", "default": "root:x:!root\nbackup:x:backup123\nadmin:x:admin", "help": "One Cowrie userdb entry per line."},
-        {"key": "filesystem", "label": "Fake filesystem metadata", "type": "string", "group": "Fake Filesystem", "default": "${honeypot:data_path}/fs.pickle", "help": "Cowrie fs.pickle metadata path. This is the fakefs control point."},
-        {"key": "contents_path", "label": "honeyfs contents path", "type": "string", "group": "Fake Filesystem", "default": "honeyfs", "help": "Directory with file contents shown by commands like cat."},
-        {"key": "txtcmds_path", "label": "txtcmds path", "type": "string", "group": "Fake Filesystem", "default": "txtcmds", "help": "Directory with simple command output files."},
-        {"key": "processes", "label": "ps command output", "type": "string", "group": "Fake Filesystem", "default": "${honeypot:data_path}/cmdoutput.json"},
-        {"key": "download_limit_size", "label": "Download limit bytes", "type": "integer", "group": "Downloads and Sessions", "default": 10485760, "min": 0, "help": "0 means unlimited. Cowrie stores attacker uploads/downloads under download_path."},
-        {"key": "download_path", "label": "Download artifact path", "type": "string", "group": "Downloads and Sessions", "default": "${honeypot:state_path}/downloads"},
-        {"key": "ttylog", "label": "Enable TTY logs", "type": "boolean", "group": "Downloads and Sessions", "default": true},
-        {"key": "ttylog_path", "label": "TTY log path", "type": "string", "group": "Downloads and Sessions", "default": "${honeypot:state_path}/tty"},
-        {"key": "idle_timeout", "label": "Idle timeout seconds", "type": "integer", "group": "Timeouts", "default": 180, "min": 1},
-        {"key": "authentication_timeout", "label": "Authentication timeout seconds", "type": "integer", "group": "Timeouts", "default": 120, "min": 1},
-        {"key": "out_addr", "label": "Outgoing bind address", "type": "string", "group": "Network Persona", "default": ""},
-        {"key": "fake_addr", "label": "Fake client-visible address", "type": "string", "group": "Network Persona", "default": "192.168.66.254"},
-        {"key": "internet_facing_ip", "label": "Internet-facing IPv4", "type": "string", "group": "Network Persona", "default": ""},
-        {"key": "internet_facing_ipv6", "label": "Internet-facing IPv6", "type": "string", "group": "Network Persona", "default": ""},
-        {"key": "shell_arch", "label": "Shell architecture", "type": "string", "group": "Shell Persona", "default": "linux-x64-lsb"},
-        {"key": "kernel_version", "label": "uname kernel version", "type": "string", "group": "Shell Persona", "default": "3.2.0-4-amd64"},
-        {"key": "kernel_build_string", "label": "uname kernel build", "type": "string", "group": "Shell Persona", "default": "#1 SMP Debian 3.2.68-1+deb7u1"},
-        {"key": "hardware_platform", "label": "uname hardware platform", "type": "string", "group": "Shell Persona", "default": "x86_64"},
-        {"key": "operating_system", "label": "uname operating system", "type": "string", "group": "Shell Persona", "default": "GNU/Linux"},
-        {"key": "ssh_version", "label": "SSH banner", "type": "string", "group": "SSH/Telnet", "default": "SSH-2.0-OpenSSH_8.4"},
-        {"key": "shell_ssh_version", "label": "ssh -V shell output", "type": "string", "group": "SSH/Telnet", "default": "OpenSSH_7.9p1, OpenSSL 1.1.1a 20 Nov 2018"},
-        {"key": "proxy_backend", "label": "Proxy backend", "type": "select", "group": "Proxy Backend", "default": "pool", "options": ["simple", "pool"]},
-        {"key": "backend_ssh_host", "label": "Backend SSH host", "type": "string", "group": "Proxy Backend", "default": "localhost"},
-        {"key": "backend_ssh_port", "label": "Backend SSH port", "type": "integer", "group": "Proxy Backend", "default": 2022, "min": 1, "max": 65535},
-        {"key": "backend_telnet_host", "label": "Backend Telnet host", "type": "string", "group": "Proxy Backend", "default": "localhost"},
-        {"key": "backend_telnet_port", "label": "Backend Telnet port", "type": "integer", "group": "Proxy Backend", "default": 2023, "min": 1, "max": 65535},
-        {"key": "backend_user", "label": "Backend user", "type": "string", "group": "Proxy Backend", "default": "root"},
-        {"key": "backend_pass_env", "label": "Backend password env var", "type": "string", "group": "Proxy Backend", "default": "COWRIE_BACKEND_PASS"},
-        {"key": "raw_cowrie_cfg", "label": "Advanced cowrie.cfg override", "type": "textarea", "group": "Advanced", "default": "", "help": "Optional raw INI fragment appended by the future real Cowrie runner."}
+        {
+          "key": "sensor_name",
+          "label": "Имя сенсора",
+          "type": "string",
+          "group": "Общее",
+          "default": "office-filesrv-01",
+          "help": "Имя сенсора Cowrie в логах и интеграциях."
+        },
+        {
+          "key": "hostname",
+          "label": "Hostname shell",
+          "type": "string",
+          "group": "Общее",
+          "default": "office-filesrv-01",
+          "help": "Hostname, который видит атакующий в эмулированном shell."
+        },
+        {
+          "key": "backend",
+          "label": "Backend",
+          "type": "select",
+          "group": "Общее",
+          "default": "shell",
+          "options": [
+            "shell",
+            "proxy",
+            "llm"
+          ],
+          "help": "Backend Cowrie: эмулированный shell, SSH/Telnet proxy или LLM backend."
+        },
+        {
+          "key": "logtype",
+          "label": "Тип логов",
+          "type": "select",
+          "group": "Общее",
+          "default": "rotating",
+          "options": [
+            "rotating",
+            "plain"
+          ]
+        },
+        {
+          "key": "timezone",
+          "label": "Часовой пояс",
+          "type": "string",
+          "group": "Общее",
+          "default": "UTC"
+        },
+        {
+          "key": "prompt",
+          "label": "Пользовательский shell prompt",
+          "type": "string",
+          "group": "Общее",
+          "default": "",
+          "help": "Необязательная замена prompt; пустое значение оставляет стандартный prompt Cowrie."
+        },
+        {
+          "key": "auth_class",
+          "label": "Класс аутентификации",
+          "type": "select",
+          "group": "Аутентификация",
+          "default": "UserDB",
+          "options": [
+            "UserDB",
+            "AuthRandom"
+          ],
+          "help": "UserDB использует заданные учётные данные; AuthRandom разрешает вход после случайного числа попыток."
+        },
+        {
+          "key": "auth_class_parameters",
+          "label": "Параметры AuthRandom",
+          "type": "string",
+          "group": "Аутентификация",
+          "default": "2, 5, 10",
+          "help": "Минимум попыток, максимум попыток, размер кэша учётных данных."
+        },
+        {
+          "key": "userdb_entries",
+          "label": "Записи userdb.txt",
+          "type": "textarea",
+          "group": "Аутентификация",
+          "default": "root:x:!root\nbackup:x:backup123\nadmin:x:admin",
+          "help": "Одна запись Cowrie userdb на строку."
+        },
+        {
+          "key": "filesystem",
+          "label": "Метаданные fake filesystem",
+          "type": "string",
+          "group": "Fake Filesystem",
+          "default": "${honeypot:data_path}/fs.pickle",
+          "help": "Путь к метаданным fs.pickle. Это контрольная точка fakefs."
+        },
+        {
+          "key": "contents_path",
+          "label": "Путь honeyfs contents",
+          "type": "string",
+          "group": "Fake Filesystem",
+          "default": "honeyfs",
+          "help": "Каталог с содержимым файлов, которое показывают команды вроде cat."
+        },
+        {
+          "key": "txtcmds_path",
+          "label": "Путь txtcmds",
+          "type": "string",
+          "group": "Fake Filesystem",
+          "default": "txtcmds",
+          "help": "Каталог с простыми файлами вывода команд."
+        },
+        {
+          "key": "processes",
+          "label": "Вывод команды ps",
+          "type": "string",
+          "group": "Fake Filesystem",
+          "default": "${honeypot:data_path}/cmdoutput.json"
+        },
+        {
+          "key": "download_limit_size",
+          "label": "Лимит загрузки, байт",
+          "type": "integer",
+          "group": "Загрузки и сессии",
+          "default": 10485760,
+          "min": 0,
+          "help": "0 означает без лимита. Cowrie хранит загрузки атакующего в download_path."
+        },
+        {
+          "key": "download_path",
+          "label": "Путь артефактов загрузки",
+          "type": "string",
+          "group": "Загрузки и сессии",
+          "default": "${honeypot:state_path}/downloads"
+        },
+        {
+          "key": "ttylog",
+          "label": "Включить TTY-логи",
+          "type": "boolean",
+          "group": "Загрузки и сессии",
+          "default": true
+        },
+        {
+          "key": "ttylog_path",
+          "label": "Путь TTY-логов",
+          "type": "string",
+          "group": "Загрузки и сессии",
+          "default": "${honeypot:state_path}/tty"
+        },
+        {
+          "key": "idle_timeout",
+          "label": "Idle timeout, секунд",
+          "type": "integer",
+          "group": "Таймауты",
+          "default": 180,
+          "min": 1
+        },
+        {
+          "key": "authentication_timeout",
+          "label": "Таймаут аутентификации, секунд",
+          "type": "integer",
+          "group": "Таймауты",
+          "default": 120,
+          "min": 1
+        },
+        {
+          "key": "out_addr",
+          "label": "Исходящий bind-адрес",
+          "type": "string",
+          "group": "Сетевая легенда",
+          "default": ""
+        },
+        {
+          "key": "fake_addr",
+          "label": "Фиктивный адрес для клиента",
+          "type": "string",
+          "group": "Сетевая легенда",
+          "default": "192.168.66.254"
+        },
+        {
+          "key": "internet_facing_ip",
+          "label": "Внешний IPv4",
+          "type": "string",
+          "group": "Сетевая легенда",
+          "default": ""
+        },
+        {
+          "key": "internet_facing_ipv6",
+          "label": "Внешний IPv6",
+          "type": "string",
+          "group": "Сетевая легенда",
+          "default": ""
+        },
+        {
+          "key": "shell_arch",
+          "label": "Архитектура shell",
+          "type": "string",
+          "group": "Легенда shell",
+          "default": "linux-x64-lsb"
+        },
+        {
+          "key": "kernel_version",
+          "label": "Версия ядра uname",
+          "type": "string",
+          "group": "Легенда shell",
+          "default": "3.2.0-4-amd64"
+        },
+        {
+          "key": "kernel_build_string",
+          "label": "Сборка ядра uname",
+          "type": "string",
+          "group": "Легенда shell",
+          "default": "#1 SMP Debian 3.2.68-1+deb7u1"
+        },
+        {
+          "key": "hardware_platform",
+          "label": "Платформа uname",
+          "type": "string",
+          "group": "Легенда shell",
+          "default": "x86_64"
+        },
+        {
+          "key": "operating_system",
+          "label": "ОС uname",
+          "type": "string",
+          "group": "Легенда shell",
+          "default": "GNU/Linux"
+        },
+        {
+          "key": "ssh_version",
+          "label": "SSH-баннер",
+          "type": "string",
+          "group": "SSH/Telnet",
+          "default": "SSH-2.0-OpenSSH_8.4"
+        },
+        {
+          "key": "shell_ssh_version",
+          "label": "Вывод ssh -V в shell",
+          "type": "string",
+          "group": "SSH/Telnet",
+          "default": "OpenSSH_7.9p1, OpenSSL 1.1.1a 20 Nov 2018"
+        },
+        {
+          "key": "proxy_backend",
+          "label": "Proxy backend",
+          "type": "select",
+          "group": "Proxy backend",
+          "default": "pool",
+          "options": [
+            "simple",
+            "pool"
+          ]
+        },
+        {
+          "key": "backend_ssh_host",
+          "label": "Backend SSH host",
+          "type": "string",
+          "group": "Proxy backend",
+          "default": "localhost"
+        },
+        {
+          "key": "backend_ssh_port",
+          "label": "Backend SSH port",
+          "type": "integer",
+          "group": "Proxy backend",
+          "default": 2022,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "key": "backend_telnet_host",
+          "label": "Backend Telnet host",
+          "type": "string",
+          "group": "Proxy backend",
+          "default": "localhost"
+        },
+        {
+          "key": "backend_telnet_port",
+          "label": "Backend Telnet port",
+          "type": "integer",
+          "group": "Proxy backend",
+          "default": 2023,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "key": "backend_user",
+          "label": "Backend user",
+          "type": "string",
+          "group": "Proxy backend",
+          "default": "root"
+        },
+        {
+          "key": "backend_pass_env",
+          "label": "Env-переменная пароля backend",
+          "type": "string",
+          "group": "Proxy backend",
+          "default": "COWRIE_BACKEND_PASS"
+        },
+        {
+          "key": "raw_cowrie_cfg",
+          "label": "Расширенный фрагмент cowrie.cfg",
+          "type": "textarea",
+          "group": "Расширенные настройки",
+          "default": "",
+          "help": "Необязательный raw INI-фрагмент, который добавляется к cowrie.cfg."
+        }
       ]
     },
     {
@@ -100,18 +375,42 @@
       "title": "OpenCanary",
       "source": "https://github.com/thinkst/opencanary",
       "documentation": "https://www.opencanary.org/en/latest/starting/configuration.html",
-      "purpose": "Lightweight multi-protocol early warning honeypot",
+      "purpose": "Лёгкий многопротокольный honeypot раннего предупреждения",
       "priority": 2,
       "status": "planned-first-class",
       "runtime": "container-module",
       "resource_class": "light",
       "services": [
-        {"id": "http", "protocol": "tcp", "default_host_port": 8081},
-        {"id": "ftp", "protocol": "tcp", "default_host_port": 2121},
-        {"id": "smb", "protocol": "tcp", "default_host_port": 445},
-        {"id": "redis", "protocol": "tcp", "default_host_port": 6379},
-        {"id": "mysql", "protocol": "tcp", "default_host_port": 3306},
-        {"id": "mssql", "protocol": "tcp", "default_host_port": 1433}
+        {
+          "id": "http",
+          "protocol": "tcp",
+          "default_host_port": 8081
+        },
+        {
+          "id": "ftp",
+          "protocol": "tcp",
+          "default_host_port": 2121
+        },
+        {
+          "id": "smb",
+          "protocol": "tcp",
+          "default_host_port": 445
+        },
+        {
+          "id": "redis",
+          "protocol": "tcp",
+          "default_host_port": 6379
+        },
+        {
+          "id": "mysql",
+          "protocol": "tcp",
+          "default_host_port": 3306
+        },
+        {
+          "id": "mssql",
+          "protocol": "tcp",
+          "default_host_port": 1433
+        }
       ],
       "config_contract": [
         "device.node_id",
@@ -128,32 +427,216 @@
         "raw_opencanary_conf"
       ],
       "config_schema": [
-        {"key": "device.node_id", "label": "Device node id", "type": "string", "group": "Device", "default": "opencanary-sensor1"},
-        {"key": "device.listen_addr", "label": "Listen address", "type": "string", "group": "Device", "default": "", "help": "OpenCanary bind address for selected native modules; empty means default."},
-        {"key": "ip.ignorelist", "label": "Ignore IPs/CIDRs", "type": "list", "group": "Device", "default": "192.168.0.196", "help": "Comma or newline separated ignore list."},
-        {"key": "ftp.banner", "label": "FTP banner", "type": "string", "group": "Service Banners", "default": "FTP server ready"},
-        {"key": "http.banner", "label": "HTTP server banner", "type": "string", "group": "Service Banners", "default": "nginx/1.18.0"},
-        {"key": "http.skin", "label": "HTTP skin", "type": "select", "group": "Service Banners", "default": "nasLogin", "options": ["basicLogin", "nasLogin"]},
-        {"key": "https.skin", "label": "HTTPS skin", "type": "select", "group": "Service Banners", "default": "nasLogin", "options": ["basicLogin", "nasLogin"]},
-        {"key": "https.certificate", "label": "HTTPS certificate path", "type": "string", "group": "TLS", "default": "/etc/ssl/opencanary/opencanary.pem"},
-        {"key": "https.key", "label": "HTTPS key path", "type": "string", "group": "TLS", "default": "/etc/ssl/opencanary/opencanary.key"},
-        {"key": "httpproxy.skin", "label": "HTTP proxy skin", "type": "select", "group": "Service Banners", "default": "squid", "options": ["squid", "ms-isa"]},
-        {"key": "mysql.banner", "label": "MySQL banner", "type": "string", "group": "Service Banners", "default": "5.5.43-0ubuntu0.14.04.1"},
-        {"key": "ssh.version", "label": "SSH version", "type": "string", "group": "Service Banners", "default": "SSH-2.0-OpenSSH_5.1p1 Debian-4"},
-        {"key": "telnet.banner", "label": "Telnet banner", "type": "string", "group": "Service Banners", "default": ""},
-        {"key": "telnet.honeycreds", "label": "Telnet honey credentials", "type": "textarea", "group": "Credentials", "default": "admin:TopsyKretts", "help": "One username:password per line; future runner maps to telnet.honeycreds."},
-        {"key": "smb.auditfile", "label": "Samba audit log path", "type": "string", "group": "SMB", "default": "/var/log/samba-audit.log"},
-        {"key": "portscan.enabled", "label": "Enable portscan watcher", "type": "boolean", "group": "Portscan", "default": false},
-        {"key": "portscan.logfile", "label": "Portscan logfile", "type": "string", "group": "Portscan", "default": "/var/log/kern.log"},
-        {"key": "portscan.synrate", "label": "Portscan SYN rate", "type": "integer", "group": "Portscan", "default": 5, "min": 1},
-        {"key": "portscan.nmaposrate", "label": "Nmap OS rate", "type": "integer", "group": "Portscan", "default": 5, "min": 1},
-        {"key": "portscan.lorate", "label": "Low scan rate", "type": "integer", "group": "Portscan", "default": 3, "min": 1},
-        {"key": "logger.mode", "label": "Logger mode", "type": "select", "group": "Logging", "default": "file", "options": ["console", "file", "syslog-unix", "json-tcp", "webhook"]},
-        {"key": "logger.file", "label": "Logger file", "type": "string", "group": "Logging", "default": "/var/tmp/opencanary.log"},
-        {"key": "logger.json_tcp_host", "label": "JSON TCP host", "type": "string", "group": "Logging", "default": "127.0.0.1"},
-        {"key": "logger.json_tcp_port", "label": "JSON TCP port", "type": "integer", "group": "Logging", "default": 1514, "min": 1, "max": 65535},
-        {"key": "logger.webhook_url", "label": "Webhook URL", "type": "string", "group": "Logging", "default": ""},
-        {"key": "raw_opencanary_conf", "label": "Advanced opencanary.conf JSON", "type": "textarea", "group": "Advanced", "default": "", "help": "Optional raw JSON overlay for keys not exposed above."}
+        {
+          "key": "device.node_id",
+          "label": "Идентификатор устройства",
+          "type": "string",
+          "group": "Устройство",
+          "default": "opencanary-sensor1"
+        },
+        {
+          "key": "device.listen_addr",
+          "label": "Адрес прослушивания",
+          "type": "string",
+          "group": "Устройство",
+          "default": "",
+          "help": "Bind-адрес OpenCanary для выбранных модулей; пусто означает значение по умолчанию."
+        },
+        {
+          "key": "ip.ignorelist",
+          "label": "Игнорируемые IP/CIDR",
+          "type": "list",
+          "group": "Устройство",
+          "default": "192.168.0.196",
+          "help": "Список через запятую или перенос строки."
+        },
+        {
+          "key": "ftp.banner",
+          "label": "FTP-баннер",
+          "type": "string",
+          "group": "Баннеры сервисов",
+          "default": "FTP server ready"
+        },
+        {
+          "key": "http.banner",
+          "label": "HTTP server banner",
+          "type": "string",
+          "group": "Баннеры сервисов",
+          "default": "nginx/1.18.0"
+        },
+        {
+          "key": "http.skin",
+          "label": "HTTP skin",
+          "type": "select",
+          "group": "Баннеры сервисов",
+          "default": "nasLogin",
+          "options": [
+            "basicLogin",
+            "nasLogin"
+          ]
+        },
+        {
+          "key": "https.skin",
+          "label": "HTTPS skin",
+          "type": "select",
+          "group": "Баннеры сервисов",
+          "default": "nasLogin",
+          "options": [
+            "basicLogin",
+            "nasLogin"
+          ]
+        },
+        {
+          "key": "https.certificate",
+          "label": "Путь HTTPS-сертификата",
+          "type": "string",
+          "group": "TLS",
+          "default": "/etc/ssl/opencanary/opencanary.pem"
+        },
+        {
+          "key": "https.key",
+          "label": "Путь HTTPS-ключа",
+          "type": "string",
+          "group": "TLS",
+          "default": "/etc/ssl/opencanary/opencanary.key"
+        },
+        {
+          "key": "httpproxy.skin",
+          "label": "HTTP proxy skin",
+          "type": "select",
+          "group": "Баннеры сервисов",
+          "default": "squid",
+          "options": [
+            "squid",
+            "ms-isa"
+          ]
+        },
+        {
+          "key": "mysql.banner",
+          "label": "MySQL-баннер",
+          "type": "string",
+          "group": "Баннеры сервисов",
+          "default": "5.5.43-0ubuntu0.14.04.1"
+        },
+        {
+          "key": "ssh.version",
+          "label": "Версия SSH",
+          "type": "string",
+          "group": "Баннеры сервисов",
+          "default": "SSH-2.0-OpenSSH_5.1p1 Debian-4"
+        },
+        {
+          "key": "telnet.banner",
+          "label": "Telnet-баннер",
+          "type": "string",
+          "group": "Баннеры сервисов",
+          "default": ""
+        },
+        {
+          "key": "telnet.honeycreds",
+          "label": "Telnet honey credentials",
+          "type": "textarea",
+          "group": "Учётные данные",
+          "default": "admin:TopsyKretts",
+          "help": "Одна пара username:password на строку."
+        },
+        {
+          "key": "smb.auditfile",
+          "label": "Путь Samba audit log",
+          "type": "string",
+          "group": "SMB",
+          "default": "/var/log/samba-audit.log"
+        },
+        {
+          "key": "portscan.enabled",
+          "label": "Включить отслеживание portscan",
+          "type": "boolean",
+          "group": "Portscan",
+          "default": false
+        },
+        {
+          "key": "portscan.logfile",
+          "label": "Лог-файл portscan",
+          "type": "string",
+          "group": "Portscan",
+          "default": "/var/log/kern.log"
+        },
+        {
+          "key": "portscan.synrate",
+          "label": "SYN rate portscan",
+          "type": "integer",
+          "group": "Portscan",
+          "default": 5,
+          "min": 1
+        },
+        {
+          "key": "portscan.nmaposrate",
+          "label": "Nmap OS rate",
+          "type": "integer",
+          "group": "Portscan",
+          "default": 5,
+          "min": 1
+        },
+        {
+          "key": "portscan.lorate",
+          "label": "Low scan rate",
+          "type": "integer",
+          "group": "Portscan",
+          "default": 3,
+          "min": 1
+        },
+        {
+          "key": "logger.mode",
+          "label": "Режим логирования",
+          "type": "select",
+          "group": "Логирование",
+          "default": "file",
+          "options": [
+            "console",
+            "file",
+            "syslog-unix",
+            "json-tcp",
+            "webhook"
+          ]
+        },
+        {
+          "key": "logger.file",
+          "label": "Файл логов",
+          "type": "string",
+          "group": "Логирование",
+          "default": "/var/tmp/opencanary.log"
+        },
+        {
+          "key": "logger.json_tcp_host",
+          "label": "JSON TCP host",
+          "type": "string",
+          "group": "Логирование",
+          "default": "127.0.0.1"
+        },
+        {
+          "key": "logger.json_tcp_port",
+          "label": "JSON TCP port",
+          "type": "integer",
+          "group": "Логирование",
+          "default": 1514,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "key": "logger.webhook_url",
+          "label": "Webhook URL",
+          "type": "string",
+          "group": "Логирование",
+          "default": ""
+        },
+        {
+          "key": "raw_opencanary_conf",
+          "label": "Расширенный JSON opencanary.conf",
+          "type": "textarea",
+          "group": "Расширенные настройки",
+          "default": "",
+          "help": "Необязательный JSON overlay для ключей, которых нет в форме."
+        }
       ]
     },
     {
@@ -161,16 +644,32 @@
       "title": "Heralding",
       "source": "https://github.com/johnnykv/heralding",
       "documentation": "https://github.com/johnnykv/heralding",
-      "purpose": "Credential-catching low-interaction services",
+      "purpose": "Низкоинтерактивные сервисы для сбора попыток входа и учётных данных",
       "priority": 3,
       "status": "planned",
       "runtime": "container-module",
       "resource_class": "light",
       "services": [
-        {"id": "ftp", "protocol": "tcp", "default_host_port": 2122},
-        {"id": "http", "protocol": "tcp", "default_host_port": 8082},
-        {"id": "pop3", "protocol": "tcp", "default_host_port": 110},
-        {"id": "smtp", "protocol": "tcp", "default_host_port": 25}
+        {
+          "id": "ftp",
+          "protocol": "tcp",
+          "default_host_port": 2122
+        },
+        {
+          "id": "http",
+          "protocol": "tcp",
+          "default_host_port": 8082
+        },
+        {
+          "id": "pop3",
+          "protocol": "tcp",
+          "default_host_port": 110
+        },
+        {
+          "id": "smtp",
+          "protocol": "tcp",
+          "default_host_port": 25
+        }
       ],
       "config_contract": [
         "enabled_protocols",
@@ -182,14 +681,67 @@
         "raw_heralding_yml"
       ],
       "config_schema": [
-        {"key": "enabled_protocols", "label": "Enabled protocols", "type": "list", "group": "Protocols", "default": "ftp,http,pop3,smtp"},
-        {"key": "listen_addr", "label": "Listen address", "type": "string", "group": "Protocols", "default": "0.0.0.0"},
-        {"key": "banner_profile", "label": "Banner profile", "type": "string", "group": "Persona", "default": "enterprise-mail-and-ftp"},
-        {"key": "credential_policy", "label": "Credential policy", "type": "select", "group": "Persona", "default": "capture-all", "options": ["capture-all", "always-fail", "first-step-only"]},
-        {"key": "auth_logfile", "label": "Auth CSV logfile", "type": "string", "group": "Logging", "default": "log_auth.csv"},
-        {"key": "session_csv_logfile", "label": "Session CSV logfile", "type": "string", "group": "Logging", "default": "log_session.csv"},
-        {"key": "session_json_logfile", "label": "Session JSON logfile", "type": "string", "group": "Logging", "default": "log_session.json"},
-        {"key": "raw_heralding_yml", "label": "Advanced heralding.yml", "type": "textarea", "group": "Advanced", "default": ""}
+        {
+          "key": "enabled_protocols",
+          "label": "Включённые протоколы",
+          "type": "list",
+          "group": "Протоколы",
+          "default": "ftp,http,pop3,smtp"
+        },
+        {
+          "key": "listen_addr",
+          "label": "Адрес прослушивания",
+          "type": "string",
+          "group": "Протоколы",
+          "default": "0.0.0.0"
+        },
+        {
+          "key": "banner_profile",
+          "label": "Профиль баннеров",
+          "type": "string",
+          "group": "Легенда",
+          "default": "enterprise-mail-and-ftp"
+        },
+        {
+          "key": "credential_policy",
+          "label": "Политика учётных данных",
+          "type": "select",
+          "group": "Легенда",
+          "default": "capture-all",
+          "options": [
+            "capture-all",
+            "always-fail",
+            "first-step-only"
+          ]
+        },
+        {
+          "key": "auth_logfile",
+          "label": "CSV-лог аутентификации",
+          "type": "string",
+          "group": "Логирование",
+          "default": "log_auth.csv"
+        },
+        {
+          "key": "session_csv_logfile",
+          "label": "CSV-лог сессий",
+          "type": "string",
+          "group": "Логирование",
+          "default": "log_session.csv"
+        },
+        {
+          "key": "session_json_logfile",
+          "label": "JSON-лог сессий",
+          "type": "string",
+          "group": "Логирование",
+          "default": "log_session.json"
+        },
+        {
+          "key": "raw_heralding_yml",
+          "label": "Расширенный heralding.yml",
+          "type": "textarea",
+          "group": "Расширенные настройки",
+          "default": ""
+        }
       ]
     },
     {
@@ -197,14 +749,22 @@
       "title": "Conpot",
       "source": "https://github.com/mushorg/conpot",
       "documentation": "https://conpot.readthedocs.io/en/latest/",
-      "purpose": "ICS/SCADA deception",
+      "purpose": "ICS/SCADA honeypot для имитации промышленного оборудования",
       "priority": 4,
       "status": "planned-after-arm-check",
       "runtime": "container-module",
       "resource_class": "medium",
       "services": [
-        {"id": "modbus", "protocol": "tcp", "default_host_port": 502},
-        {"id": "http", "protocol": "tcp", "default_host_port": 8800}
+        {
+          "id": "modbus",
+          "protocol": "tcp",
+          "default_host_port": 502
+        },
+        {
+          "id": "http",
+          "protocol": "tcp",
+          "default_host_port": 8800
+        }
       ],
       "config_contract": [
         "template",
@@ -220,25 +780,154 @@
         "raw_conpot_cfg"
       ],
       "config_schema": [
-        {"key": "template", "label": "Template", "type": "select", "group": "Template", "default": "default", "options": ["default", "ipmi", "kamstrup_382", "guardian_ast"]},
-        {"key": "industrial_persona", "label": "Industrial persona", "type": "string", "group": "Template", "default": "building automation controller"},
-        {"key": "protocol_profile", "label": "Protocol profile", "type": "string", "group": "Template", "default": "modbus-http"},
-        {"key": "modbus.host", "label": "Modbus host", "type": "string", "group": "Protocols", "default": "0.0.0.0"},
-        {"key": "modbus.port", "label": "Modbus container port", "type": "integer", "group": "Protocols", "default": 502, "min": 1, "max": 65535},
-        {"key": "http.host", "label": "HTTP host", "type": "string", "group": "Protocols", "default": "0.0.0.0"},
-        {"key": "http.port", "label": "HTTP container port", "type": "integer", "group": "Protocols", "default": 80, "min": 1, "max": 65535},
-        {"key": "snmp.host", "label": "SNMP host", "type": "string", "group": "Protocols", "default": "0.0.0.0"},
-        {"key": "snmp.port", "label": "SNMP port", "type": "integer", "group": "Protocols", "default": 161, "min": 1, "max": 65535},
-        {"key": "sqlite.enabled", "label": "Enable sqlite", "type": "boolean", "group": "Storage", "default": false},
-        {"key": "hpfriends.enabled", "label": "Enable HPFriends", "type": "boolean", "group": "HPFriends", "default": false, "help": "Can transmit attack data to The Honeynet Project; keep off unless explicitly intended."},
-        {"key": "hpfriends.host", "label": "HPFriends host", "type": "string", "group": "HPFriends", "default": "hpfriends.honeycloud.net"},
-        {"key": "hpfriends.port", "label": "HPFriends port", "type": "integer", "group": "HPFriends", "default": 20000, "min": 1, "max": 65535},
-        {"key": "hpfriends.ident_env", "label": "HPFriends ident env var", "type": "string", "group": "HPFriends", "default": "CONPOT_HPFRIENDS_IDENT"},
-        {"key": "hpfriends.secret_env", "label": "HPFriends secret env var", "type": "string", "group": "HPFriends", "default": "CONPOT_HPFRIENDS_SECRET"},
-        {"key": "hpfriends.channels", "label": "HPFriends channels", "type": "list", "group": "HPFriends", "default": "conpot.events"},
-        {"key": "fetch_public_ip.enabled", "label": "Fetch public IP", "type": "boolean", "group": "Network", "default": false},
-        {"key": "fetch_public_ip.url", "label": "Public IP API URL", "type": "string", "group": "Network", "default": "http://api-sth01.exip.org/?call=ip"},
-        {"key": "raw_conpot_cfg", "label": "Advanced conpot.cfg", "type": "textarea", "group": "Advanced", "default": ""}
+        {
+          "key": "template",
+          "label": "Шаблон",
+          "type": "select",
+          "group": "Шаблон",
+          "default": "default",
+          "options": [
+            "default",
+            "ipmi",
+            "kamstrup_382",
+            "guardian_ast"
+          ]
+        },
+        {
+          "key": "industrial_persona",
+          "label": "Промышленная легенда",
+          "type": "string",
+          "group": "Шаблон",
+          "default": "building automation controller"
+        },
+        {
+          "key": "protocol_profile",
+          "label": "Профиль протоколов",
+          "type": "string",
+          "group": "Шаблон",
+          "default": "modbus-http"
+        },
+        {
+          "key": "modbus.host",
+          "label": "Modbus host",
+          "type": "string",
+          "group": "Протоколы",
+          "default": "0.0.0.0"
+        },
+        {
+          "key": "modbus.port",
+          "label": "Порт Modbus в контейнере",
+          "type": "integer",
+          "group": "Протоколы",
+          "default": 502,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "key": "http.host",
+          "label": "HTTP host",
+          "type": "string",
+          "group": "Протоколы",
+          "default": "0.0.0.0"
+        },
+        {
+          "key": "http.port",
+          "label": "Порт HTTP в контейнере",
+          "type": "integer",
+          "group": "Протоколы",
+          "default": 80,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "key": "snmp.host",
+          "label": "SNMP host",
+          "type": "string",
+          "group": "Протоколы",
+          "default": "0.0.0.0"
+        },
+        {
+          "key": "snmp.port",
+          "label": "SNMP port",
+          "type": "integer",
+          "group": "Протоколы",
+          "default": 161,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "key": "sqlite.enabled",
+          "label": "Включить sqlite",
+          "type": "boolean",
+          "group": "Хранилище",
+          "default": false
+        },
+        {
+          "key": "hpfriends.enabled",
+          "label": "Включить HPFriends",
+          "type": "boolean",
+          "group": "HPFriends",
+          "default": false,
+          "help": "Может отправлять данные атак во внешний проект The Honeynet Project; включайте только осознанно."
+        },
+        {
+          "key": "hpfriends.host",
+          "label": "HPFriends host",
+          "type": "string",
+          "group": "HPFriends",
+          "default": "hpfriends.honeycloud.net"
+        },
+        {
+          "key": "hpfriends.port",
+          "label": "HPFriends port",
+          "type": "integer",
+          "group": "HPFriends",
+          "default": 20000,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "key": "hpfriends.ident_env",
+          "label": "Env-переменная HPFriends ident",
+          "type": "string",
+          "group": "HPFriends",
+          "default": "CONPOT_HPFRIENDS_IDENT"
+        },
+        {
+          "key": "hpfriends.secret_env",
+          "label": "Env-переменная HPFriends secret",
+          "type": "string",
+          "group": "HPFriends",
+          "default": "CONPOT_HPFRIENDS_SECRET"
+        },
+        {
+          "key": "hpfriends.channels",
+          "label": "Каналы HPFriends",
+          "type": "list",
+          "group": "HPFriends",
+          "default": "conpot.events"
+        },
+        {
+          "key": "fetch_public_ip.enabled",
+          "label": "Получать публичный IP",
+          "type": "boolean",
+          "group": "Сеть",
+          "default": false
+        },
+        {
+          "key": "fetch_public_ip.url",
+          "label": "URL API публичного IP",
+          "type": "string",
+          "group": "Сеть",
+          "default": "http://api-sth01.exip.org/?call=ip"
+        },
+        {
+          "key": "raw_conpot_cfg",
+          "label": "Расширенный conpot.cfg",
+          "type": "textarea",
+          "group": "Расширенные настройки",
+          "default": ""
+        }
       ]
     },
     {
@@ -246,15 +935,27 @@
       "title": "Dionaea",
       "source": "https://github.com/DinoTools/dionaea",
       "documentation": "https://dionaea.readthedocs.io/en/latest/",
-      "purpose": "Malware/service honeypot",
+      "purpose": "Honeypot для сервисов и вредоносных загрузок",
       "priority": 5,
       "status": "planned-heavy",
       "runtime": "container-module",
       "resource_class": "heavy",
       "services": [
-        {"id": "smb", "protocol": "tcp", "default_host_port": 445},
-        {"id": "http", "protocol": "tcp", "default_host_port": 8083},
-        {"id": "ftp", "protocol": "tcp", "default_host_port": 2123}
+        {
+          "id": "smb",
+          "protocol": "tcp",
+          "default_host_port": 445
+        },
+        {
+          "id": "http",
+          "protocol": "tcp",
+          "default_host_port": 8083
+        },
+        {
+          "id": "ftp",
+          "protocol": "tcp",
+          "default_host_port": 2123
+        }
       ],
       "config_contract": [
         "services_enabled",
@@ -267,23 +968,137 @@
         "raw_dionaea_conf"
       ],
       "config_schema": [
-        {"key": "services_enabled", "label": "Services enabled", "type": "list", "group": "Services", "default": "smb,http,ftp"},
-        {"key": "service_config_dir", "label": "Service config dir", "type": "string", "group": "Services", "default": "/etc/dionaea/services-enabled"},
-        {"key": "listen.mode", "label": "Listen mode", "type": "select", "group": "Services", "default": "getifaddrs", "options": ["getifaddrs", "manual"]},
-        {"key": "downloads_dir", "label": "Malware downloads dir", "type": "string", "group": "Artifacts", "default": "/var/lib/dionaea/binaries"},
-        {"key": "artifact_storage", "label": "Artifact storage", "type": "select", "group": "Artifacts", "default": "center", "options": ["local", "center", "s3", "disabled"]},
-        {"key": "log_json.enabled", "label": "Enable JSON log", "type": "boolean", "group": "Logging", "default": true},
-        {"key": "log_json.path", "label": "JSON log path", "type": "string", "group": "Logging", "default": "/var/log/dionaea/dionaea.json"},
-        {"key": "sqlite.enabled", "label": "Enable sqlite", "type": "boolean", "group": "Logging", "default": true},
-        {"key": "sqlite.path", "label": "Sqlite DB path", "type": "string", "group": "Logging", "default": "/var/lib/dionaea/dionaea.sqlite"},
-        {"key": "submit_http.enabled", "label": "Enable submit_http", "type": "boolean", "group": "Submit", "default": false},
-        {"key": "submit_http.url", "label": "submit_http URL", "type": "string", "group": "Submit", "default": ""},
-        {"key": "hpfeeds.enabled", "label": "Enable hpfeeds", "type": "boolean", "group": "Submit", "default": false},
-        {"key": "hpfeeds.host", "label": "hpfeeds host", "type": "string", "group": "Submit", "default": ""},
-        {"key": "hpfeeds.port", "label": "hpfeeds port", "type": "integer", "group": "Submit", "default": 10000, "min": 1, "max": 65535},
-        {"key": "p0f.enabled", "label": "Enable p0f processor", "type": "boolean", "group": "Processors", "default": false},
-        {"key": "emu.enabled", "label": "Enable emu processor", "type": "boolean", "group": "Processors", "default": true},
-        {"key": "raw_dionaea_conf", "label": "Advanced dionaea config overlay", "type": "textarea", "group": "Advanced", "default": ""}
+        {
+          "key": "services_enabled",
+          "label": "Включённые сервисы",
+          "type": "list",
+          "group": "Сервисы",
+          "default": "smb,http,ftp"
+        },
+        {
+          "key": "service_config_dir",
+          "label": "Каталог конфигов сервисов",
+          "type": "string",
+          "group": "Сервисы",
+          "default": "/etc/dionaea/services-enabled"
+        },
+        {
+          "key": "listen.mode",
+          "label": "Режим прослушивания",
+          "type": "select",
+          "group": "Сервисы",
+          "default": "getifaddrs",
+          "options": [
+            "getifaddrs",
+            "manual"
+          ]
+        },
+        {
+          "key": "downloads_dir",
+          "label": "Каталог malware-загрузок",
+          "type": "string",
+          "group": "Артефакты",
+          "default": "/var/lib/dionaea/binaries"
+        },
+        {
+          "key": "artifact_storage",
+          "label": "Хранилище артефактов",
+          "type": "select",
+          "group": "Артефакты",
+          "default": "center",
+          "options": [
+            "local",
+            "center",
+            "s3",
+            "disabled"
+          ]
+        },
+        {
+          "key": "log_json.enabled",
+          "label": "Включить JSON-лог",
+          "type": "boolean",
+          "group": "Логирование",
+          "default": true
+        },
+        {
+          "key": "log_json.path",
+          "label": "Путь JSON-лога",
+          "type": "string",
+          "group": "Логирование",
+          "default": "/var/log/dionaea/dionaea.json"
+        },
+        {
+          "key": "sqlite.enabled",
+          "label": "Включить sqlite",
+          "type": "boolean",
+          "group": "Логирование",
+          "default": true
+        },
+        {
+          "key": "sqlite.path",
+          "label": "Путь sqlite DB",
+          "type": "string",
+          "group": "Логирование",
+          "default": "/var/lib/dionaea/dionaea.sqlite"
+        },
+        {
+          "key": "submit_http.enabled",
+          "label": "Включить submit_http",
+          "type": "boolean",
+          "group": "Отправка",
+          "default": false
+        },
+        {
+          "key": "submit_http.url",
+          "label": "submit_http URL",
+          "type": "string",
+          "group": "Отправка",
+          "default": ""
+        },
+        {
+          "key": "hpfeeds.enabled",
+          "label": "Включить hpfeeds",
+          "type": "boolean",
+          "group": "Отправка",
+          "default": false
+        },
+        {
+          "key": "hpfeeds.host",
+          "label": "hpfeeds host",
+          "type": "string",
+          "group": "Отправка",
+          "default": ""
+        },
+        {
+          "key": "hpfeeds.port",
+          "label": "hpfeeds port",
+          "type": "integer",
+          "group": "Отправка",
+          "default": 10000,
+          "min": 1,
+          "max": 65535
+        },
+        {
+          "key": "p0f.enabled",
+          "label": "Включить p0f processor",
+          "type": "boolean",
+          "group": "Обработчики",
+          "default": false
+        },
+        {
+          "key": "emu.enabled",
+          "label": "Включить emu processor",
+          "type": "boolean",
+          "group": "Обработчики",
+          "default": true
+        },
+        {
+          "key": "raw_dionaea_conf",
+          "label": "Расширенный overlay конфига Dionaea",
+          "type": "textarea",
+          "group": "Расширенные настройки",
+          "default": ""
+        }
       ]
     }
   ]

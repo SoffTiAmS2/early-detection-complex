@@ -1,36 +1,36 @@
-# Sensor Appliance
+# Сенсор
 
-Сенсор в новой архитектуре - это managed appliance, установленный на плату.
+Сенсор в новой архитектуре - это управляемый узел, установленный на плату или небольшой сервер.
 
-## Responsibilities
+## Задачи
 
-- enrollment в центре;
-- polling desired state;
+- регистрация в центре;
+- периодическое получение desired state;
 - установка/обновление honeypot-модулей;
 - запуск реальных Docker honeypot-модулей;
 - очистка старых контейнеров комплекса перед применением новой политики;
-- сбор raw container logs и доставка их в центр;
-- local health;
-- normalized event pipeline;
+- сбор сырых container logs и доставка их в центр;
+- локальный health/status;
+- нормализованный поток событий;
 - rollback при неудачном обновлении.
 
-## Runtime Shape
+## Состав Runtime / Среды Запуска
 
 ```text
 edc-sensor-agent
-├─ control loop
+├─ цикл управления
 ├─ Docker Compose runtime
-├─ raw log collectors
-├─ local state
+├─ сборщики сырых логов
+├─ локальное состояние
 └─ updater
 ```
 
-## Bootstrap
+## Первичная Установка
 
-SSH используется только чтобы поставить agent первый раз:
+SSH используется, чтобы поставить agent первый раз:
 
 ```text
-center -> ssh -> install sensor-agent -> sensor-agent talks to center
+центр -> ssh -> установка sensor-agent -> sensor-agent сам общается с центром
 ```
 
-После bootstrap центр не должен вручную конфигурировать каждую мелочь на плате.
+После первичной установки центр не должен вручную конфигурировать каждую мелочь на плате.

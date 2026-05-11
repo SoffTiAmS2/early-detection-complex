@@ -1,4 +1,4 @@
-# Early Detection Complex
+# Early Detection Complex / Комплекс Раннего Обнаружения
 
 Распределённый комплекс раннего обнаружения подозрительной сетевой активности на основе honeypot.
 
@@ -36,6 +36,8 @@ python3 -m center.main --host 0.0.0.0 --port 8080
 
 Для первого знакомства смотри [docs/beginner_guide.md](docs/beginner_guide.md).
 
+Рабочая политика центра хранится в `config/site.local.json`. Если файла нет, центр при первом запуске скопирует его из `config/site.example.json`.
+
 ## Что Нужно На Плате
 
 Минимум:
@@ -44,7 +46,9 @@ python3 -m center.main --host 0.0.0.0 --port 8080
 ОС Linux + сеть + SSH + пользователь с sudo или root
 ```
 
-Docker вручную ставить не нужно. Центр установит его сам.
+Поддерживается установка на Banana Pi Pro с Armbian. Docker вручную ставить не нужно: центр установит Python, Docker, Compose и `edc-sensor.service` сам.
+
+На 32-bit ARM часть тяжёлых honeypot images может не иметь подходящего Docker-образа. В этом случае sensor-agent пропустит неподдержанный модуль и отправит предупреждение в status.
 
 ## Структура
 
@@ -58,11 +62,12 @@ tools/      # проверки политики и e2e reconfigure-тест
 docs/       # архитектура, карта файлов, стенд, roadmap
 compose.yml # контейнер центра
 Makefile    # короткие команды запуска и проверки
+pyproject.toml, requirements.txt # упаковка Python-проекта, зависимостей нет
 ```
 
 Старые прототипы и сгенерированные runtime-файлы больше не хранятся в git.
 
-## Honeypot Runtime
+## Honeypot Runtime / Запуск Honeypot
 
 Сенсор не имитирует протоколы сам. Он запускает реальные upstream Docker images:
 

@@ -8,4 +8,6 @@ sensors/
 sensors/*/logs/
 config/network.yml
 config/sensors.yml
+config/site.local.json
 docs-*-org-*-latest.md
+ВКРТекст.md

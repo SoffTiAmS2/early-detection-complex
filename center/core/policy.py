@@ -162,6 +162,17 @@ def find_sensor(policy: dict[str, Any], sensor_id: str) -> dict[str, Any] | None
     return None
 
 
+def remove_sensor(policy: dict[str, Any], sensor_id: str) -> bool:
+    sensors = policy.get("sensors", [])
+    if not isinstance(sensors, list):
+        return False
+    kept = [sensor for sensor in sensors if not isinstance(sensor, dict) or sensor.get("id") != sensor_id]
+    removed = len(kept) != len(sensors)
+    if removed:
+        policy["sensors"] = kept
+    return removed
+
+
 def ensure_desired_module(sensor: dict[str, Any], catalog_module: dict[str, Any]) -> dict[str, Any]:
     desired = sensor.setdefault("desired_state", {})
     modules = desired.setdefault("modules", [])

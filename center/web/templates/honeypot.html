@@ -144,7 +144,7 @@
       }).join('')}</tbody></table>`;
       const fieldsByGroup = {};
       for (const field of catalogModule.config_schema || []) {
-        const group = field.group || 'General';
+        const group = field.group || 'Общее';
         fieldsByGroup[group] ||= [];
         fieldsByGroup[group].push(field);
       }

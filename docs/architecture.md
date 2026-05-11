@@ -1,4 +1,4 @@
-# Architecture
+# Архитектура
 
 ## Цель
 
@@ -43,7 +43,7 @@ honeypot modules
 
 SSH остается только bootstrap-механизмом: поставить sensor-agent первый раз или восстановить сломанную плату.
 
-## Event Flow
+## Поток Событий
 
 ```text
 attacker -> honeypot module -> local event adapter -> sensor event pipeline -> center ingest
@@ -67,7 +67,7 @@ attacker -> honeypot module -> local event adapter -> sensor event pipeline -> c
 
 Центр хранит события в SQLite. Нормализованные поля (`sensor_id`, `module`, `service`, `event_type`, `src_ip`, `dst_port`, `severity`) используются для фильтрации и dashboard, а полный исходный JSON события сохраняется в `raw_event`. В сами логи не добавляются `mitre_techniques`: сопоставление с MITRE и корреляция должны быть отдельным аналитическим слоем поверх сохраненных оригинальных событий.
 
-## Desired State
+## Desired State / Целевое Состояние
 
 Desired state - это не generated compose, а декларация:
 
@@ -85,36 +85,36 @@ Desired state - это не generated compose, а декларация:
 }
 ```
 
-Sensor-agent превращает эту декларацию в локальные контейнеры, конфиги, ports и health checks.
+Sensor-agent превращает эту декларацию в локальные контейнеры, конфиги, порты и проверки состояния.
 
-## Module Contract
+## Контракт Модуля
 
 Каждый honeypot-модуль обязан иметь:
 
-- module id;
+- id модуля;
 - список сервисов и портов;
-- config schema;
-- container/build recipe;
-- event adapter;
-- health check;
-- smoke test;
-- resource class;
-- supported architectures.
+- schema настроек;
+- рецепт контейнера/сборки;
+- адаптер событий;
+- проверка состояния;
+- smoke-тест;
+- класс ресурсов;
+- поддержанные архитектуры.
 
 Без этого модуль не попадает в рабочий каталог, даже если он красивый в UI.
 
-## Current MVP
+## Текущий MVP
 
 Текущий минимальный MVP уже реализует control loop:
 
-- `center/main.py` - точка входа control-plane на Python stdlib;
+- `center/main.py` - точка входа control-plane на стандартной библиотеке Python;
 - `center/api/handler.py`, `center/core/policy.py`, `center/persistence/events.py`, `center/services/installer.py` - разделенные компоненты центра;
-- `sensor/agent.py` - polling sensor-agent;
+- `sensor/agent.py` - sensor-agent с polling;
 - `scripts/run_mvp.sh` - локальная демонстрация одного цикла;
-- `tools/validate_policy.py` - проверка site-policy против module catalog.
+- `tools/validate_policy.py` - проверка site-policy против каталога модулей.
 
-В текущем MVP центр также отдает `/api/overview`, проверяет политику перед выдачей desired state и принимает `sensor.enroll`. Sensor-agent отправляет enrollment, пишет локальное applied state и отправляет расширенный `sensor.status` с версией агента, профилем, active-модулями и портами.
+В текущем MVP центр также отдает `/api/overview`, проверяет политику перед выдачей desired state и принимает `sensor.enroll`. Sensor-agent отправляет регистрацию, пишет локальное applied state и отправляет расширенный `sensor.status` с версией агента, профилем, активными модулями и портами.
 
-В режиме `--serve` sensor-agent запускает Docker runtime: генерирует compose-файл, удаляет старые контейнеры с label `edc.sensor_id`, стартует реальные upstream/community images Cowrie, OpenCanary, Dionaea, Conpot и Heralding, затем отправляет status и raw container logs в центр.
+В режиме `--serve` sensor-agent запускает Docker runtime: генерирует compose-файл, удаляет старые контейнеры с label `edc.sensor_id`, стартует реальные upstream/community images Cowrie, OpenCanary, Dionaea, Conpot и Heralding, затем отправляет status и сырые container logs в центр.
 
 Центр не должен подменять исходные события своей аналитикой. Raw telemetry сохраняется как `raw_event`; нормализация нужна только для фильтрации, поиска и dashboard. Корреляция, risk-score и MITRE-техники должны вычисляться отдельным аналитическим слоем поверх сохраненных исходных логов.

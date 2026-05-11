@@ -1,43 +1,12 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from pathlib import Path
 from typing import Any
 
 from center.core.paths import MAX_EVENT_LIMIT
 from center.core.utils import now_ts
-
-def connect_store(store: Path) -> sqlite3.Connection:
-    store.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(store)
-    connection.row_factory = sqlite3.Row
-    connection.execute(
-        """
-        CREATE TABLE IF NOT EXISTS events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            received_at REAL NOT NULL,
-            timestamp REAL,
-            event_type TEXT NOT NULL,
-            sensor_id TEXT,
-            module TEXT,
-            service TEXT,
-            severity TEXT,
-            src_ip TEXT,
-            src_port INTEGER,
-            dst_port INTEGER,
-            raw_sample TEXT,
-            raw_event TEXT NOT NULL
-        )
-        """
-    )
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_events_received_at ON events(received_at)")
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_events_sensor_id ON events(sensor_id)")
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_events_module ON events(module)")
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_events_service ON events(service)")
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_events_severity ON events(severity)")
-    connection.execute("CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type)")
-    return connection
+from center.persistence.store import connect_store
 
 
 def write_event(store: Path, event: dict[str, Any]) -> None:
