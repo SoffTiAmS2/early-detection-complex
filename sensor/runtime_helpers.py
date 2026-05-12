@@ -51,7 +51,7 @@ HERALDING_CAPABILITIES = {
     "rdp": 3389,
 }
 ARM32_ARCHES = {"armv7l", "armv6l", "armhf", "armv7"}
-ARM32_UNSUPPORTED_MODULES: set[str] = set()
+ARM32_UNSUPPORTED_MODULES: set[str] = {"opencanary", "dionaea", "conpot", "heralding"}
 
 
 def now_ts() -> float:
@@ -118,7 +118,8 @@ def module_supported_on_arch(module_id: str, architecture: str | None = None) ->
     if arch in ARM32_ARCHES and module_id in ARM32_UNSUPPORTED_MODULES and os.environ.get("EDC_ENABLE_UNTESTED_ARM_IMAGES") != "1":
         return (
             False,
-            f"{module_id} отключён на 32-bit ARM ({arch}): текущий Docker image не публикует linux/arm/v7 manifest. "
-            "Задайте EDC_ENABLE_UNTESTED_ARM_IMAGES=1 только если вручную указали совместимый образ.",
+            f"{module_id} отключён на 32-bit ARM ({arch}): upstream image не даёт стабильный linux/arm/v7 runtime "
+            "или стартует с exec format error. Задайте EDC_ENABLE_UNTESTED_ARM_IMAGES=1 только если вручную указали "
+            "проверенный ARMv7-совместимый образ.",
         )
     return True, ""

@@ -68,11 +68,12 @@ class DockerRuntime:
         self.write_compose()
         self.remove_old_containers()
         started = 0
-        for service_name in self.compose_service_names():
+        for service_name, module_id in self.compose_service_modules().items():
             result = self.run_compose("up", "-d", "--build", "--no-deps", service_name, check=False)
             if result.returncode != 0:
                 self.errors.append(
                     {
+                        "module": module_id,
                         "service": service_name,
                         "stage": "compose-up",
                         "error": result.stderr.strip() or result.stdout.strip(),
@@ -108,10 +109,8 @@ class DockerRuntime:
             container = active_modules.get(module_id, {})
             if not container:
                 continue
-            if container.get("Running") is True:
-                state = "running"
-            else:
-                state = str(container.get("ContainerState") or "exited")
+            container_state = str(container.get("ContainerState") or "unknown")
+            state = "running" if container_state == "running" else container_state
             for service in selected_services(module):
                 service_id = str(service.get("id"))
                 items.append(
@@ -125,7 +124,7 @@ class DockerRuntime:
                         "container_status": container.get("Status"),
                         "image": container.get("Image"),
                         "container_state": container.get("ContainerState"),
-                        "running": container.get("Running"),
+                        "running": container_state == "running",
                         "restart_count": container.get("RestartCount"),
                         "last_error": container.get("LastError"),
                         "port_bindings": container.get("PortBindings", []),
@@ -184,8 +183,11 @@ class DockerRuntime:
         return modules
 
     def compose_service_names(self) -> list[str]:
-        names = [compose_service_name(str(module.get("id"))) for module in self.compose_modules()]
-        return names or ["idle"]
+        return list(self.compose_service_modules())
+
+    def compose_service_modules(self) -> dict[str, str]:
+        names = {compose_service_name(str(module.get("id"))): str(module.get("id")) for module in self.compose_modules()}
+        return names or {"idle": "idle"}
 
     def compose_block(self, module: dict[str, Any]) -> list[str]:
         module_id = str(module.get("id"))
@@ -239,7 +241,16 @@ class DockerRuntime:
             image_dir = self.runtime_dir / module_id / "image"
             if not (image_dir / "Dockerfile").exists():
                 return {}
-            arg_name = "COWRIE_BASE_IMAGE" if module_id == "cowrie" else "HONEYPOT_BASE_IMAGE"
+            if module_id == "cowrie":
+                return {
+                    "context": str(image_dir.resolve()),
+                    "dockerfile": "Dockerfile",
+                    "args": {
+                        "COWRIE_BASE_IMAGE": settings.get("base_image", UPSTREAM_IMAGES.get(module_id, SUPPORTED_IMAGES[module_id])),
+                        "COWRIE_REF": settings.get("cowrie_ref", "v2.9.18"),
+                    },
+                }
+            arg_name = "HONEYPOT_BASE_IMAGE"
             return {
                 "context": str(image_dir.resolve()),
                 "dockerfile": "Dockerfile",

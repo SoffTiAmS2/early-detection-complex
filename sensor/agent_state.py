@@ -68,6 +68,11 @@ def runtime_plan(
         for item in listener_errors
         if item.get("module") and item.get("stage") == "architecture"
     }
+    module_failures = {
+        item.get("module"): item
+        for item in listener_errors
+        if item.get("module") and item.get("stage") in {"compose-up", "image"}
+    }
     updated: list[dict[str, Any]] = []
     for module in plan:
         module_copy = {**module, "services": []}
@@ -85,6 +90,9 @@ def runtime_plan(
             elif module["id"] in module_skips:
                 service_copy["state"] = "skipped"
                 service_copy["last_error"] = module_skips[module["id"]].get("error")
+            elif module["id"] in module_failures:
+                service_copy["state"] = "failed"
+                service_copy["last_error"] = module_failures[module["id"]].get("error")
             else:
                 service_copy["state"] = "disabled" if not module["enabled"] else "pending"
             service_states.append(service_copy["state"])
