@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from center.core.auth import auth_required_response, is_admin_route, is_authorized
+from center.core.metrics import prometheus_metrics
 from center.core.overview import overview_payload, sensors_payload
 from center.core.paths import DEFAULT_CATALOG, DEFAULT_POLICY, DEFAULT_STORE, MAX_EVENT_LIMIT
 from center.core.policy import (
@@ -22,14 +22,11 @@ from center.core.policy import (
 )
 from center.core.sensor_sync import sensor_sync
 from center.core.utils import load_json, now_ts, write_json
-from center.persistence.events import filter_events, read_events, write_event
-from center.persistence.install_jobs import get_install_job, list_install_jobs, mark_finished
-from center.services.installer import INSTALL_JOBS, install_sensor_job, job_log, new_job, public_job
-from center.web.views import render_dashboard, render_honeypot_page
+from center.persistence.events import filter_events, purge_sensor_events, read_events, write_event
 
 
-POLICY_SAFE_GET_PATHS = {"", "/", "/health", "/api/modules"}
-JSON_POST_PATHS = {"/api/events", "/api/sensors", "/api/install-sensor"}
+POLICY_SAFE_GET_PATHS = {"", "/", "/health", "/metrics", "/api/modules"}
+JSON_POST_PATHS = {"/api/events", "/api/sensors"}
 
 
 class ControlPlaneHandler(BaseHTTPRequestHandler):
@@ -46,6 +43,14 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def send_text(self, payload: str, content_type: str, status: HTTPStatus = HTTPStatus.OK) -> None:
+        data = payload.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def require_admin_auth(self, method: str, path: str) -> bool:
         if not is_admin_route(method, path) or is_authorized(self.headers):
             return True
@@ -58,14 +63,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
         return False
-
-    def send_html(self, payload: str, status: HTTPStatus = HTTPStatus.OK) -> None:
-        data = payload.encode("utf-8")
-        self.send_response(status)
-        self.send_header("Content-Type", "text/html; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
 
     def read_body(self) -> tuple[Any | None, str | None]:
         try:
@@ -110,13 +107,13 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path in ("", "/"):
-            self.handle_dashboard(policy)
-            return
-        if parsed.path.startswith("/honeypots/"):
-            self.handle_honeypot_page(parsed, policy, catalog)
+            self.send_json({"service": "early-detection-complex", "api": "/api/overview", "metrics": "/metrics"})
             return
         if parsed.path == "/health":
             self.handle_health(policy, errors)
+            return
+        if parsed.path == "/metrics":
+            self.handle_metrics(policy)
             return
         if parsed.path == "/api/overview":
             self.handle_overview(policy, catalog)
@@ -130,28 +127,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/sensors":
             self.handle_sensors(policy)
             return
-        if parsed.path == "/api/install-sensor":
-            self.handle_install_jobs()
-            return
-        if parsed.path.startswith("/api/install-sensor/"):
-            self.handle_install_job(parsed.path)
-            return
         if parsed.path == "/api/events":
             self.handle_events_query(parsed.query)
             return
         self.send_not_found()
-
-    def handle_dashboard(self, policy: dict[str, Any]) -> None:
-        self.send_html(render_dashboard(policy))
-
-    def handle_honeypot_page(self, parsed: Any, policy: dict[str, Any], catalog: dict[str, Any]) -> None:
-        module_id = parsed.path.split("/", 2)[2]
-        sensor_id = parse_qs(parsed.query).get("sensor_id", ["sensor1"])[0]
-        page = render_honeypot_page(policy, catalog, sensor_id=sensor_id, module_id=module_id)
-        if not page:
-            self.send_json({"error": "honeypot module not found"}, HTTPStatus.NOT_FOUND)
-            return
-        self.send_html(page)
 
     def handle_health(self, policy: dict[str, Any], errors: list[str]) -> None:
         self.send_json(
@@ -172,22 +151,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         events = read_events(self.store_path, limit=MAX_EVENT_LIMIT)
         self.send_json(sensors_payload(policy, events))
 
-    def handle_install_jobs(self) -> None:
-        jobs_by_id = {job["id"]: job for job in list_install_jobs(self.store_path)}
-        jobs_by_id.update({job_id: public_job(job) for job_id, job in INSTALL_JOBS.items()})
-        jobs = sorted(jobs_by_id.values(), key=lambda item: item.get("updated_at", 0), reverse=True)
-        self.send_json({"jobs": jobs})
-
-    def handle_install_job(self, path: str) -> None:
-        parts = [part for part in path.split("/") if part]
-        if len(parts) != 3:
-            self.send_json({"error": "installation job not found"}, HTTPStatus.NOT_FOUND)
-            return
-        job = public_job(INSTALL_JOBS[parts[2]]) if parts[2] in INSTALL_JOBS else get_install_job(self.store_path, parts[2])
-        if not job:
-            self.send_json({"error": "installation job not found"}, HTTPStatus.NOT_FOUND)
-            return
-        self.send_json({"job": job})
+    def handle_metrics(self, policy: dict[str, Any]) -> None:
+        events = read_events(self.store_path, limit=MAX_EVENT_LIMIT)
+        self.send_text(prometheus_metrics(policy, events), "text/plain; version=0.0.4; charset=utf-8")
 
     def handle_events_query(self, query: str) -> None:
         params = parse_qs(query)
@@ -289,23 +255,19 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if not find_sensor(policy, sensor_id):
             self.send_json({"error": "sensor not found"}, HTTPStatus.NOT_FOUND)
             return
-        if len(policy.get("sensors", [])) <= 1:
-            self.send_json({"error": "cannot delete the last sensor from policy"}, HTTPStatus.BAD_REQUEST)
-            return
         remove_sensor(policy, sensor_id)
         errors = policy_errors(policy, catalog)
         if errors:
             self.send_json({"status": "invalid_policy", "errors": errors}, HTTPStatus.BAD_REQUEST)
             return
         policy = self.save_policy(policy)
-        self.send_json({"status": "deleted", "sensor_id": sensor_id, "policy": policy})
+        purge = parse_qs(parsed.query).get("purge_events", ["0"])[0] in {"1", "true", "yes"}
+        purged_events = purge_sensor_events(self.store_path, sensor_id) if purge else 0
+        self.send_json({"status": "deleted", "sensor_id": sensor_id, "purged_events": purged_events, "policy": policy})
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         if not self.require_admin_auth("POST", parsed.path):
-            return
-        if parsed.path.startswith("/api/install-sensor/") and parsed.path.endswith("/cancel"):
-            self.handle_install_cancel(parsed.path)
             return
         is_sensor_sync = self.is_sensor_sync_path(parsed.path)
         if parsed.path not in JSON_POST_PATHS and not is_sensor_sync:
@@ -317,9 +279,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
         catalog = load_json(self.catalog_path)
         policy = load_json(self.policy_path)
-        if parsed.path == "/api/install-sensor":
-            self.handle_install_sensor(payload)
-            return
         if parsed.path == "/api/sensors":
             self.handle_create_sensor(payload, policy, catalog)
             return
@@ -331,39 +290,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     def is_sensor_sync_path(self, path: str) -> bool:
         parts = [part for part in path.split("/") if part]
         return len(parts) == 4 and parts[:2] == ["api", "sensors"] and parts[3] == "sync"
-
-    def handle_install_cancel(self, path: str) -> None:
-        parts = [part for part in path.split("/") if part]
-        if len(parts) != 4:
-            self.send_json({"error": "installation job not found"}, HTTPStatus.NOT_FOUND)
-            return
-        job = INSTALL_JOBS.get(parts[2])
-        if not job:
-            self.send_json({"error": "installation job not found"}, HTTPStatus.NOT_FOUND)
-            return
-        job["cancel_requested"] = True
-        process = job.get("process")
-        if process and process.poll() is None:
-            process.terminate()
-        job["status"] = "cancelled"
-        mark_finished(job)
-        job_log(job, "Отмена запрошена пользователем", step="Отменено")
-        self.send_json({"job": public_job(job)})
-
-    def handle_install_sensor(self, payload: dict[str, Any]) -> None:
-        sensor_id = str(payload.get("sensor_id") or "").strip()
-        host = str(payload.get("host") or "").strip()
-        if not sensor_id or not host:
-            self.send_json({"error": "Укажите имя сенсора и IP адрес"}, HTTPStatus.BAD_REQUEST)
-            return
-        job = new_job(sensor_id, host, self.store_path)
-        thread = threading.Thread(
-            target=install_sensor_job,
-            args=(job, payload, self.policy_path, self.catalog_path, dict(self.headers)),
-            daemon=True,
-        )
-        thread.start()
-        self.send_json({"job": public_job(job)}, HTTPStatus.ACCEPTED)
 
     def handle_create_sensor(self, payload: dict[str, Any], policy: dict[str, Any], catalog: dict[str, Any]) -> None:
         sensor_id = str(payload.get("id") or "").strip()

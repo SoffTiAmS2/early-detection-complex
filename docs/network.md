@@ -10,7 +10,8 @@ TCP 8080
 
 Входящий трафик на центр:
 
-- браузер -> `GET /`, `/honeypots/...`, `/api/overview`, `/api/policy`, `/api/sensors`;
+- оператор/API-клиент -> `/api/overview`, `/api/policy`, `/api/sensors`, `/api/events`;
+- Prometheus -> `GET /metrics`;
 - сенсор -> `POST /api/sensors/<sensor_id>/sync`;
 - сенсор -> `POST /api/events`.
 

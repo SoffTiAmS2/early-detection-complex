@@ -15,6 +15,10 @@
               {
                 "host_port": 2223,
                 "id": "telnet"
+              },
+              {
+                "host_port": 9000,
+                "id": "metrics"
               }
             ],
             "settings": {
@@ -35,6 +39,8 @@
               "filesystem": "${honeypot:data_path}/fs.pickle",
               "hardware_platform": "x86_64",
               "hostname": "office-filesrv-01",
+              "image_mode": "local",
+              "base_image": "arm32v7/alpine:3.19",
               "idle_timeout": 180,
               "internet_facing_ip": "",
               "internet_facing_ipv6": "",
@@ -219,7 +225,8 @@
           "hostname": "office-filesrv-01",
           "os": "Debian GNU/Linux"
         },
-        "profile": "linux-backup-server"
+        "profile": "linux-backup-server",
+        "runtime_mode": "docker"
       },
       "enrollment": {
         "method": "ssh-bootstrap",
@@ -234,7 +241,27 @@
     "central_url": "http://192.168.0.196:8080",
     "management_network": "192.168.0.0/24",
     "name": "early-detection-lab",
+    "observability": {
+      "grafana_url": "http://192.168.0.196:3000",
+      "prometheus_url": "http://192.168.0.196:9090",
+      "scrape_interval": "15s"
+    },
     "purpose": "distributed early detection of suspicious network activity"
+  },
+  "sensor_classes": {
+    "banana_pi_pro": {
+      "architecture": "armv7l",
+      "deployment": "ansible",
+      "runtime_mode": "docker",
+      "runtime_profile": "fixed-io-local-build",
+      "recommended_modules": [
+        "cowrie",
+        "opencanary",
+        "heralding",
+        "conpot",
+        "dionaea"
+      ]
+    }
   },
   "version": 1
 }

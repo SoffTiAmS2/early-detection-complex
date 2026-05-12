@@ -1,0 +1,14 @@
+edc_python_bin: /usr/bin/python3
+edc_agent_interval: 20
+edc_sensor_state_dir: /var/lib/edc-sensor
+edc_center_compose_file: "{{ edc_install_dir }}/compose.yml"
+
+edc_packages:
+  - ca-certificates
+  - curl
+  - git
+  - python3
+
+edc_docker_packages:
+  - docker.io
+  - docker-compose-plugin

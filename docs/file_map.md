@@ -19,11 +19,9 @@
 - `center/core/paths.py` - общие пути проекта и значения по умолчанию.
 - `center/core/utils.py` - маленькие общие функции.
 - `center/persistence/events.py` - SQLite-хранилище событий и выборки для API.
-- `center/services/installer.py` - установка/обновление сенсора по SSH с журналом прогресса.
-- `center/web/views.py` - рендеринг HTML-шаблонов.
-- `center/web/templates/` - русскоязычный минималистичный UI центра.
+- `center/core/metrics.py` - Prometheus metrics из сохраненных событий.
 - `center/server.py` - совместимый wrapper для старой команды запуска; новая команда использует `center/main.py`.
-- `center/Dockerfile` - образ центра с Python, `openssh-client` и `sshpass`.
+- `center/Dockerfile` - минимальный образ центра с Python.
 - `center/README.md` - краткое описание API.
 
 ## Сенсор
@@ -49,6 +47,14 @@
 - `docs/network.md` - схема портов, направлений соединений и auth-настроек.
 - `scripts/run_mvp.sh` - быстрый локальный dry-run.
 - `scripts/run_sensor_runtime.sh` - запуск агента сенсора в runtime-режиме.
+
+## Ansible
+
+- `ansible/inventory.example.yml` - пример классификации центра и сенсоров.
+- `ansible/playbooks/center.yml` - установка центра, Prometheus и Grafana.
+- `ansible/playbooks/sensors.yml` - установка sensor-agent и Docker runtime.
+- `ansible/playbooks/classify_sensors.yml` - определение класса сенсора по architecture.
+- `ansible/playbooks/remove_sensor.yml` - остановка runtime, удаление файлов и удаление сенсора из policy.
 - `scripts/check.sh` - быстрые проверки проекта.
 - `tools/validate_policy.py` - проверка каталога и политики.
 - `tools/e2e_reconfigure_test.py` - проверка PATCH API и генерации Docker Compose без запуска тяжёлых образов.

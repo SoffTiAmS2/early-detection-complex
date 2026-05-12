@@ -1,0 +1,20 @@
+- name: Classify EDC sensors
+  hosts: sensors
+  gather_facts: true
+  tasks:
+    - name: Resolve runtime class from architecture
+      ansible.builtin.set_fact:
+        edc_detected_class: >-
+          {{ 'banana_pi_pro'
+             if ansible_architecture in ['armv7l', 'armv6l', 'armhf']
+             else 'linux_docker_host' }}
+
+    - name: Show classification
+      ansible.builtin.debug:
+        msg:
+          sensor_id: "{{ edc_sensor_id | default(inventory_hostname) }}"
+          host: "{{ ansible_host }}"
+          architecture: "{{ ansible_architecture }}"
+          configured_class: "{{ edc_sensor_class | default('auto') }}"
+          detected_class: "{{ edc_detected_class }}"
+          runtime_mode: "{{ edc_runtime_mode | default('docker') }}"

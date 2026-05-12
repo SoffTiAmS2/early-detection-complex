@@ -172,6 +172,16 @@ class DockerRuntime:
             f"      edc.module: {yaml_scalar(module_id)}",
             f"      edc.runtime: {yaml_scalar(RUNTIME_VERSION)}",
         ]
+        build = self.compose_build(module)
+        if build:
+            block.append("    build:")
+            for key, value in build.items():
+                if isinstance(value, dict):
+                    block.append(f"      {key}:")
+                    for nested_key, nested_value in value.items():
+                        block.append(f"        {nested_key}: {yaml_scalar(nested_value)}")
+                else:
+                    block.append(f"      {key}: {yaml_scalar(value)}")
         ports = self.compose_ports(module)
         if ports:
             block.append("    ports:")
@@ -193,6 +203,17 @@ class DockerRuntime:
             block.append(f"    working_dir: {yaml_scalar(working_dir)}")
         return block
 
+    def compose_build(self, module: dict[str, Any]) -> dict[str, Any]:
+        module_id = str(module.get("id"))
+        settings = module.get("settings", {})
+        if module_id == "cowrie" and settings.get("image_mode", "local") == "local":
+            return {
+                "context": str((self.runtime_dir / "cowrie" / "image").resolve()),
+                "dockerfile": "Dockerfile",
+                "args": {"COWRIE_BASE_IMAGE": settings.get("base_image", "arm32v7/alpine:3.19")},
+            }
+        return {}
+
     def compose_ports(self, module: dict[str, Any]) -> list[str]:
         module_id = str(module.get("id"))
         ports: list[str] = []
@@ -210,10 +231,12 @@ class DockerRuntime:
         base = (self.runtime_dir / module_id).resolve()
         if module_id == "cowrie":
             return [
-                f"{base / 'config' / 'cowrie.cfg'}:/cowrie/cowrie-git/etc/cowrie.cfg:ro",
-                f"{base / 'config' / 'userdb.txt'}:/cowrie/cowrie-git/etc/userdb.txt:ro",
-                f"{base / 'data'}:/cowrie/cowrie-git/var/lib/cowrie",
-                f"{base / 'logs'}:/cowrie/cowrie-git/var/log/cowrie",
+                f"{base / 'config' / 'cowrie.cfg'}:/home/cowrie/cowrie/etc/cowrie.cfg:ro",
+                f"{base / 'config' / 'userdb.txt'}:/home/cowrie/cowrie/etc/userdb.txt:ro",
+                f"{base / 'logs'}:/home/cowrie/cowrie/var/log/cowrie",
+                f"{base / 'tty'}:/home/cowrie/cowrie/var/lib/cowrie/tty",
+                f"{base / 'downloads'}:/home/cowrie/cowrie/var/lib/cowrie/downloads",
+                f"{base / 'data'}:/home/cowrie/cowrie/var/lib/cowrie/data",
             ]
         if module_id == "opencanary":
             return [f"{base / 'config' / 'opencanary.conf'}:/root/.opencanary.conf:ro", f"{base / 'logs'}:/var/tmp"]

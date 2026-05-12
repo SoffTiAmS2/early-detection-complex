@@ -88,8 +88,8 @@ def policy_errors(policy: Any, catalog: Any) -> list[str]:
         module_index[module_id] = module
 
     sensors = policy.get("sensors")
-    if not isinstance(sensors, list) or not sensors:
-        errors.append("policy must contain at least one sensor")
+    if not isinstance(sensors, list):
+        errors.append("policy.sensors must be a list")
         return errors
 
     seen_sensors: set[str] = set()
@@ -257,6 +257,7 @@ def desired_state(policy: dict[str, Any], catalog: dict[str, Any], sensor_id: st
         "host": sensor.get("host"),
         "architecture": sensor.get("architecture"),
         "profile": desired.get("profile"),
+        "runtime_mode": desired.get("runtime_mode", "docker"),
         "persona": desired.get("persona", {}),
         "modules": planned_modules,
     }

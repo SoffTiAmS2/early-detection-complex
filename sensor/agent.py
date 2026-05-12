@@ -19,7 +19,6 @@ from urllib.parse import quote
 from agent_state import desired_signature, module_plan, now_ts, runtime_plan, sync_payload, write_state
 from native_runtime import NativeRuntime
 from runtime import DockerRuntime
-from runtime_helpers import ARM32_ARCHES, sensor_architecture
 
 
 DEFAULT_STATE_DIR = Path("var") / "sensor"
@@ -97,8 +96,7 @@ def start_runtime(
     send_event: Any,
     state_dir: Path,
 ) -> tuple[Any, list[dict[str, Any]], list[dict[str, Any]], str]:
-    architecture = str(desired.get("architecture") or sensor_architecture())
-    if architecture in ARM32_ARCHES:
+    if desired.get("runtime_mode") == "native":
         runtime = NativeRuntime(sensor_id=sensor_id, center_url=base_url, desired=desired, sender=send_event, state_dir=state_dir)
         mode = "native-runtime"
     else:

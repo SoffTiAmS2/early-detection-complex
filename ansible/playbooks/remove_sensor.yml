@@ -1,0 +1,49 @@
+- name: Remove an EDC sensor cleanly
+  hosts: sensors
+  become: true
+  vars:
+    edc_purge_events: true
+  tasks:
+    - name: Stop sensor service
+      ansible.builtin.systemd:
+        name: edc-sensor.service
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Remove sensor service unit
+      ansible.builtin.file:
+        path: /etc/systemd/system/edc-sensor.service
+        state: absent
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Remove EDC containers for this sensor
+      ansible.builtin.shell: |
+        set -eu
+        ids="$(docker ps -aq --filter label=edc.sensor_id={{ edc_sensor_id | default(inventory_hostname) }} || true)"
+        if [ -n "$ids" ]; then
+          docker rm -f $ids
+        fi
+      args:
+        executable: /bin/sh
+      changed_when: true
+      failed_when: false
+
+    - name: Remove sensor runtime files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ edc_sensor_state_dir }}"
+        - "{{ edc_sensor_dir }}"
+
+    - name: Remove sensor from center policy
+      ansible.builtin.uri:
+        url: "{{ edc_center_url }}/api/sensors/{{ edc_sensor_id | default(inventory_hostname) }}?purge_events={{ '1' if edc_purge_events else '0' }}"
+        method: DELETE
+        status_code: [200, 404]
+      delegate_to: localhost
+      become: false

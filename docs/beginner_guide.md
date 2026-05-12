@@ -84,12 +84,12 @@ curl 'http://localhost:8080/api/events?limit=20' | python3 -m json.tool
 ```text
 center/main.py               запуск сервера
 center/app.py                создание HTTP-сервера
-center/api/handler.py        HTTP API и маршруты веб-интерфейса
+center/api/handler.py        HTTP API центра
 center/core/policy.py        проверка политики и desired-state
-center/core/overview.py      сводка для dashboard
+center/core/overview.py      сводка состояния сенсоров
+center/core/metrics.py       Prometheus metrics
 center/persistence/events.py SQLite-события
-center/services/installer.py установка сенсора по SSH
-center/web/                  HTML-интерфейс
+ansible/playbooks/           установка, классификация и удаление узлов
 sensor/agent.py              цикл работы сенсора
 sensor/runtime.py            Docker Compose для honeypot-контейнеров
 ```

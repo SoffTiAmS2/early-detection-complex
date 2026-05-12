@@ -1,0 +1,66 @@
+- name: Install EDC sensor agents
+  hosts: sensors
+  become: true
+  tasks:
+    - name: Install sensor packages
+      ansible.builtin.apt:
+        name: "{{ edc_packages + edc_docker_packages }}"
+        update_cache: true
+        state: present
+
+    - name: Enable Docker
+      ansible.builtin.service:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Clone EDC repository for sensor runtime
+      ansible.builtin.git:
+        repo: "{{ edc_repo_url }}"
+        dest: "{{ edc_sensor_dir }}"
+        version: "{{ edc_version }}"
+        update: true
+
+    - name: Ensure sensor state directory exists
+      ansible.builtin.file:
+        path: "{{ edc_sensor_state_dir }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install sensor systemd unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/edc-sensor.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=EDC managed honeypot sensor
+          After=network-online.target docker.service
+          Wants=network-online.target docker.service
+
+          [Service]
+          Type=simple
+          WorkingDirectory={{ edc_sensor_dir }}
+          Environment=PYTHONUNBUFFERED=1
+          ExecStart={{ edc_python_bin }} {{ edc_sensor_dir }}/sensor/agent.py --center {{ edc_center_url }} --sensor-id {{ edc_sensor_id | default(inventory_hostname) }} --state-dir {{ edc_sensor_state_dir }} --serve --interval {{ edc_agent_interval }}
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart sensor
+
+    - name: Enable sensor agent
+      ansible.builtin.systemd:
+        name: edc-sensor.service
+        daemon_reload: true
+        enabled: true
+        state: started
+
+  handlers:
+    - name: Restart sensor
+      ansible.builtin.systemd:
+        name: edc-sensor.service
+        daemon_reload: true
+        state: restarted

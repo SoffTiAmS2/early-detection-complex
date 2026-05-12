@@ -8,17 +8,16 @@
 - `app.py` - создание HTTP-сервера.
 - `api/handler.py` - REST API и маршруты веб-интерфейса.
 - `core/policy.py` - политика сенсоров и desired-state.
-- `core/overview.py` - сводка состояния для dashboard.
+- `core/overview.py` - сводка состояния сенсоров и событий.
+- `core/metrics.py` - Prometheus metrics endpoint.
 - `core/paths.py`, `core/utils.py` - общие пути и утилиты.
 - `persistence/events.py` - SQLite-события.
-- `services/installer.py` - SSH-установка сенсора и журнал прогресса.
-- `web/views.py`, `web/templates/` - HTML-интерфейс.
 - `server.py` - совместимый wrapper для старой команды запуска.
 
 Функции:
 
-- веб-интерфейс на русском языке;
-- установка/обновление сенсора по SSH из формы в центре;
+- API control-plane без встроенного HTML-интерфейса;
+- установка/обновление сенсоров через Ansible playbooks;
 - хранение рабочей политики `config/site.local.json`;
 - синхронизация сенсоров через один endpoint: статус на входе, desired state на выходе;
 - приём raw events из honeypot runtime;
@@ -30,6 +29,7 @@
 ```text
 GET  /
 GET  /health
+GET  /metrics
 GET  /api/overview
 GET  /api/modules
 GET  /api/policy
@@ -37,10 +37,7 @@ GET  /api/sensors
 POST /api/sensors
 POST /api/sensors/<id>/sync
 PATCH /api/sensors/<id>/modules/<module_id>
-POST /api/install-sensor
-GET  /api/install-sensor
-GET  /api/install-sensor/<job_id>
-POST /api/install-sensor/<job_id>/cancel
+DELETE /api/sensors/<id>?purge_events=1
 POST /api/events
 GET  /api/events
 ```

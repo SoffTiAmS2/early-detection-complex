@@ -117,3 +117,11 @@ def filter_events(events: list[dict[str, Any]], params: dict[str, list[str]]) ->
         if event_matches(event, filters):
             filtered.append(event)
     return filtered
+
+
+def purge_sensor_events(store: Path, sensor_id: str) -> int:
+    if not store.exists():
+        return 0
+    with connect_store(store) as connection:
+        cursor = connection.execute("DELETE FROM events WHERE sensor_id = ?", (sensor_id,))
+        return int(cursor.rowcount or 0)

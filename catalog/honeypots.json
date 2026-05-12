@@ -36,6 +36,15 @@
             "command",
             "session"
           ]
+        },
+        {
+          "id": "metrics",
+          "protocol": "tcp",
+          "container_port": 9000,
+          "default_host_port": 9000,
+          "events": [
+            "prometheus"
+          ]
         }
       ],
       "config_contract": [

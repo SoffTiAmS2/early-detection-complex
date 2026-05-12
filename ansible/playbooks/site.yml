@@ -1,0 +1,8 @@
+- name: Install center
+  import_playbook: center.yml
+
+- name: Classify sensors
+  import_playbook: classify_sensors.yml
+
+- name: Install sensors
+  import_playbook: sensors.yml

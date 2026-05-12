@@ -84,8 +84,8 @@ def validate_settings(sensor_id: str, module_id: str, settings: Any, catalog_mod
 def validate_policy(policy: dict[str, Any], modules: dict[str, dict[str, Any]]) -> list[str]:
     errors: list[str] = []
     sensors = policy.get("sensors")
-    if not isinstance(sensors, list) or not sensors:
-        return ["policy must contain at least one sensor"]
+    if not isinstance(sensors, list):
+        return ["policy.sensors must be a list"]
 
     seen_sensors: set[str] = set()
     for sensor in sensors:

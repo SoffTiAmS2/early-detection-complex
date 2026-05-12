@@ -12,14 +12,14 @@ EventSender = Callable[[dict[str, Any]], bool]
 RUNTIME_VERSION = "docker-runtime-v1"
 PROJECT_PREFIX = "edc"
 SUPPORTED_IMAGES = {
-    "cowrie": "cowrie/cowrie:latest",
+    "cowrie": "edc/cowrie:local",
     "opencanary": "thinkst/opencanary:latest",
     "dionaea": "dinotools/dionaea:latest",
     "conpot": "honeynet/conpot:latest",
     "heralding": "dtagdevsec/heralding:24.04.1",
 }
 MODULE_LOG_HINTS = {
-    "cowrie": "/cowrie/cowrie-git/var/log/cowrie/cowrie.json",
+    "cowrie": "/home/cowrie/cowrie/var/log/cowrie/cowrie.json",
     "opencanary": "/var/tmp/opencanary.log",
     "dionaea": "/opt/dionaea/var/log/dionaea",
     "conpot": "container stdout",
@@ -44,7 +44,7 @@ HERALDING_CAPABILITIES = {
     "rdp": 3389,
 }
 ARM32_ARCHES = {"armv7l", "armv6l", "armhf", "armv7"}
-ARM32_UNSUPPORTED_MODULES = set(SUPPORTED_IMAGES)
+ARM32_UNSUPPORTED_MODULES: set[str] = set()
 
 
 def now_ts() -> float:

@@ -1,0 +1,44 @@
+- name: Install EDC center and observability stack
+  hosts: centers
+  become: true
+  tasks:
+    - name: Install base packages
+      ansible.builtin.apt:
+        name: "{{ edc_packages + edc_docker_packages }}"
+        update_cache: true
+        state: present
+
+    - name: Enable Docker
+      ansible.builtin.service:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Clone EDC repository
+      ansible.builtin.git:
+        repo: "{{ edc_repo_url }}"
+        dest: "{{ edc_install_dir }}"
+        version: "{{ edc_version }}"
+        update: true
+
+    - name: Ensure local policy exists
+      ansible.builtin.copy:
+        src: "{{ edc_install_dir }}/config/site.example.json"
+        dest: "{{ edc_install_dir }}/config/site.local.json"
+        remote_src: true
+        force: false
+
+    - name: Start center, Prometheus and Grafana
+      ansible.builtin.command:
+        cmd: docker compose -f "{{ edc_center_compose_file }}" up -d --build
+        chdir: "{{ edc_install_dir }}"
+      changed_when: true
+
+    - name: Wait for center health
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:8080/health"
+        return_content: true
+      register: center_health
+      retries: 20
+      delay: 3
+      until: center_health.status == 200

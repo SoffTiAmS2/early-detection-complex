@@ -29,7 +29,7 @@ sensor1 192.168.0.173  user: banana
 Контейнеры запускаются не как заглушки, а из upstream/community images:
 
 ```text
-Cowrie     cowrie/cowrie:latest
+Cowrie     local build from sensor/images/cowrie/Dockerfile
 OpenCanary thinkst/opencanary:latest
 Dionaea    dinotools/dionaea:latest
 Conpot     honeynet/conpot:latest
@@ -63,11 +63,10 @@ Dashboard на `/` содержит две части:
 Страница отдельного honeypot:
 
 ```text
-http://192.168.0.196:8080/honeypots/opencanary?sensor_id=sensor1
-http://192.168.0.196:8080/honeypots/cowrie?sensor_id=sensor1
-http://192.168.0.196:8080/honeypots/heralding?sensor_id=sensor1
-http://192.168.0.196:8080/honeypots/conpot?sensor_id=sensor1
-http://192.168.0.196:8080/honeypots/dionaea?sensor_id=sensor1
+http://192.168.0.196:8080/api/overview
+http://192.168.0.196:8080/metrics
+http://192.168.0.196:9090
+http://192.168.0.196:3000
 ```
 
 На этой странице можно включать/отключать конкретный honeypot, включать сервисы, менять host-порты и settings.
@@ -81,7 +80,7 @@ curl -X POST http://192.168.0.196:8080/api/sensors \
   -d '{"id":"sensor2","host":"192.168.0.177","architecture":"x86_64","clone_from":"sensor1"}' | python3 -m json.tool
 ```
 
-После изменения политики через dashboard sensor-agent сам заберет новую версию desired state на следующем polling loop. В текущем запуске на стенде интервал обычно `10s`.
+После изменения политики через API или git/Ansible sensor-agent сам заберет новую версию desired state на следующем sync loop. В текущем запуске на стенде интервал обычно `20s`.
 
 Если нужно принудительно перезапустить агент вручную:
 

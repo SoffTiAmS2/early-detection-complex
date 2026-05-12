@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -10,10 +11,11 @@ from runtime_helpers import HERALDING_CAPABILITIES, SUPPORTED_IMAGES, as_bool, s
 def prepare_module_dirs(runtime_dir: Path, desired: dict[str, Any], sensor_id: str, errors: list[dict[str, Any]]) -> None:
     for module_id in SUPPORTED_IMAGES:
         base = runtime_dir / module_id
-        for child in ("config", "data", "logs"):
+        for child in ("config", "data", "logs", "downloads", "tty", "image"):
             path = base / child
             path.mkdir(parents=True, exist_ok=True)
             path.chmod(0o777)
+    prepare_cowrie_image(runtime_dir, errors)
     write_cowrie_config(runtime_dir, desired, sensor_id)
     write_opencanary_config(runtime_dir, desired, sensor_id, errors)
     write_heralding_config(runtime_dir, desired)
@@ -25,6 +27,16 @@ def module_by_id(desired: dict[str, Any], module_id: str) -> dict[str, Any] | No
         if module.get("id") == module_id:
             return module
     return None
+
+
+def prepare_cowrie_image(runtime_dir: Path, errors: list[dict[str, Any]]) -> None:
+    source = Path(__file__).resolve().parent / "images" / "cowrie"
+    target = runtime_dir / "cowrie" / "image"
+    dockerfile = source / "Dockerfile"
+    if not dockerfile.exists():
+        errors.append({"module": "cowrie", "stage": "image", "error": f"missing local Dockerfile: {dockerfile}"})
+        return
+    shutil.copy2(dockerfile, target / "Dockerfile")
 
 
 def write_cowrie_config(runtime_dir: Path, desired: dict[str, Any], sensor_id: str) -> None:
@@ -46,10 +58,19 @@ def write_cowrie_config(runtime_dir: Path, desired: dict[str, Any], sensor_id: s
         "",
         "[ssh]",
         f"enabled = {'yes' if 'ssh' in selected_service_ids(module) else 'no'}",
+        "listen_endpoints = tcp:2222:interface=0.0.0.0",
         f"version = {settings.get('ssh_version', 'SSH-2.0-OpenSSH_8.4')}",
         "",
         "[telnet]",
         f"enabled = {'yes' if 'telnet' in selected_service_ids(module) else 'no'}",
+        "listen_endpoints = tcp:2223:interface=0.0.0.0",
+        "",
+        "[output_json]",
+        "enabled = true",
+        "",
+        "[output_prometheus]",
+        "enabled = true",
+        "port = 9000",
         "",
     ]
     raw = str(settings.get("raw_cowrie_cfg") or "").strip()

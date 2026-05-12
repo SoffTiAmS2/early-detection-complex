@@ -58,20 +58,5 @@ def apply_v1(connection: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_events_service ON events(service);
         CREATE INDEX IF NOT EXISTS idx_events_severity ON events(severity);
         CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type);
-
-        CREATE TABLE IF NOT EXISTS install_jobs (
-            id TEXT PRIMARY KEY,
-            sensor_id TEXT NOT NULL,
-            host TEXT NOT NULL,
-            status TEXT NOT NULL,
-            step TEXT NOT NULL,
-            progress INTEGER NOT NULL,
-            logs_json TEXT NOT NULL,
-            started_at REAL NOT NULL,
-            updated_at REAL NOT NULL,
-            finished_at REAL
-        );
-        CREATE INDEX IF NOT EXISTS idx_install_jobs_updated_at ON install_jobs(updated_at);
-        CREATE INDEX IF NOT EXISTS idx_install_jobs_sensor_id ON install_jobs(sensor_id);
         """
     )

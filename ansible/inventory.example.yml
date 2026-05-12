@@ -1,0 +1,23 @@
+all:
+  vars:
+    edc_repo_url: "https://github.com/SoffTiAmS2/early-detection-complex.git"
+    edc_version: "main"
+    edc_center_url: "http://192.168.0.196:8080"
+    edc_install_dir: "/opt/edc"
+    edc_sensor_dir: "/opt/edc-sensor"
+
+  children:
+    centers:
+      hosts:
+        edc-center:
+          ansible_host: 192.168.0.196
+          ansible_user: centre
+
+    sensors:
+      hosts:
+        banana-pi-pro-1:
+          ansible_host: 192.168.0.239
+          ansible_user: banana
+          edc_sensor_id: banana-pi-pro-1
+          edc_sensor_class: banana_pi_pro
+          edc_runtime_mode: docker

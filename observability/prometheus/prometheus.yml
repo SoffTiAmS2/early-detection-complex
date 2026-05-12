@@ -1,0 +1,24 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules.yml
+
+scrape_configs:
+  - job_name: edc-center
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["center:8080"]
+        labels:
+          role: center
+
+  # Add deployed sensors here or generate this file from Ansible inventory.
+  # Cowrie local builds expose Prometheus metrics on host tcp/9000.
+  - job_name: edc-cowrie-sensors
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["192.168.0.239:9000"]
+        labels:
+          sensor_id: banana-pi-pro-1
+          module: cowrie
