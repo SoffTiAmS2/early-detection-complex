@@ -69,7 +69,11 @@ class DockerRuntime:
         self.remove_old_containers()
         started = 0
         for service_name, module_id in self.compose_service_modules().items():
-            result = self.run_compose("up", "-d", "--build", "--no-deps", service_name, check=False)
+            args = ["up", "-d", "--no-deps"]
+            if module_id != "idle" and not self.image_exists(SUPPORTED_IMAGES.get(module_id, "")):
+                args.append("--build")
+            args.append(service_name)
+            result = self.run_compose(*args, check=False)
             if result.returncode != 0:
                 self.errors.append(
                     {
@@ -367,6 +371,12 @@ class DockerRuntime:
         if check and result.returncode != 0:
             raise DockerRuntimeError(result.stderr.strip() or result.stdout.strip())
         return result
+
+    def image_exists(self, image: str) -> bool:
+        if not image:
+            return False
+        result = subprocess.run(["docker", "image", "inspect", image], text=True, capture_output=True, check=False)
+        return result.returncode == 0
 
     def remove_old_containers(self) -> None:
         rows = subprocess.run(
