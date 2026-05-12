@@ -244,7 +244,7 @@ class DockerRuntime:
                     "dockerfile": "Dockerfile",
                     "args": {
                         "COWRIE_BASE_IMAGE": settings.get("base_image", UPSTREAM_IMAGES.get(module_id, SUPPORTED_IMAGES[module_id])),
-                        "COWRIE_REF": settings.get("cowrie_ref", "v2.9.18"),
+                        "COWRIE_REF": settings.get("cowrie_ref", "v2.6.1"),
                     },
                 }
             arg_name = "HONEYPOT_BASE_IMAGE"

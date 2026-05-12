@@ -19,7 +19,7 @@ SUPPORTED_IMAGES = {
     "heralding": "edc/heralding:local",
 }
 UPSTREAM_IMAGES = {
-    "cowrie": "arm32v7/alpine:3.19",
+    "cowrie": "arm32v7/debian:bookworm-slim",
     "opencanary": "thinkst/opencanary:latest",
     "dionaea": "dinotools/dionaea:latest",
     "conpot": "honeynet/conpot:latest",
