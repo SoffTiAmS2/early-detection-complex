@@ -20,6 +20,7 @@ from runtime_helpers import (
     PROJECT_PREFIX,
     RUNTIME_VERSION,
     SUPPORTED_IMAGES,
+    UPSTREAM_IMAGES,
     EventSender,
     compose_service_name,
     module_enabled,
@@ -206,11 +207,15 @@ class DockerRuntime:
     def compose_build(self, module: dict[str, Any]) -> dict[str, Any]:
         module_id = str(module.get("id"))
         settings = module.get("settings", {})
-        if module_id == "cowrie" and settings.get("image_mode", "local") == "local":
+        if settings.get("image_mode", "local") == "local":
+            image_dir = self.runtime_dir / module_id / "image"
+            if not (image_dir / "Dockerfile").exists():
+                return {}
+            arg_name = "COWRIE_BASE_IMAGE" if module_id == "cowrie" else "HONEYPOT_BASE_IMAGE"
             return {
-                "context": str((self.runtime_dir / "cowrie" / "image").resolve()),
+                "context": str(image_dir.resolve()),
                 "dockerfile": "Dockerfile",
-                "args": {"COWRIE_BASE_IMAGE": settings.get("base_image", "arm32v7/alpine:3.19")},
+                "args": {arg_name: settings.get("base_image", UPSTREAM_IMAGES.get(module_id, SUPPORTED_IMAGES[module_id]))},
             }
         return {}
 

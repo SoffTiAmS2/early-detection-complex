@@ -13,6 +13,13 @@ RUNTIME_VERSION = "docker-runtime-v1"
 PROJECT_PREFIX = "edc"
 SUPPORTED_IMAGES = {
     "cowrie": "edc/cowrie:local",
+    "opencanary": "edc/opencanary:local",
+    "dionaea": "edc/dionaea:local",
+    "conpot": "edc/conpot:local",
+    "heralding": "edc/heralding:local",
+}
+UPSTREAM_IMAGES = {
+    "cowrie": "arm32v7/alpine:3.19",
     "opencanary": "thinkst/opencanary:latest",
     "dionaea": "dinotools/dionaea:latest",
     "conpot": "honeynet/conpot:latest",

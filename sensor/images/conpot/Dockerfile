@@ -1,0 +1,2 @@
+ARG HONEYPOT_BASE_IMAGE=honeynet/conpot:latest
+FROM ${HONEYPOT_BASE_IMAGE}

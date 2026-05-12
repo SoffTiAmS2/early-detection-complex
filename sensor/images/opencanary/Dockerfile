@@ -1,0 +1,2 @@
+ARG HONEYPOT_BASE_IMAGE=thinkst/opencanary:latest
+FROM ${HONEYPOT_BASE_IMAGE}

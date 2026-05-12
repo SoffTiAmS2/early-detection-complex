@@ -116,7 +116,7 @@ def assert_compose_materializes(desired: dict[str, Any], state_dir: Path) -> Non
     runtime.prepare_module_dirs()
     runtime.write_compose()
     compose = runtime.compose_path.read_text(encoding="utf-8")
-    expected = ["edc/cowrie:local", "thinkst/opencanary:latest", "2222:2222", "8081:80", "build:"]
+    expected = ["edc/cowrie:local", "edc/opencanary:local", "2222:2222", "8081:80", "build:"]
     missing = [item for item in expected if item not in compose]
     if missing:
         raise RuntimeError(f"compose missing expected real runtime entries: {missing}\n{compose}")

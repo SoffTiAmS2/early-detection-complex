@@ -1,0 +1,2 @@
+ARG HONEYPOT_BASE_IMAGE=dinotools/dionaea:latest
+FROM ${HONEYPOT_BASE_IMAGE}

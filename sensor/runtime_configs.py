@@ -15,7 +15,7 @@ def prepare_module_dirs(runtime_dir: Path, desired: dict[str, Any], sensor_id: s
             path = base / child
             path.mkdir(parents=True, exist_ok=True)
             path.chmod(0o777)
-    prepare_cowrie_image(runtime_dir, errors)
+    prepare_image_contexts(runtime_dir, errors)
     write_cowrie_config(runtime_dir, desired, sensor_id)
     write_opencanary_config(runtime_dir, desired, sensor_id, errors)
     write_heralding_config(runtime_dir, desired)
@@ -29,14 +29,16 @@ def module_by_id(desired: dict[str, Any], module_id: str) -> dict[str, Any] | No
     return None
 
 
-def prepare_cowrie_image(runtime_dir: Path, errors: list[dict[str, Any]]) -> None:
-    source = Path(__file__).resolve().parent / "images" / "cowrie"
-    target = runtime_dir / "cowrie" / "image"
-    dockerfile = source / "Dockerfile"
-    if not dockerfile.exists():
-        errors.append({"module": "cowrie", "stage": "image", "error": f"missing local Dockerfile: {dockerfile}"})
-        return
-    shutil.copy2(dockerfile, target / "Dockerfile")
+def prepare_image_contexts(runtime_dir: Path, errors: list[dict[str, Any]]) -> None:
+    image_root = Path(__file__).resolve().parent / "images"
+    for module_id in SUPPORTED_IMAGES:
+        source = image_root / module_id
+        target = runtime_dir / module_id / "image"
+        dockerfile = source / "Dockerfile"
+        if not dockerfile.exists():
+            errors.append({"module": module_id, "stage": "image", "error": f"missing local Dockerfile: {dockerfile}"})
+            continue
+        shutil.copy2(dockerfile, target / "Dockerfile")
 
 
 def write_cowrie_config(runtime_dir: Path, desired: dict[str, Any], sensor_id: str) -> None:
