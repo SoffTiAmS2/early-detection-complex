@@ -59,6 +59,7 @@ class DockerRuntime:
         self.log_threads: list[threading.Thread] = []
         self.log_processes: list[subprocess.Popen[str]] = []
         self._stop_logs = threading.Event()
+        self._compose_modules: list[dict[str, Any]] | None = None
 
     def start(self) -> None:
         self.ensure_docker()
@@ -66,10 +67,24 @@ class DockerRuntime:
         self.prepare_module_dirs()
         self.write_compose()
         self.remove_old_containers()
-        result = self.run_compose("up", "-d", "--remove-orphans", check=False)
-        if result.returncode != 0:
-            self.errors.append({"stage": "compose-up", "error": result.stderr.strip() or result.stdout.strip()})
-            raise DockerRuntimeError(result.stderr.strip() or result.stdout.strip())
+        started = 0
+        for service_name in self.compose_service_names():
+            result = self.run_compose("up", "-d", "--build", "--no-deps", service_name, check=False)
+            if result.returncode != 0:
+                self.errors.append(
+                    {
+                        "service": service_name,
+                        "stage": "compose-up",
+                        "error": result.stderr.strip() or result.stdout.strip(),
+                    }
+                )
+                continue
+            started += 1
+        if started == 0:
+            error = "no honeypot containers started"
+            if self.errors:
+                error = self.errors[-1].get("error", error)
+            raise DockerRuntimeError(error)
         self.start_log_collectors()
 
     def stop(self) -> None:
@@ -140,6 +155,19 @@ class DockerRuntime:
     def write_compose(self) -> None:
         lines = ["services:"]
         service_count = 0
+        for module in self.compose_modules():
+            block = self.compose_block(module)
+            if block:
+                service_count += 1
+                lines.extend(block)
+        if service_count == 0:
+            lines.extend(["  idle:", "    image: alpine:3.20", "    command: [\"sh\", \"-c\", \"sleep infinity\"]"])
+        self.compose_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def compose_modules(self) -> list[dict[str, Any]]:
+        if self._compose_modules is not None:
+            return self._compose_modules
+        modules: list[dict[str, Any]] = []
         for module in self.desired.get("modules", []):
             if not module_enabled(module):
                 continue
@@ -151,13 +179,13 @@ class DockerRuntime:
             if not supported:
                 self.errors.append({"module": module_id, "stage": "architecture", "error": reason})
                 continue
-            block = self.compose_block(module)
-            if block:
-                service_count += 1
-                lines.extend(block)
-        if service_count == 0:
-            lines.extend(["  idle:", "    image: alpine:3.20", "    command: [\"sh\", \"-c\", \"sleep infinity\"]"])
-        self.compose_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            modules.append(module)
+        self._compose_modules = modules
+        return modules
+
+    def compose_service_names(self) -> list[str]:
+        names = [compose_service_name(str(module.get("id"))) for module in self.compose_modules()]
+        return names or ["idle"]
 
     def compose_block(self, module: dict[str, Any]) -> list[str]:
         module_id = str(module.get("id"))
