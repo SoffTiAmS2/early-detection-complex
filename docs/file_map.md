@@ -12,7 +12,8 @@
 
 - `center/main.py` - основная точка входа центра: парсит CLI-аргументы и запускает приложение.
 - `center/app.py` - собирает настроенный HTTP-сервер.
-- `center/api/handler.py` - HTTP routes: веб-страницы, REST API, sensor enroll/status/events, install jobs.
+- `center/api/handler.py` - HTTP routes: веб-страницы, REST API, sensor sync/raw events, install jobs.
+- `center/core/sensor_sync.py` - контракт синхронизации сенсора: status payload -> desired state.
 - `center/core/policy.py` - чтение, запись и валидация политики сенсоров.
 - `center/core/overview.py` - агрегированное состояние сенсоров, модулей и последних событий.
 - `center/core/paths.py` - общие пути проекта и значения по умолчанию.
@@ -27,8 +28,8 @@
 
 ## Сенсор
 
-- `sensor/agent.py` - агент сенсора: регистрируется в центре, забирает desired-state, докладывает status.
-- `sensor/agent_state.py` - payload enrollment/status и локальный applied state.
+- `sensor/agent.py` - агент сенсора: синхронизируется с центром, применяет desired state, докладывает runtime status.
+- `sensor/agent_state.py` - payload sync/status и локальный applied state.
 - `sensor/runtime.py` - Docker runtime: compose, удаление старых контейнеров, запуск images, отправка сырых логов.
 - `sensor/runtime_configs.py` - генерация конфигов Cowrie, OpenCanary, Heralding и Conpot.
 - `sensor/runtime_helpers.py` - общие helper-функции и константы runtime.

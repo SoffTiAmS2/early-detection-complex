@@ -20,8 +20,8 @@
 - веб-интерфейс на русском языке;
 - установка/обновление сенсора по SSH из формы в центре;
 - хранение рабочей политики `config/site.local.json`;
-- выдача desired-state сенсорам;
-- приём enroll/status/raw events;
+- синхронизация сенсоров через один endpoint: статус на входе, desired state на выходе;
+- приём raw events из honeypot runtime;
 - хранение событий в SQLite `var/center/events.sqlite3`;
 - настройка honeypot-модулей, сервисов и host-портов.
 
@@ -35,13 +35,12 @@ GET  /api/modules
 GET  /api/policy
 GET  /api/sensors
 POST /api/sensors
-GET  /api/sensors/<id>/desired-state
+POST /api/sensors/<id>/sync
 PATCH /api/sensors/<id>/modules/<module_id>
 POST /api/install-sensor
 GET  /api/install-sensor
 GET  /api/install-sensor/<job_id>
 POST /api/install-sensor/<job_id>/cancel
-POST /api/enroll
 POST /api/events
 GET  /api/events
 ```

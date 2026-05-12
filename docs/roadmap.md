@@ -56,9 +56,9 @@ Sensor-agent должен:
 - module registry API;
 - приём событий;
 - история задач и обновлений;
-- enrollment/bootstrap endpoint.
+- sensor sync/bootstrap endpoint.
 
-Сейчас `center/main.py` запускает центр, а `center/api/handler.py` отдает module catalog, sensor list, desired state и принимает events/enroll events.
+Сейчас `center/main.py` запускает центр, а `center/api/handler.py` отдает module catalog, sensor list, принимает sensor sync и raw events.
 
 ## Этап 4: Первые Реальные Модули
 

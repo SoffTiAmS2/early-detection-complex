@@ -26,18 +26,14 @@ def sensor_summary(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         item["events"] += 1
         item["last_seen"] = event.get("received_at") or event.get("timestamp")
         item["last_event_type"] = event.get("event_type") or event.get("type")
-        if item["last_event_type"] == "sensor.enroll":
-            item["status"] = "enrolled"
-            item["node_hostname"] = event.get("node_hostname", item.get("node_hostname"))
-            item["architecture"] = event.get("architecture", item.get("architecture"))
-            item["agent_version"] = event.get("agent_version", item.get("agent_version"))
-        elif item["last_event_type"] == "sensor.status":
+        if item["last_event_type"] == "sensor.status":
             item["status"] = event.get("status", item["status"])
             item["last_status_seen"] = event.get("received_at") or event.get("timestamp")
             item["applied_version"] = event.get("applied_version", item["applied_version"])
             item["modules"] = event.get("modules", item["modules"])
             item["profile"] = event.get("profile", item.get("profile"))
             item["host"] = event.get("host", item.get("host"))
+            item["node_hostname"] = event.get("node_hostname", item.get("node_hostname"))
             item["architecture"] = event.get("architecture", item.get("architecture"))
             item["agent_version"] = event.get("agent_version", item.get("agent_version"))
             item["agent_mode"] = event.get("agent_mode", item.get("agent_mode"))

@@ -38,6 +38,16 @@ def get_json(url: str, timeout: float = 2) -> dict[str, Any]:
     return payload
 
 
+def post_json(url: str, payload: dict[str, Any], timeout: float = 2) -> dict[str, Any]:
+    data = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        parsed = json.loads(response.read().decode("utf-8"))
+    if not isinstance(parsed, dict):
+        raise RuntimeError(f"{url} returned non-object json")
+    return parsed
+
+
 def patch_json(url: str, payload: dict[str, Any], timeout: float = 2) -> dict[str, Any]:
     data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="PATCH")
@@ -173,6 +183,20 @@ def main() -> int:
         )
         try:
             wait_for("center health", lambda: get_json(f"http://127.0.0.1:{center_port}/health")["status"] == "ok")
+            synced = post_json(
+                f"http://127.0.0.1:{center_port}/api/sensors/sensor1/sync",
+                {
+                    "sensor_id": "sensor1",
+                    "agent_version": "e2e",
+                    "facts": {"hostname": "e2e-node", "architecture": "test"},
+                    "status": {"state": "online", "mode": "dry-run", "modules": []},
+                },
+            )
+            if not synced.get("registered") or synced.get("desired_state", {}).get("profile") != "test-profile":
+                raise RuntimeError(f"sensor sync failed: {synced}")
+            sensors = get_json(f"http://127.0.0.1:{center_port}/api/sensors")["sensors"]
+            if not any(item.get("sensor_id") == "sensor1" and item.get("status") == "online" for item in sensors):
+                raise RuntimeError(f"sensor sync did not update status: {sensors}")
             bad_status = patch_expect_error(
                 f"http://127.0.0.1:{center_port}/api/sensors/sensor1/modules/opencanary",
                 {"settings": {"portscan.synrate": "wrong"}},

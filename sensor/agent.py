@@ -14,8 +14,9 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
-from agent_state import desired_signature, enroll_event, module_plan, now_ts, runtime_plan, status_event, write_state
+from agent_state import desired_signature, module_plan, now_ts, runtime_plan, sync_payload, write_state
 from native_runtime import NativeRuntime
 from runtime import DockerRuntime
 from runtime_helpers import ARM32_ARCHES, sensor_architecture
@@ -23,14 +24,6 @@ from runtime_helpers import ARM32_ARCHES, sensor_architecture
 
 DEFAULT_STATE_DIR = Path("var") / "sensor"
 AGENT_VERSION = "0.4.0"
-
-
-def get_json(url: str, timeout: int = 10) -> dict[str, Any]:
-    with urllib.request.urlopen(url, timeout=timeout) as response:
-        payload = json.loads(response.read().decode("utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError("center response must be an object")
-    return payload
 
 
 def post_json(url: str, payload: dict[str, Any], timeout: int = 10) -> tuple[bool, dict[str, Any] | None]:
@@ -46,52 +39,58 @@ def post_json(url: str, payload: dict[str, Any], timeout: int = 10) -> tuple[boo
         return False, None
 
 
-def run_once(center_url: str, sensor_id: str, state_dir: Path, enroll: bool = True) -> dict[str, Any]:
-    base_url = center_url.rstrip("/")
-    enroll_url = f"{base_url}/api/enroll"
-    desired_url = f"{base_url}/api/sensors/{sensor_id}/desired-state"
-    event_url = f"{base_url}/api/events"
-    enrollment_delivered = False
-    enrollment_response = None
-    if enroll:
-        enrollment_delivered, enrollment_response = post_json(enroll_url, enroll_event(sensor_id, AGENT_VERSION))
+def sync_with_center(base_url: str, sensor_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    url = f"{base_url}/api/sensors/{quote(sensor_id, safe='')}/sync"
+    delivered, response = post_json(url, payload)
+    if not delivered or not response:
+        raise RuntimeError("center sync failed")
+    if not response.get("registered"):
+        raise RuntimeError(str(response.get("warning") or "sensor is not registered in center policy"))
+    desired = response.get("desired_state")
+    if not isinstance(desired, dict):
+        raise RuntimeError("center sync response does not contain desired_state")
+    return desired
 
-    desired = get_json(desired_url)
+
+def sync_with_retry(
+    base_url: str,
+    sensor_id: str,
+    payload: dict[str, Any],
+    retries: int = 30,
+    delay: float = 2,
+) -> dict[str, Any]:
+    last_error: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            return sync_with_center(base_url, sensor_id, payload)
+        except Exception as exc:  # noqa: BLE001 - startup should tolerate center boot order.
+            last_error = exc
+            print(f"sensor-agent: center sync unavailable, retry {attempt}/{retries}: {exc}", flush=True)
+            time.sleep(delay)
+    raise RuntimeError(f"center sync unavailable after {retries} retries: {last_error}")
+
+
+def run_once(center_url: str, sensor_id: str, state_dir: Path) -> dict[str, Any]:
+    base_url = center_url.rstrip("/")
+    desired = sync_with_retry(base_url, sensor_id, sync_payload(sensor_id, AGENT_VERSION, agent_mode="dry-run"))
     plan = module_plan(desired)
+    status = sync_payload(sensor_id, AGENT_VERSION, desired=desired, plan=plan, agent_mode="dry-run")
+    sync_with_center(base_url, sensor_id, status)
     state = {
         "sensor_id": sensor_id,
         "agent_version": AGENT_VERSION,
         "updated_at": now_ts(),
         "center_url": base_url,
-        "enrollment_delivered": enrollment_delivered,
-        "enrollment_response": enrollment_response,
         "desired": desired,
         "plan": plan,
+        "last_sync_payload": status,
     }
     write_state(state_dir / "applied_state.json", state)
-    event = status_event(sensor_id, desired, plan, agent_mode="dry-run", agent_version=AGENT_VERSION)
-    delivered, status_response = post_json(event_url, event)
-    state["last_status_delivered"] = delivered
-    state["last_status_response"] = status_response
-    write_state(state_dir / "applied_state.json", state)
-    print(json.dumps(event, ensure_ascii=False, sort_keys=True))
+    print(json.dumps(status, ensure_ascii=False, sort_keys=True))
     return state
 
 
-def fetch_desired_with_retry(base_url: str, sensor_id: str, retries: int = 30, delay: float = 2) -> dict[str, Any]:
-    desired_url = f"{base_url}/api/sensors/{sensor_id}/desired-state"
-    last_error: Exception | None = None
-    for attempt in range(1, retries + 1):
-        try:
-            return get_json(desired_url)
-        except Exception as exc:  # noqa: BLE001 - startup should tolerate center boot order.
-            last_error = exc
-            print(f"sensor-agent: desired-state unavailable, retry {attempt}/{retries}: {exc}", flush=True)
-            time.sleep(delay)
-    raise RuntimeError(f"desired-state unavailable after {retries} retries: {last_error}")
-
-
-def start_docker_runtime(
+def start_runtime(
     sensor_id: str,
     base_url: str,
     desired: dict[str, Any],
@@ -108,38 +107,19 @@ def start_docker_runtime(
     runtime.start()
     active_services = runtime.active_services()
     plan = runtime_plan(module_plan(desired), active_services, runtime.errors)
-    send_event(
-        {
-            "event_type": f"sensor.{mode}.started",
-            "timestamp": now_ts(),
-            "sensor_id": sensor_id,
-            "agent_version": AGENT_VERSION,
-            "applied_version": desired.get("version"),
-            "agent_mode": mode,
-            "active_services": active_services,
-            "listener_errors": runtime.errors,
-        }
-    )
     return runtime, active_services, plan, mode
 
 
 def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: float, duration: float = 0) -> None:
     base_url = center_url.rstrip("/")
-    enroll_url = f"{base_url}/api/enroll"
     event_url = f"{base_url}/api/events"
-    while True:
-        delivered, _ = post_json(enroll_url, enroll_event(sensor_id, AGENT_VERSION))
-        if delivered:
-            break
-        print("sensor-agent: enrollment failed, retrying", flush=True)
-        time.sleep(2)
     def send_event(event: dict[str, Any]) -> bool:
         delivered, _ = post_json(event_url, event)
         return delivered
 
-    desired = fetch_desired_with_retry(base_url, sensor_id)
+    desired = sync_with_retry(base_url, sensor_id, sync_payload(sensor_id, AGENT_VERSION))
     signature = desired_signature(desired)
-    runtime, active_services, plan, agent_mode = start_docker_runtime(sensor_id, base_url, desired, send_event, state_dir)
+    runtime, active_services, plan, agent_mode = start_runtime(sensor_id, base_url, desired, send_event, state_dir)
     started_at = now_ts()
     state = {
         "sensor_id": sensor_id,
@@ -159,39 +139,40 @@ def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: floa
 
     try:
         while True:
+            active_services = runtime.active_services()
+            plan = runtime_plan(module_plan(desired), active_services, runtime.errors)
+            status = sync_payload(
+                sensor_id,
+                AGENT_VERSION,
+                desired=desired,
+                plan=plan,
+                agent_mode=agent_mode,
+                active_services=active_services,
+                listener_errors=runtime.errors,
+                started_at=started_at,
+            )
             try:
-                latest_desired = get_json(f"{base_url}/api/sensors/{sensor_id}/desired-state")
+                latest_desired = sync_with_center(base_url, sensor_id, status)
                 latest_signature = desired_signature(latest_desired)
                 if latest_signature != signature:
-                    send_event(
-                        {
-                            "event_type": "sensor.runtime.reconfigure",
-                            "timestamp": now_ts(),
-                            "sensor_id": sensor_id,
-                            "agent_version": AGENT_VERSION,
-                            "old_version": desired.get("version"),
-                            "new_version": latest_desired.get("version"),
-                        }
-                    )
                     runtime.stop()
                     desired = latest_desired
                     signature = latest_signature
-                    runtime, active_services, plan, agent_mode = start_docker_runtime(sensor_id, base_url, desired, send_event, state_dir)
+                    runtime, active_services, plan, agent_mode = start_runtime(sensor_id, base_url, desired, send_event, state_dir)
+                    plan = runtime_plan(module_plan(desired), active_services, runtime.errors)
+                    status = sync_payload(
+                        sensor_id,
+                        AGENT_VERSION,
+                        desired=desired,
+                        plan=plan,
+                        agent_mode=agent_mode,
+                        active_services=active_services,
+                        listener_errors=runtime.errors,
+                        started_at=started_at,
+                    )
             except Exception as exc:  # noqa: BLE001 - keep current runtime while center is unavailable.
-                print(f"sensor-agent: desired-state refresh failed: {exc}", flush=True)
+                print(f"sensor-agent: center sync failed: {exc}", flush=True)
 
-            active_services = runtime.active_services()
-            plan = runtime_plan(module_plan(desired), active_services, runtime.errors)
-            event = status_event(
-                sensor_id,
-                desired,
-                plan,
-                agent_mode=agent_mode,
-                agent_version=AGENT_VERSION,
-                active_services=active_services,
-                listener_errors=runtime.errors,
-            )
-            delivered, response = post_json(event_url, event)
             state.update(
                 {
                     "updated_at": now_ts(),
@@ -203,16 +184,15 @@ def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: floa
                     "uptime_seconds": round(now_ts() - started_at, 1),
                     "listener_errors": runtime.errors,
                     "agent_mode": agent_mode,
-                    "last_status_delivered": delivered,
-                    "last_status_response": response,
+                    "last_sync_payload": status,
                 }
             )
             write_state(state_dir / "applied_state.json", state)
             print(
                 "sensor-agent: status "
                 f"sensor={sensor_id} profile={desired.get('profile')} "
-                f"modules={','.join(event['enabled_modules'])} "
-                f"active_services={len(active_services)} delivered={delivered}",
+                f"modules={','.join(status['status']['enabled_modules'])} "
+                f"active_services={len(active_services)}",
                 flush=True,
             )
             if duration > 0 and now_ts() - started_at >= duration:
@@ -231,7 +211,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--duration", type=float, default=0, help="Runtime duration in seconds; 0 means forever")
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--serve", action="store_true", help="Run real honeypot containers from desired state")
-    parser.add_argument("--no-enroll", action="store_true", help="Skip POST /api/enroll before polling desired state")
     return parser.parse_args()
 
 
@@ -245,7 +224,7 @@ def main() -> None:
         return
     while True:
         try:
-            run_once(args.center, args.sensor_id, args.state_dir, enroll=not args.no_enroll)
+            run_once(args.center, args.sensor_id, args.state_dir)
         except Exception as exc:  # noqa: BLE001 - MVP agent keeps reporting instead of crashing the loop.
             print(f"sensor-agent: loop failed: {exc}", flush=True)
         if args.once:

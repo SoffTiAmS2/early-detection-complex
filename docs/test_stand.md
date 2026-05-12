@@ -17,11 +17,11 @@ sensor1 192.168.0.173  user: banana
 
 1. Центр публикует каталог honeypot-модулей.
 2. Центр хранит desired state сенсора.
-3. Sensor-agent регистрируется через `POST /api/enroll`.
-4. Sensor-agent забирает `GET /api/sensors/sensor1/desired-state`.
+3. Sensor-agent синхронизируется через `POST /api/sensors/sensor1/sync`.
+4. Центр сохраняет status payload и возвращает desired state в том же ответе.
 5. Sensor-agent генерирует Docker Compose из desired state.
 6. Sensor-agent удаляет старые контейнеры комплекса и запускает реальные images.
-7. Sensor-agent отправляет `sensor.status` и suspicious events в `POST /api/events`.
+7. Sensor-agent отправляет raw honeypot events в `POST /api/events`, а runtime status передает через sync.
 8. Центр показывает состояние через `/api/overview` и `/api/sensors`.
 
 Центр сохраняет события в SQLite `var/center/events.sqlite3`: нормализованные поля используются для фильтрации, а исходное событие сохраняется целиком в `raw_event`.
@@ -116,7 +116,7 @@ curl 'http://192.168.0.196:8080/api/events?limit=10' | python3 -m json.tool
 - `sensor1.applied_version` равен текущей версии policy;
 - `agent_mode = docker-runtime`;
 - активны контейнеры Cowrie, OpenCanary, Heralding, Conpot и Dionaea;
-- в events есть `sensor.enroll`, `sensor.docker_runtime.started`, `sensor.status` и raw log events из контейнеров.
+- в events есть `sensor.status` из sync и raw log events из контейнеров.
 
 ## Проверка Менеджера Политики
 

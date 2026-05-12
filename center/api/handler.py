@@ -12,7 +12,6 @@ from center.core.overview import overview_payload, sensors_payload
 from center.core.paths import DEFAULT_CATALOG, DEFAULT_POLICY, DEFAULT_STORE, MAX_EVENT_LIMIT
 from center.core.policy import (
     bump_policy_version,
-    desired_state,
     ensure_desired_module,
     ensure_desired_service,
     find_sensor,
@@ -21,6 +20,7 @@ from center.core.policy import (
     remove_sensor,
     services_by_id,
 )
+from center.core.sensor_sync import sensor_sync
 from center.core.utils import load_json, now_ts, write_json
 from center.persistence.events import filter_events, read_events, write_event
 from center.persistence.install_jobs import get_install_job, list_install_jobs, mark_finished
@@ -29,7 +29,7 @@ from center.web.views import render_dashboard, render_honeypot_page
 
 
 POLICY_SAFE_GET_PATHS = {"", "/", "/health", "/api/modules"}
-JSON_POST_PATHS = {"/api/events", "/api/enroll", "/api/sensors", "/api/install-sensor"}
+JSON_POST_PATHS = {"/api/events", "/api/sensors", "/api/install-sensor"}
 
 
 class ControlPlaneHandler(BaseHTTPRequestHandler):
@@ -136,9 +136,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/api/install-sensor/"):
             self.handle_install_job(parsed.path)
             return
-        if parsed.path.startswith("/api/sensors/") and parsed.path.endswith("/desired-state"):
-            self.handle_desired_state(parsed.path, policy, catalog)
-            return
         if parsed.path == "/api/events":
             self.handle_events_query(parsed.query)
             return
@@ -191,14 +188,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "installation job not found"}, HTTPStatus.NOT_FOUND)
             return
         self.send_json({"job": job})
-
-    def handle_desired_state(self, path: str, policy: dict[str, Any], catalog: dict[str, Any]) -> None:
-        sensor_id = path.split("/")[3]
-        state = desired_state(policy, catalog, sensor_id)
-        if not state:
-            self.send_json({"error": "sensor not found"}, HTTPStatus.NOT_FOUND)
-            return
-        self.send_json(state)
 
     def handle_events_query(self, query: str) -> None:
         params = parse_qs(query)
@@ -318,7 +307,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path.startswith("/api/install-sensor/") and parsed.path.endswith("/cancel"):
             self.handle_install_cancel(parsed.path)
             return
-        if parsed.path not in JSON_POST_PATHS:
+        is_sensor_sync = self.is_sensor_sync_path(parsed.path)
+        if parsed.path not in JSON_POST_PATHS and not is_sensor_sync:
             self.send_not_found()
             return
         payload, ok = self.read_json_object()
@@ -333,7 +323,14 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/sensors":
             self.handle_create_sensor(payload, policy, catalog)
             return
-        self.handle_sensor_event(parsed.path, payload, policy, catalog)
+        if is_sensor_sync:
+            self.handle_sensor_sync(parsed.path, payload, policy, catalog)
+            return
+        self.handle_sensor_event(payload, policy, catalog)
+
+    def is_sensor_sync_path(self, path: str) -> bool:
+        parts = [part for part in path.split("/") if part]
+        return len(parts) == 4 and parts[:2] == ["api", "sensors"] and parts[3] == "sync"
 
     def handle_install_cancel(self, path: str) -> None:
         parts = [part for part in path.split("/") if part]
@@ -396,9 +393,25 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         policy = self.save_policy(policy)
         self.send_json({"status": "saved", "sensor": sensor, "policy": policy}, HTTPStatus.CREATED)
 
-    def handle_sensor_event(
+    def handle_sensor_sync(
         self,
         path: str,
+        payload: dict[str, Any],
+        policy: dict[str, Any],
+        catalog: dict[str, Any],
+    ) -> None:
+        parts = [part for part in path.split("/") if part]
+        sensor_id = unquote(parts[2])
+        errors = policy_errors(policy, catalog)
+        if errors:
+            self.send_json({"status": "invalid_policy", "errors": errors}, HTTPStatus.CONFLICT)
+            return
+        event, response = sensor_sync(policy, catalog, sensor_id, payload)
+        write_event(self.store_path, event)
+        self.send_json(response, HTTPStatus.ACCEPTED)
+
+    def handle_sensor_event(
+        self,
         payload: dict[str, Any],
         policy: dict[str, Any],
         catalog: dict[str, Any],
@@ -407,19 +420,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if errors:
             self.send_json({"status": "invalid_policy", "errors": errors}, HTTPStatus.CONFLICT)
             return
-        event_type = "sensor.enroll" if path == "/api/enroll" else payload.get("event_type", "sensor.event")
-        event = {**payload, "event_type": event_type}
+        event = {**payload, "event_type": payload.get("event_type", "sensor.event")}
         write_event(self.store_path, event)
-        response: dict[str, Any] = {"status": "accepted"}
-        if path == "/api/enroll":
-            sensor_id = str(payload.get("sensor_id") or payload.get("sensor") or "")
-            state = desired_state(policy, catalog, sensor_id) if sensor_id else None
-            response["registered"] = bool(state)
-            if state:
-                response["desired_state"] = state
-            else:
-                response["warning"] = "sensor is not present in policy"
-        self.send_json(response, HTTPStatus.ACCEPTED)
+        self.send_json({"status": "accepted"}, HTTPStatus.ACCEPTED)
 
     def log_message(self, fmt: str, *args: Any) -> None:
         print(f"center: {self.address_string()} - {fmt % args}")

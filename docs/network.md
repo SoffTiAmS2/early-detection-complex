@@ -11,8 +11,7 @@ TCP 8080
 Входящий трафик на центр:
 
 - браузер -> `GET /`, `/honeypots/...`, `/api/overview`, `/api/policy`, `/api/sensors`;
-- сенсор -> `POST /api/enroll`;
-- сенсор -> `GET /api/sensors/<sensor_id>/desired-state`;
+- сенсор -> `POST /api/sensors/<sensor_id>/sync`;
 - сенсор -> `POST /api/events`.
 
 Исходящий трафик из центра во время установки сенсора:
@@ -58,7 +57,7 @@ Armbian/Debian-based Linux + SSH + пользователь с sudo или root
 
 Исходящий трафик с сенсора:
 
-- сенсор -> центр `TCP 8080` для регистрации, получения desired-state и отправки событий;
+- сенсор -> центр `TCP 8080` для sync и отправки raw events;
 - сенсор -> Docker registry при скачивании honeypot-образов.
 
 ## Авторизация

@@ -21,20 +21,6 @@ def host_facts() -> dict[str, Any]:
     }
 
 
-def enroll_event(sensor_id: str, agent_version: str) -> dict[str, Any]:
-    facts = host_facts()
-    return {
-        "event_type": "sensor.enroll",
-        "timestamp": now_ts(),
-        "sensor_id": sensor_id,
-        "status": "enrolling",
-        "agent_version": agent_version,
-        "node_hostname": facts["hostname"],
-        "architecture": facts["architecture"],
-        "facts": facts,
-    }
-
-
 def module_plan(desired: dict[str, Any]) -> list[dict[str, Any]]:
     plan = []
     for module in desired.get("modules", []):
@@ -140,15 +126,18 @@ def desired_signature(desired: dict[str, Any]) -> str:
     return json.dumps(desired, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-def status_event(
+def sync_payload(
     sensor_id: str,
-    desired: dict[str, Any],
-    plan: list[dict[str, Any]],
-    agent_mode: str,
     agent_version: str,
+    desired: dict[str, Any] | None = None,
+    plan: list[dict[str, Any]] | None = None,
+    agent_mode: str = "starting",
     active_services: list[dict[str, Any]] | None = None,
     listener_errors: list[dict[str, Any]] | None = None,
+    started_at: float | None = None,
 ) -> dict[str, Any]:
+    desired = desired or {}
+    plan = plan or []
     enabled_modules = [module for module in plan if module["enabled"]]
     planned_ports = [
         service["host_port"]
@@ -156,21 +145,24 @@ def status_event(
         for service in module["services"]
         if service.get("host_port") is not None
     ]
-    return {
-        "event_type": "sensor.status",
-        "timestamp": now_ts(),
-        "sensor_id": sensor_id,
-        "status": "online",
-        "agent_mode": agent_mode,
-        "agent_version": agent_version,
+    status: dict[str, Any] = {
+        "state": "online",
+        "mode": agent_mode,
         "applied_version": desired.get("version"),
         "profile": desired.get("profile"),
-        "persona": desired.get("persona", {}),
         "host": desired.get("host"),
-        "architecture": desired.get("architecture"),
         "enabled_modules": [module["id"] for module in enabled_modules],
         "planned_ports": planned_ports,
+        "modules": plan,
         "active_services": active_services or [],
         "listener_errors": listener_errors or [],
-        "modules": plan,
+    }
+    if started_at is not None:
+        status["uptime_seconds"] = round(now_ts() - started_at, 1)
+    return {
+        "timestamp": now_ts(),
+        "sensor_id": sensor_id,
+        "agent_version": agent_version,
+        "facts": host_facts(),
+        "status": status,
     }
