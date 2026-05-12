@@ -82,10 +82,7 @@ class DockerRuntime:
                 continue
             started += 1
         if started == 0:
-            error = "no honeypot containers started"
-            if self.errors:
-                error = self.errors[-1].get("error", error)
-            raise DockerRuntimeError(error)
+            self.errors.append({"stage": "runtime", "error": "no honeypot containers started"})
         self.start_log_collectors()
 
     def stop(self) -> None:

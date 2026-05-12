@@ -1,6 +1,7 @@
 ARG COWRIE_BASE_IMAGE=arm32v7/alpine:3.19
 ARG COWRIE_REF=v2.9.18
 FROM ${COWRIE_BASE_IMAGE}
+ARG COWRIE_REF=v2.9.18
 
 USER root
 RUN apk add --no-cache \
