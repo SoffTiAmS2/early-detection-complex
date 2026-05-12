@@ -15,10 +15,6 @@
               {
                 "host_port": 2223,
                 "id": "telnet"
-              },
-              {
-                "host_port": 9000,
-                "id": "metrics"
               }
             ],
             "settings": {

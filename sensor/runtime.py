@@ -11,6 +11,7 @@ import json
 import shutil
 import subprocess
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -397,6 +398,51 @@ class DockerRuntime:
             thread = threading.Thread(target=self.collect_container_logs, args=(container_id, module_id), daemon=True)
             thread.start()
             self.log_threads.append(thread)
+        for module in self.compose_modules():
+            module_id = str(module.get("id"))
+            if module_id == "cowrie":
+                path = self.runtime_dir / "cowrie" / "logs" / "cowrie.json"
+                thread = threading.Thread(target=self.collect_json_file_logs, args=(path, module_id), daemon=True)
+                thread.start()
+                self.log_threads.append(thread)
+
+    def collect_json_file_logs(self, path: Path, module_id: str) -> None:
+        position = 0
+        while not self._stop_logs.is_set():
+            if not path.exists():
+                time.sleep(1)
+                continue
+            if path.stat().st_size < position:
+                position = 0
+            with path.open("r", encoding="utf-8", errors="replace") as handle:
+                handle.seek(position)
+                while not self._stop_logs.is_set():
+                    line = handle.readline()
+                    if not line:
+                        position = handle.tell()
+                        time.sleep(1)
+                        continue
+                    raw_line = line.rstrip("\n")
+                    if not raw_line:
+                        continue
+                    try:
+                        parsed: Any = json.loads(raw_line)
+                    except json.JSONDecodeError:
+                        parsed = raw_line
+                    event: dict[str, Any] = {
+                        "event_type": self.raw_event_type(module_id, parsed),
+                        "timestamp": now_ts(),
+                        "sensor_id": self.sensor_id,
+                        "module": module_id,
+                        "service": self.raw_service(module_id, parsed),
+                        "severity": "low",
+                        "runtime": RUNTIME_VERSION,
+                        "raw_sample": raw_line[:2000],
+                        "honeypot_raw_event": parsed,
+                        "log_hint": str(path),
+                    }
+                    self.copy_network_fields(event, parsed)
+                    self.sender(event)
 
     def collect_container_logs(self, container_id: str, module_id: str) -> None:
         process = subprocess.Popen(

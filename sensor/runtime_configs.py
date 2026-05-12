@@ -67,12 +67,10 @@ def write_cowrie_config(runtime_dir: Path, desired: dict[str, Any], sensor_id: s
         f"enabled = {'yes' if 'telnet' in selected_service_ids(module) else 'no'}",
         "listen_endpoints = tcp:2223:interface=0.0.0.0",
         "",
-        "[output_json]",
+        "[output_jsonlog]",
         "enabled = true",
-        "",
-        "[output_prometheus]",
-        "enabled = true",
-        "port = 9000",
+        "logfile = /home/cowrie/cowrie/var/log/cowrie/cowrie.json",
+        "epoch_timestamp = false",
         "",
     ]
     raw = str(settings.get("raw_cowrie_cfg") or "").strip()
