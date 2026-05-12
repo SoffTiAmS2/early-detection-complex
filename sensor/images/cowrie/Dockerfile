@@ -42,6 +42,7 @@ RUN git clone --depth 1 --branch "${COWRIE_REF}" https://github.com/cowrie/cowri
     && . cowrie-env/bin/activate \
     && pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir --no-deps -e . tftpy==0.8.2 \
+    && ln -sf /usr/bin/twistd3 cowrie-env/bin/twistd \
     && cp etc/cowrie.cfg.dist etc/cowrie.cfg \
     && mkdir -p var/log/cowrie var/lib/cowrie/tty var/lib/cowrie/downloads var/lib/cowrie/data
 
