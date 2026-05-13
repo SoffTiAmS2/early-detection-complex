@@ -7,12 +7,16 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        build-essential \
+       cargo \
+       rustc \
+       pkg-config \
        libssl-dev \
        libffi-dev \
        libpcap-dev \
        ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir opencanary==0.9.7
+RUN pip install --no-cache-dir --upgrade pip "setuptools<81" wheel setuptools-rust \
+    && pip install --no-cache-dir --no-build-isolation opencanary==0.9.7
 
 CMD ["opencanaryd", "--dev", "--config=/root/.opencanary.conf"]

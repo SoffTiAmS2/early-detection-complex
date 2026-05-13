@@ -145,6 +145,7 @@
     <nav class="toplinks">
       <a class="button secondary" id="grafanaLink" href="#" target="_blank" rel="noreferrer">Grafana</a>
       <a class="button secondary" id="prometheusLink" href="#" target="_blank" rel="noreferrer">Prometheus</a>
+      <a class="button secondary" href="/mask">Маскировка</a>
       <a class="button secondary" href="/db">База</a>
       <button class="secondary" id="refreshBtn">Обновить</button>
     </nav>
@@ -186,6 +187,22 @@
     <section class="panel" style="margin-top:14px">
       <h2>Последние события</h2>
       <div id="events"></div>
+    </section>
+    <section class="panel" style="margin-top:14px">
+      <h2>Логи и конфиги (сенсор)</h2>
+      <table>
+        <thead>
+          <tr><th>Модуль</th><th>Файл логов на сенсоре</th><th>Файл конфига на сенсоре</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>cowrie</td><td><code>/var/lib/edc-sensor/docker-runtime/cowrie/logs/cowrie.json</code></td><td><code>/var/lib/edc-sensor/docker-runtime/cowrie/config/cowrie.cfg</code></td></tr>
+          <tr><td>opencanary</td><td><code>/var/lib/edc-sensor/docker-runtime/opencanary/logs/opencanary.log</code></td><td><code>/var/lib/edc-sensor/docker-runtime/opencanary/config/opencanary.conf</code></td></tr>
+          <tr><td>heralding</td><td><code>/var/lib/edc-sensor/docker-runtime/heralding/logs/log_session.json</code><br><code>/var/lib/edc-sensor/docker-runtime/heralding/logs/heralding.log</code></td><td><code>/var/lib/edc-sensor/docker-runtime/heralding/config/heralding.yml</code></td></tr>
+          <tr><td>conpot</td><td><code>/var/lib/edc-sensor/docker-runtime/conpot/logs/conpot.json</code></td><td><code>/var/lib/edc-sensor/docker-runtime/conpot/config/conpot.cfg</code></td></tr>
+          <tr><td>dionaea</td><td><code>/var/lib/edc-sensor/docker-runtime/dionaea/logs/dionaea.json</code></td><td><code>/var/lib/edc-sensor/docker-runtime/dionaea/config/*.yml</code></td></tr>
+        </tbody>
+      </table>
+      <div class="muted" style="margin-top:8px">Центр читает события, которые sensor-agent отправляет из этих файлов.</div>
     </section>
   </main>
   <script>

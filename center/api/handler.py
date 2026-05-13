@@ -24,11 +24,11 @@ from center.core.profiles import apply_profile, available_profiles
 from center.core.sensor_sync import sensor_sync
 from center.core.utils import load_json, now_ts, write_json
 from center.persistence.events import database_stats, filter_events, purge_all_events, purge_sensor_events, read_events, write_event
-from center.web.views import render_admin_page, render_database_page
+from center.web.views import render_admin_page, render_database_page, render_mask_page
 
 
-POLICY_SAFE_GET_PATHS = {"", "/", "/settings", "/db", "/health", "/metrics", "/api/modules", "/api/profiles", "/api/db/stats"}
-JSON_POST_PATHS = {"/api/events", "/api/sensors"}
+POLICY_SAFE_GET_PATHS = {"", "/", "/settings", "/db", "/mask", "/health", "/metrics", "/api/modules", "/api/profiles", "/api/db/stats"}
+JSON_POST_PATHS = {"/api/events", "/api/sensors", "/api/mask"}
 
 
 class ControlPlaneHandler(BaseHTTPRequestHandler):
@@ -117,6 +117,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path == "/db":
             self.send_html(render_database_page(policy))
             return
+        if parsed.path == "/mask":
+            self.send_html(render_mask_page(policy))
+            return
         if parsed.path == "/health":
             self.handle_health(policy, errors)
             return
@@ -143,6 +146,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/db/stats":
             self.send_json(database_stats(self.store_path))
+            return
+        if parsed.path == "/api/mask":
+            self.send_json({"policy": policy, "errors": errors})
             return
         self.send_not_found()
 
@@ -322,6 +328,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             deleted = purge_all_events(self.store_path)
             self.send_json({"status": "purged", "deleted_events": deleted, "stats": database_stats(self.store_path)})
             return
+        if parsed.path == "/api/mask":
+            self.handle_mask_update(payload, policy, catalog)
+            return
         if self.is_apply_profile_path(parsed.path):
             self.handle_apply_profile(parsed.path, payload, policy, catalog)
             return
@@ -433,6 +442,54 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         event = {**payload, "event_type": payload.get("event_type", "sensor.event")}
         write_event(self.store_path, event)
         self.send_json({"status": "accepted"}, HTTPStatus.ACCEPTED)
+
+    def handle_mask_update(self, payload: dict[str, Any], policy: dict[str, Any], catalog: dict[str, Any]) -> None:
+        sensor_id = str(payload.get("sensor_id") or "").strip()
+        if not sensor_id:
+            self.send_json({"error": "sensor_id is required"}, HTTPStatus.BAD_REQUEST)
+            return
+        sensor = find_sensor(policy, sensor_id)
+        if not sensor:
+            self.send_json({"error": "sensor not found"}, HTTPStatus.NOT_FOUND)
+            return
+        desired = sensor.setdefault("desired_state", {})
+        modules = desired.setdefault("modules", [])
+        module_index = {str(m.get("id")): m for m in modules if isinstance(m, dict)}
+
+        def module_settings(mid: str) -> dict[str, Any]:
+            module = module_index.get(mid)
+            if not module:
+                module = {"id": mid, "enabled": True, "services": [], "settings": {}}
+                modules.append(module)
+                module_index[mid] = module
+            settings = module.setdefault("settings", {})
+            return settings if isinstance(settings, dict) else {}
+
+        cowrie = payload.get("cowrie") if isinstance(payload.get("cowrie"), dict) else {}
+        opencanary = payload.get("opencanary") if isinstance(payload.get("opencanary"), dict) else {}
+
+        cowrie_settings = module_settings("cowrie")
+        for key in ("hostname", "ssh_version", "userdb_entries"):
+            if key in cowrie:
+                cowrie_settings[key] = str(cowrie.get(key) or "")
+        if "fake_http_html" in cowrie:
+            cowrie_settings["fake_http_html"] = str(cowrie.get("fake_http_html") or "")
+        if "fake_ftp_files" in cowrie:
+            cowrie_settings["fake_ftp_files"] = str(cowrie.get("fake_ftp_files") or "")
+
+        opencanary_settings = module_settings("opencanary")
+        for key in ("http.banner", "ftp.banner", "mysql.banner", "ssh.version", "telnet.banner", "http.skin"):
+            if key in opencanary:
+                opencanary_settings[key] = str(opencanary.get(key) or "")
+        if "raw_opencanary_conf" in opencanary:
+            opencanary_settings["raw_opencanary_conf"] = str(opencanary.get("raw_opencanary_conf") or "")
+
+        errors = policy_errors(policy, catalog)
+        if errors:
+            self.send_json({"status": "invalid_policy", "errors": errors}, HTTPStatus.BAD_REQUEST)
+            return
+        policy = self.save_policy(policy)
+        self.send_json({"status": "saved", "policy": policy, "sensor_id": sensor_id})
 
     def log_message(self, fmt: str, *args: Any) -> None:
         print(f"center: {self.address_string()} - {fmt % args}")

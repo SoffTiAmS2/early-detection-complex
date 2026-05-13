@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{SITE_NAME}} · маскировка</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --text: #17202a;
+      --muted: #627084;
+      --line: #d8dee9;
+      --brand: #0f766e;
+      --brand-dark: #115e59;
+      --ok: #147a3d;
+      --bad: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      padding: 14px 20px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    h1 { margin: 0; font-size: 20px; font-weight: 760; }
+    h2 { margin: 0 0 10px; font-size: 16px; }
+    main { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    label { color: var(--muted); font-size: 13px; }
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 9px;
+      font: inherit;
+      background: #fff;
+      color: var(--text);
+    }
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+    .buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+    button, .button {
+      border: 1px solid var(--brand);
+      background: var(--brand);
+      color: white;
+      border-radius: 6px;
+      padding: 8px 11px;
+      font: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+    }
+    button:hover, .button:hover { background: var(--brand-dark); }
+    .button.secondary, button.secondary {
+      background: #fff;
+      color: var(--text);
+      border-color: var(--line);
+    }
+    .msg { min-height: 22px; margin-top: 8px; color: var(--muted); }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    .hint { color: var(--muted); font-size: 12px; }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+      header { padding: 12px 14px; }
+      main { padding: 14px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>EDC · маскировка</h1>
+      <div class="hint">{{SITE_NAME}}</div>
+    </div>
+    <div class="buttons">
+      <a class="button secondary" href="/">Настройки</a>
+      <a class="button secondary" href="/db">База</a>
+    </div>
+  </header>
+  <main>
+    <section class="panel">
+      <div class="row">
+        <label for="sensor">Сенсор</label>
+        <select id="sensor"></select>
+      </div>
+      <div class="buttons">
+        <button id="save">Сохранить маскировку</button>
+        <button id="reload" class="secondary">Обновить</button>
+      </div>
+      <div class="msg" id="msg"></div>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <h2>Cowrie</h2>
+        <div class="row"><label>Hostname<input id="c_hostname" placeholder="filesrv01"></label></div>
+        <div class="row"><label>SSH banner / version<input id="c_ssh_version" placeholder="SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.5"></label></div>
+        <div class="row"><label>userdb entries<textarea id="c_userdb_entries" placeholder="root:x:123456"></textarea></label></div>
+        <div class="row"><label>Fake HTTP HTML<textarea id="c_fake_http_html" placeholder="<html>...</html>"></textarea></label></div>
+        <div class="row"><label>Fake FTP files (name,size per line)<textarea id="c_fake_ftp_files" placeholder="backup.zip,204800&#10;camera.jpg,51200"></textarea></label></div>
+      </div>
+
+      <div class="panel">
+        <h2>OpenCanary</h2>
+        <div class="row"><label>HTTP banner<input id="o_http_banner" placeholder="Apache/2.4.52 (Ubuntu)"></label></div>
+        <div class="row"><label>FTP banner<input id="o_ftp_banner" placeholder="vsFTPd 3.0.3"></label></div>
+        <div class="row"><label>MySQL banner<input id="o_mysql_banner" placeholder="5.7.42-0ubuntu0.18.04.1"></label></div>
+        <div class="row"><label>SSH version<input id="o_ssh_version" placeholder="SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.5"></label></div>
+        <div class="row"><label>Telnet banner<input id="o_telnet_banner" placeholder="Debian GNU/Linux 11"></label></div>
+        <div class="row"><label>HTTP skin<input id="o_http_skin" placeholder="basicLogin"></label></div>
+        <div class="row"><label>Raw opencanary.conf (json)<textarea id="o_raw_conf" placeholder="{ }"></textarea></label></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const state = { policy: null, selected: "" };
+    const $ = (id) => document.getElementById(id);
+
+    function setMsg(text, ok = false) {
+      const el = $("msg");
+      el.textContent = text || "";
+      el.className = "msg " + (ok ? "ok" : "bad");
+      if (!text) el.className = "msg";
+    }
+
+    function byId(sensorId) {
+      const sensors = state.policy?.sensors || [];
+      return sensors.find((sensor) => sensor.id === sensorId) || null;
+    }
+
+    function modSettings(sensor, modId) {
+      const modules = sensor?.desired_state?.modules || [];
+      const mod = modules.find((item) => item && item.id === modId) || {};
+      return (mod.settings && typeof mod.settings === "object") ? mod.settings : {};
+    }
+
+    function fillForm() {
+      const sensor = byId(state.selected);
+      const cowrie = modSettings(sensor, "cowrie");
+      const opencanary = modSettings(sensor, "opencanary");
+
+      $("c_hostname").value = cowrie.hostname || "";
+      $("c_ssh_version").value = cowrie.ssh_version || "";
+      $("c_userdb_entries").value = cowrie.userdb_entries || "";
+      $("c_fake_http_html").value = cowrie.fake_http_html || "";
+      $("c_fake_ftp_files").value = cowrie.fake_ftp_files || "";
+
+      $("o_http_banner").value = opencanary["http.banner"] || "";
+      $("o_ftp_banner").value = opencanary["ftp.banner"] || "";
+      $("o_mysql_banner").value = opencanary["mysql.banner"] || "";
+      $("o_ssh_version").value = opencanary["ssh.version"] || "";
+      $("o_telnet_banner").value = opencanary["telnet.banner"] || "";
+      $("o_http_skin").value = opencanary["http.skin"] || "";
+      $("o_raw_conf").value = opencanary.raw_opencanary_conf || "";
+    }
+
+    function fillSensors() {
+      const sensors = state.policy?.sensors || [];
+      const sel = $("sensor");
+      sel.innerHTML = sensors.map((sensor) => `<option value="${sensor.id}">${sensor.id} (${sensor.host || "-"})</option>`).join("");
+      if (!state.selected && sensors.length) state.selected = sensors[0].id;
+      sel.value = state.selected;
+      fillForm();
+    }
+
+    async function loadMask() {
+      setMsg("");
+      const response = await fetch("/api/mask", { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || response.statusText);
+      state.policy = payload.policy || {};
+      const sensors = state.policy.sensors || [];
+      if (sensors.length && !sensors.some((sensor) => sensor.id === state.selected)) {
+        state.selected = sensors[0].id;
+      }
+      fillSensors();
+    }
+
+    async function saveMask() {
+      const payload = {
+        sensor_id: state.selected,
+        cowrie: {
+          hostname: $("c_hostname").value,
+          ssh_version: $("c_ssh_version").value,
+          userdb_entries: $("c_userdb_entries").value,
+          fake_http_html: $("c_fake_http_html").value,
+          fake_ftp_files: $("c_fake_ftp_files").value
+        },
+        opencanary: {
+          "http.banner": $("o_http_banner").value,
+          "ftp.banner": $("o_ftp_banner").value,
+          "mysql.banner": $("o_mysql_banner").value,
+          "ssh.version": $("o_ssh_version").value,
+          "telnet.banner": $("o_telnet_banner").value,
+          "http.skin": $("o_http_skin").value,
+          raw_opencanary_conf: $("o_raw_conf").value
+        }
+      };
+      const response = await fetch("/api/mask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        const details = result.errors ? `: ${result.errors.join("; ")}` : "";
+        throw new Error((result.error || result.status || "save failed") + details);
+      }
+      setMsg("Сохранено", true);
+      await loadMask();
+    }
+
+    $("sensor").addEventListener("change", (event) => {
+      state.selected = event.target.value || "";
+      fillForm();
+    });
+    $("reload").addEventListener("click", async () => {
+      try { await loadMask(); setMsg("Обновлено", true); } catch (error) { setMsg(error.message || String(error)); }
+    });
+    $("save").addEventListener("click", async () => {
+      try { await saveMask(); } catch (error) { setMsg(error.message || String(error)); }
+    });
+
+    loadMask().catch((error) => setMsg(error.message || String(error)));
+  </script>
+</body>
+</html>

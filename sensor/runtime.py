@@ -17,7 +17,6 @@ from typing import Any
 
 from runtime_configs import prepare_module_dirs
 from runtime_helpers import (
-    MODULE_LOG_HINTS,
     PROJECT_PREFIX,
     RUNTIME_VERSION,
     SUPPORTED_IMAGES,
@@ -32,7 +31,7 @@ from runtime_helpers import (
     selected_services,
     yaml_scalar,
 )
-from runtime_status import container_rows, inspect_labels
+from runtime_status import container_rows
 
 
 class DockerRuntimeError(RuntimeError):
@@ -61,6 +60,7 @@ class DockerRuntime:
         self.log_processes: list[subprocess.Popen[str]] = []
         self._stop_logs = threading.Event()
         self._compose_modules: list[dict[str, Any]] | None = None
+        self._log_mode = "files"
 
     def start(self) -> None:
         self.ensure_docker()
@@ -389,22 +389,41 @@ class DockerRuntime:
             subprocess.run(["docker", "rm", "-f", *ids], text=True, capture_output=True, check=False)
 
     def start_log_collectors(self) -> None:
-        for row in container_rows(self.sensor_id):
-            container_id = row.get("ID")
-            labels = inspect_labels(container_id)
-            module_id = labels.get("edc.module", "unknown")
-            thread = threading.Thread(target=self.collect_container_logs, args=(container_id, module_id), daemon=True)
-            thread.start()
-            self.log_threads.append(thread)
+        # Default mode: collect events from mounted files in docker-runtime/*/logs.
+        # This is deterministic and easier to debug than parsing docker stdout.
         for module in self.compose_modules():
             module_id = str(module.get("id"))
-            if module_id == "cowrie":
-                path = self.runtime_dir / "cowrie" / "logs" / "cowrie.json"
-                thread = threading.Thread(target=self.collect_json_file_logs, args=(path, module_id), daemon=True)
+            for path, parse_as_json in self.module_log_sources(module_id):
+                thread = threading.Thread(
+                    target=self.collect_file_logs,
+                    args=(path, module_id, parse_as_json),
+                    daemon=True,
+                )
                 thread.start()
                 self.log_threads.append(thread)
 
-    def collect_json_file_logs(self, path: Path, module_id: str) -> None:
+    def module_log_sources(self, module_id: str) -> list[tuple[Path, bool]]:
+        base = self.runtime_dir / module_id / "logs"
+        if module_id == "cowrie":
+            return [(base / "cowrie.json", True)]
+        if module_id == "opencanary":
+            return [(base / "opencanary.log", True)]
+        if module_id == "heralding":
+            return [
+                (base / "log_session.json", True),
+                (base / "heralding.log", False),
+                (base / "log_auth.csv", False),
+            ]
+        if module_id == "conpot":
+            return [(base / "conpot.json", True), (base / "conpot.log", False)]
+        if module_id == "dionaea":
+            return [
+                (base / "dionaea.json", True),
+                (base / "dionaea.log", False),
+            ]
+        return []
+
+    def collect_file_logs(self, path: Path, module_id: str, parse_as_json: bool) -> None:
         position = 0
         while not self._stop_logs.is_set():
             if not path.exists():
@@ -423,10 +442,14 @@ class DockerRuntime:
                     raw_line = line.rstrip("\n")
                     if not raw_line:
                         continue
-                    try:
-                        parsed: Any = json.loads(raw_line)
-                    except json.JSONDecodeError:
-                        parsed = raw_line
+                    parsed: Any = None
+                    if parse_as_json:
+                        try:
+                            parsed = json.loads(raw_line)
+                        except json.JSONDecodeError:
+                            parsed = None
+                    else:
+                        parsed = None
                     event: dict[str, Any] = {
                         "event_type": self.raw_event_type(module_id, parsed),
                         "timestamp": now_ts(),
@@ -436,48 +459,11 @@ class DockerRuntime:
                         "severity": "low",
                         "runtime": RUNTIME_VERSION,
                         "raw_sample": raw_line[:2000],
-                        "honeypot_raw_event": parsed,
+                        "honeypot_raw_event": parsed if parsed is not None else raw_line,
                         "log_hint": str(path),
                     }
                     self.copy_network_fields(event, parsed)
                     self.sender(event)
-
-    def collect_container_logs(self, container_id: str, module_id: str) -> None:
-        process = subprocess.Popen(
-            ["docker", "logs", "--follow", "--since", "0s", container_id],
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
-        self.log_processes.append(process)
-        if not process.stdout:
-            return
-        for line in process.stdout:
-            if self._stop_logs.is_set():
-                break
-            raw_line = line.rstrip("\n")
-            if not raw_line:
-                continue
-            parsed: Any = None
-            try:
-                parsed = json.loads(raw_line)
-            except json.JSONDecodeError:
-                parsed = None
-            event: dict[str, Any] = {
-                "event_type": self.raw_event_type(module_id, parsed),
-                "timestamp": now_ts(),
-                "sensor_id": self.sensor_id,
-                "module": module_id,
-                "service": self.raw_service(module_id, parsed),
-                "severity": "low",
-                "runtime": RUNTIME_VERSION,
-                "container_id": container_id,
-                "raw_sample": raw_line[:2000],
-                "honeypot_raw_event": parsed if parsed is not None else raw_line,
-                "log_hint": MODULE_LOG_HINTS.get(module_id, "container stdout"),
-            }
-            self.copy_network_fields(event, parsed)
-            self.sender(event)
 
     def raw_event_type(self, module_id: str, parsed: Any) -> str:
         if isinstance(parsed, dict):
