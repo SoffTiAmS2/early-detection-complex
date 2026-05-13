@@ -21,7 +21,7 @@ SUPPORTED_IMAGES = {
 UPSTREAM_IMAGES = {
     "cowrie": "arm32v7/debian:bookworm-slim",
     "opencanary": "thinkst/opencanary:latest",
-    "dionaea": "dinotools/dionaea:latest",
+    "dionaea": "ghcr.io/telekom-security/dionaea:24.04.1",
     "conpot": "honeynet/conpot:latest",
     "heralding": "dtagdevsec/heralding:24.04.1",
 }
@@ -51,7 +51,7 @@ HERALDING_CAPABILITIES = {
     "rdp": 3389,
 }
 ARM32_ARCHES = {"armv7l", "armv6l", "armhf", "armv7"}
-ARM32_UNSUPPORTED_MODULES: set[str] = {"opencanary", "dionaea", "conpot", "heralding"}
+ARM32_UNSUPPORTED_MODULES: set[str] = set()
 
 
 def now_ts() -> float:
@@ -114,12 +114,7 @@ def sensor_architecture() -> str:
 
 
 def module_supported_on_arch(module_id: str, architecture: str | None = None) -> tuple[bool, str]:
-    arch = architecture or sensor_architecture()
-    if arch in ARM32_ARCHES and module_id in ARM32_UNSUPPORTED_MODULES and os.environ.get("EDC_ENABLE_UNTESTED_ARM_IMAGES") != "1":
-        return (
-            False,
-            f"{module_id} отключён на 32-bit ARM ({arch}): upstream image не даёт стабильный linux/arm/v7 runtime "
-            "или стартует с exec format error. Задайте EDC_ENABLE_UNTESTED_ARM_IMAGES=1 только если вручную указали "
-            "проверенный ARMv7-совместимый образ.",
-        )
+    _ = architecture or sensor_architecture()
+    if module_id in ARM32_UNSUPPORTED_MODULES:
+        return False, f"{module_id} disabled by runtime architecture policy"
     return True, ""

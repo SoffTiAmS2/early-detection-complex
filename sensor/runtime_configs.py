@@ -185,7 +185,7 @@ def write_conpot_config(runtime_dir: Path, desired: dict[str, Any], sensor_id: s
         "",
         "[virtual_file_system]",
         "data_fs_url = osfs:///data",
-        "fs_url = tar:///home/conpot/.local/lib/python3.6/site-packages/conpot-0.6.0-py3.6.egg/conpot/data.tar",
+        "fs_url = tar:///usr/local/lib/python3.8/site-packages/conpot/data.tar",
         "",
         "[session]",
         "timeout = 30",

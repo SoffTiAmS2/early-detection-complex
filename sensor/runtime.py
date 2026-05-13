@@ -318,9 +318,7 @@ class DockerRuntime:
             return yaml_scalar("heralding -c /etc/heralding/heralding.yml -l /logs/heralding.log")
         if module_id == "conpot":
             template = module.get("settings", {}).get("template", "default")
-            return yaml_scalar(
-                f"/home/conpot/.local/bin/conpot --template {template} --config /etc/conpot/conpot.cfg --logfile /logs/conpot.log --temp_dir /tmp"
-            )
+            return yaml_scalar(f"conpot --template {template} --config /etc/conpot/conpot.cfg --logfile /logs/conpot.log --temp_dir /tmp")
         return ""
 
     def compose_working_dir(self, module: dict[str, Any]) -> str:
