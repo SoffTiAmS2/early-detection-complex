@@ -29,13 +29,13 @@ def load_auth_config() -> AuthConfig:
 
 def is_admin_route(method: str, path: str) -> bool:
     """Routes that can reveal management data or change center state."""
-    if path in {"", "/", "/settings", "/api/overview", "/api/policy", "/api/sensors"}:
+    if path in {"", "/", "/settings", "/api/overview", "/api/policy", "/api/sensors", "/api/profiles"}:
         return True
     if method == "GET" and path == "/api/events":
         return True
     if method in {"PUT", "PATCH", "DELETE"}:
         return True
-    if method == "POST" and path == "/api/sensors":
+    if method == "POST" and (path == "/api/sensors" or path.startswith("/api/sensors/")):
         return True
     return False
 

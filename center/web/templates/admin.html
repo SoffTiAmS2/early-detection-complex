@@ -92,7 +92,7 @@
     }
     .metric .label { color: var(--muted); font-size: 12px; text-transform: uppercase; }
     .metric .value { font-size: 28px; font-weight: 780; margin-top: 2px; }
-    .toolbar { display: flex; gap: 10px; align-items: end; margin-bottom: 12px; }
+    .toolbar { display: flex; gap: 10px; align-items: end; margin-bottom: 12px; flex-wrap: wrap; }
     .toolbar label { flex: 1; }
     .cards { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 12px; }
     .module {
@@ -121,7 +121,7 @@
     .event:first-child { border-top: 0; }
     .event-head { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .sample { margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 90px; overflow: auto; color: var(--muted); }
-    .add-sensor { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 12px; }
+    .add-sensor { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 12px; }
     .message { min-height: 22px; margin: 8px 0 0; color: var(--muted); }
     @media (max-width: 1050px) {
       .layout, .cards { grid-template-columns: 1fr; }
@@ -157,12 +157,15 @@
           <label><span class="muted">ID</span><input id="newSensorId" placeholder="sensor-2"></label>
           <label><span class="muted">Host</span><input id="newSensorHost" placeholder="192.168.0.240"></label>
           <label><span class="muted">Clone from</span><input id="cloneFrom" placeholder="banana-pi-pro-1"></label>
+          <label><span class="muted">Профиль</span><select id="newSensorProfile"></select></label>
           <button id="addSensorBtn">Добавить</button>
         </div>
       </div>
       <div class="panel">
         <div class="toolbar">
           <label><span class="muted">Активный сенсор</span><select id="sensorSelect"></select></label>
+          <label><span class="muted">Профиль сенсора</span><select id="sensorProfileSelect"></select></label>
+          <button id="applyProfileBtn">Применить профиль</button>
           <button class="danger" id="deleteSensorBtn">Удалить сенсор</button>
         </div>
         <div class="message" id="message"></div>
@@ -175,7 +178,7 @@
     </section>
   </main>
   <script>
-    const state = { policy: null, catalog: null, overview: null, selectedSensor: new URLSearchParams(location.search).get('sensor_id') || '' };
+    const state = { policy: null, catalog: null, overview: null, profiles: [], selectedSensor: new URLSearchParams(location.search).get('sensor_id') || '' };
     const $ = (id) => document.getElementById(id);
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
     const age = (ts) => ts ? Math.max(0, Math.round(Date.now() / 1000 - Number(ts))) + ' сек. назад' : 'нет данных';
@@ -250,6 +253,17 @@
       const sensors = state.policy?.sensors || [];
       if (!state.selectedSensor && sensors[0]) state.selectedSensor = sensors[0].id;
       $('sensorSelect').innerHTML = sensors.map((sensor) => `<option value="${esc(sensor.id)}" ${sensor.id === state.selectedSensor ? 'selected' : ''}>${esc(sensor.id)} · ${esc(sensor.host || '')}</option>`).join('');
+    }
+
+    function renderProfileSelectors() {
+      const sensor = selectedPolicySensor();
+      const profiles = state.profiles || [];
+      const profileOptions = profiles.map((profile) => `<option value="${esc(profile.id)}">${esc(profile.title)}</option>`).join('');
+      $('newSensorProfile').innerHTML = `<option value="">clone only</option>${profileOptions}`;
+      $('sensorProfileSelect').innerHTML = profiles.map((profile) => {
+        const selected = sensor?.desired_state?.profile === profile.id ? 'selected' : '';
+        return `<option value="${esc(profile.id)}" ${selected}>${esc(profile.title)}</option>`;
+      }).join('');
     }
 
     function renderModules() {
@@ -338,16 +352,31 @@
     async function addSensor() {
       const id = $('newSensorId').value.trim();
       if (!id) return setMessage('Укажи ID нового сенсора.', 'bad');
+      const profileId = $('newSensorProfile').value;
       await request('/api/sensors', {
         method: 'POST',
         body: JSON.stringify({
           id,
           host: $('newSensorHost').value.trim(),
-          clone_from: $('cloneFrom').value.trim() || state.selectedSensor
+          clone_from: $('cloneFrom').value.trim() || state.selectedSensor,
+          profile_id: profileId || undefined
         })
       });
       state.selectedSensor = id;
       setMessage(`Сенсор ${id} добавлен в политику.`, 'ok');
+      await refresh();
+    }
+
+    async function applyProfile() {
+      const sensor = selectedPolicySensor();
+      if (!sensor) return;
+      const profileId = $('sensorProfileSelect').value;
+      if (!profileId) return setMessage('Выбери профиль сенсора.', 'bad');
+      await request(`/api/sensors/${encodeURIComponent(sensor.id)}/apply-profile`, {
+        method: 'POST',
+        body: JSON.stringify({ profile_id: profileId })
+      });
+      setMessage(`Профиль ${profileId} применён к ${sensor.id}.`, 'ok');
       await refresh();
     }
 
@@ -362,21 +391,24 @@
     }
 
     async function refresh() {
-      const [overview, policyPayload, catalog, events] = await Promise.all([
+      const [overview, policyPayload, catalog, profilesPayload, events] = await Promise.all([
         request('/api/overview'),
         request('/api/policy'),
         request('/api/modules'),
+        request('/api/profiles'),
         request('/api/events?limit=50')
       ]);
       state.overview = overview;
       state.policy = policyPayload.policy;
       state.catalog = catalog;
+      state.profiles = profilesPayload.profiles || [];
       const obs = state.policy?.site?.observability || {};
       $('grafanaLink').href = obs.grafana_url || 'http://127.0.0.1:3000';
       $('prometheusLink').href = obs.prometheus_url || 'http://127.0.0.1:9090';
       renderMetrics();
       renderSensors();
       renderSelector();
+      renderProfileSelectors();
       renderModules();
       renderEvents(events);
     }
@@ -387,6 +419,7 @@
       const url = new URL(location.href);
       url.searchParams.set('sensor_id', state.selectedSensor);
       history.replaceState(null, '', url);
+      renderProfileSelectors();
       renderModules();
     });
     $('modules').addEventListener('click', (event) => {
@@ -394,6 +427,7 @@
       if (button) saveModule(button.dataset.saveModule).catch((error) => setMessage(error.message, 'bad'));
     });
     $('addSensorBtn').addEventListener('click', () => addSensor().catch((error) => setMessage(error.message, 'bad')));
+    $('applyProfileBtn').addEventListener('click', () => applyProfile().catch((error) => setMessage(error.message, 'bad')));
     $('deleteSensorBtn').addEventListener('click', () => deleteSensor().catch((error) => setMessage(error.message, 'bad')));
     refresh().catch((error) => setMessage(error.message, 'bad'));
   </script>

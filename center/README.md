@@ -16,7 +16,7 @@
 
 Функции:
 
-- API control-plane без встроенного HTML-интерфейса;
+- API control-plane со встроенным HTML-интерфейсом `/settings`;
 - установка/обновление сенсоров через Ansible playbooks;
 - хранение рабочей политики `config/site.local.json`;
 - синхронизация сенсоров через один endpoint: статус на входе, desired state на выходе;
@@ -32,9 +32,11 @@ GET  /health
 GET  /metrics
 GET  /api/overview
 GET  /api/modules
+GET  /api/profiles
 GET  /api/policy
 GET  /api/sensors
 POST /api/sensors
+POST /api/sensors/<id>/apply-profile
 POST /api/sensors/<id>/sync
 PATCH /api/sensors/<id>/modules/<module_id>
 DELETE /api/sensors/<id>?purge_events=1

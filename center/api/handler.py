@@ -20,13 +20,14 @@ from center.core.policy import (
     remove_sensor,
     services_by_id,
 )
+from center.core.profiles import apply_profile, available_profiles
 from center.core.sensor_sync import sensor_sync
 from center.core.utils import load_json, now_ts, write_json
 from center.persistence.events import filter_events, purge_sensor_events, read_events, write_event
 from center.web.views import render_admin_page
 
 
-POLICY_SAFE_GET_PATHS = {"", "/", "/settings", "/health", "/metrics", "/api/modules"}
+POLICY_SAFE_GET_PATHS = {"", "/", "/settings", "/health", "/metrics", "/api/modules", "/api/profiles"}
 JSON_POST_PATHS = {"/api/events", "/api/sensors"}
 
 
@@ -124,6 +125,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/modules":
             self.send_json(catalog)
+            return
+        if parsed.path == "/api/profiles":
+            self.send_json({"profiles": list(available_profiles(policy, catalog).values())})
             return
         if parsed.path == "/api/policy":
             self.send_json({"policy": policy, "errors": errors})
@@ -275,14 +279,18 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         is_sensor_sync = self.is_sensor_sync_path(parsed.path)
         if parsed.path not in JSON_POST_PATHS and not is_sensor_sync:
-            self.send_not_found()
-            return
+            if not self.is_apply_profile_path(parsed.path):
+                self.send_not_found()
+                return
         payload, ok = self.read_json_object()
         if not ok or payload is None:
             return
 
         catalog = load_json(self.catalog_path)
         policy = load_json(self.policy_path)
+        if self.is_apply_profile_path(parsed.path):
+            self.handle_apply_profile(parsed.path, payload, policy, catalog)
+            return
         if parsed.path == "/api/sensors":
             self.handle_create_sensor(payload, policy, catalog)
             return
@@ -294,6 +302,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     def is_sensor_sync_path(self, path: str) -> bool:
         parts = [part for part in path.split("/") if part]
         return len(parts) == 4 and parts[:2] == ["api", "sensors"] and parts[3] == "sync"
+
+    def is_apply_profile_path(self, path: str) -> bool:
+        parts = [part for part in path.split("/") if part]
+        return len(parts) == 4 and parts[:2] == ["api", "sensors"] and parts[3] == "apply-profile"
 
     def handle_create_sensor(self, payload: dict[str, Any], policy: dict[str, Any], catalog: dict[str, Any]) -> None:
         sensor_id = str(payload.get("id") or "").strip()
@@ -315,6 +327,12 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             "enrollment": payload.get("enrollment", {"method": "agent-polling"}),
             "desired_state": json.loads(json.dumps(payload.get("desired_state", source.get("desired_state", {})))),
         }
+        profile_id = str(payload.get("profile_id") or "").strip()
+        if profile_id:
+            ok_apply, error = apply_profile(policy, catalog, sensor, profile_id)
+            if not ok_apply:
+                self.send_json({"error": error}, HTTPStatus.BAD_REQUEST)
+                return
         policy.setdefault("sensors", []).append(sensor)
         errors = policy_errors(policy, catalog)
         if errors:
@@ -322,6 +340,34 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         policy = self.save_policy(policy)
         self.send_json({"status": "saved", "sensor": sensor, "policy": policy}, HTTPStatus.CREATED)
+
+    def handle_apply_profile(
+        self,
+        path: str,
+        payload: dict[str, Any],
+        policy: dict[str, Any],
+        catalog: dict[str, Any],
+    ) -> None:
+        parts = [part for part in path.split("/") if part]
+        sensor_id = unquote(parts[2])
+        sensor = find_sensor(policy, sensor_id)
+        if not sensor:
+            self.send_json({"error": "sensor not found"}, HTTPStatus.NOT_FOUND)
+            return
+        profile_id = str(payload.get("profile_id") or "").strip()
+        if not profile_id:
+            self.send_json({"error": "profile_id is required"}, HTTPStatus.BAD_REQUEST)
+            return
+        ok_apply, error = apply_profile(policy, catalog, sensor, profile_id)
+        if not ok_apply:
+            self.send_json({"error": error}, HTTPStatus.BAD_REQUEST)
+            return
+        errors = policy_errors(policy, catalog)
+        if errors:
+            self.send_json({"status": "invalid_policy", "errors": errors}, HTTPStatus.BAD_REQUEST)
+            return
+        policy = self.save_policy(policy)
+        self.send_json({"status": "saved", "sensor": sensor, "policy": policy})
 
     def handle_sensor_sync(
         self,
