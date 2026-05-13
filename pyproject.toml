@@ -3,7 +3,9 @@ name = "early-detection-complex"
 version = "0.1.0"
 description = "Распределённый комплекс раннего обнаружения на основе honeypot"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+  "psycopg[binary]==3.2.12",
+]
 
 [project.scripts]
 edc-center = "center.main:main"

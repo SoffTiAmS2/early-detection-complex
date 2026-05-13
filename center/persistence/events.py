@@ -6,15 +6,41 @@ from typing import Any
 
 from center.core.paths import MAX_EVENT_LIMIT
 from center.core.utils import now_ts
-from center.persistence.store import connect_store
+from center.persistence.store import connect_store, is_postgres_enabled
 
 
 def write_event(store: Path, event: dict[str, Any]) -> None:
     stored = json.loads(json.dumps(event, ensure_ascii=False))
     stored.setdefault("received_at", now_ts())
     stored.setdefault("event_type", stored.get("type", "sensor.event"))
-    raw_event = json.dumps(stored, ensure_ascii=False, sort_keys=True)
+    raw_sample = stored.get("raw_sample") or stored.get("message")
     with connect_store(store) as connection:
+        if is_postgres_enabled():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO events (
+                        received_at, timestamp, event_type, sensor_id, module, service, severity,
+                        src_ip, src_port, dst_port, raw_sample, raw_event
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)
+                    """,
+                    (
+                        float(stored.get("received_at") or now_ts()),
+                        stored.get("timestamp"),
+                        str(stored.get("event_type") or "sensor.event"),
+                        stored.get("sensor_id") or stored.get("sensor"),
+                        stored.get("module"),
+                        stored.get("service"),
+                        stored.get("severity"),
+                        stored.get("src_ip"),
+                        stored.get("src_port"),
+                        stored.get("dst_port"),
+                        raw_sample,
+                        json.dumps(stored, ensure_ascii=False, sort_keys=True),
+                    ),
+                )
+            return
+
         connection.execute(
             """
             INSERT INTO events (
@@ -33,32 +59,55 @@ def write_event(store: Path, event: dict[str, Any]) -> None:
                 stored.get("src_ip"),
                 stored.get("src_port"),
                 stored.get("dst_port"),
-                stored.get("raw_sample") or stored.get("message"),
-                raw_event,
+                raw_sample,
+                json.dumps(stored, ensure_ascii=False, sort_keys=True),
             ),
         )
 
 
 def read_events(store: Path, limit: int) -> list[dict[str, Any]]:
-    if not store.exists():
-        return []
+    safe_limit = max(1, min(limit, MAX_EVENT_LIMIT))
     with connect_store(store) as connection:
-        rows = connection.execute(
-            """
-            SELECT id, received_at, timestamp, event_type, sensor_id, module, service, severity,
-                   src_ip, src_port, dst_port, raw_sample, raw_event
-            FROM events
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            (max(1, min(limit, MAX_EVENT_LIMIT)),),
-        ).fetchall()
+        if is_postgres_enabled():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT id, received_at, timestamp, event_type, sensor_id, module, service, severity,
+                           src_ip, src_port, dst_port, raw_sample, raw_event
+                    FROM events
+                    ORDER BY id DESC
+                    LIMIT %s
+                    """,
+                    (safe_limit,),
+                )
+                rows = cursor.fetchall()
+        else:
+            if not store.exists():
+                return []
+            rows = connection.execute(
+                """
+                SELECT id, received_at, timestamp, event_type, sensor_id, module, service, severity,
+                       src_ip, src_port, dst_port, raw_sample, raw_event
+                FROM events
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (safe_limit,),
+            ).fetchall()
+    return _rows_to_events(rows)
+
+
+def _rows_to_events(rows: list[Any]) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     for row in reversed(rows):
-        try:
-            raw_event = json.loads(row["raw_event"])
-        except json.JSONDecodeError:
-            raw_event = {"event_type": "parse_error", "raw": row["raw_event"]}
+        raw_value = row["raw_event"]
+        if isinstance(raw_value, (dict, list)):
+            raw_event = raw_value
+        else:
+            try:
+                raw_event = json.loads(raw_value)
+            except Exception:
+                raw_event = {"event_type": "parse_error", "raw": str(raw_value)}
         event = dict(raw_event) if isinstance(raw_event, dict) else {"event_type": row["event_type"]}
         event.update(
             {
@@ -120,8 +169,50 @@ def filter_events(events: list[dict[str, Any]], params: dict[str, list[str]]) ->
 
 
 def purge_sensor_events(store: Path, sensor_id: str) -> int:
-    if not store.exists():
-        return 0
     with connect_store(store) as connection:
+        if is_postgres_enabled():
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM events WHERE sensor_id = %s", (sensor_id,))
+                return int(cursor.rowcount or 0)
+        if not store.exists():
+            return 0
         cursor = connection.execute("DELETE FROM events WHERE sensor_id = ?", (sensor_id,))
+        return int(cursor.rowcount or 0)
+
+
+def database_stats(store: Path) -> dict[str, Any]:
+    with connect_store(store) as connection:
+        if is_postgres_enabled():
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT COUNT(*) AS c FROM events")
+                total = int(cursor.fetchone()["c"])
+                cursor.execute("SELECT COUNT(DISTINCT sensor_id) AS c FROM events WHERE sensor_id IS NOT NULL")
+                sensors = int(cursor.fetchone()["c"])
+                cursor.execute("SELECT COALESCE(MIN(received_at), 0) AS min_ts, COALESCE(MAX(received_at), 0) AS max_ts FROM events")
+                period = cursor.fetchone()
+        else:
+            if not store.exists():
+                return {"backend": "sqlite", "total_events": 0, "unique_sensors": 0, "min_received_at": 0, "max_received_at": 0}
+            total = int(connection.execute("SELECT COUNT(*) FROM events").fetchone()[0])
+            sensors = int(connection.execute("SELECT COUNT(DISTINCT sensor_id) FROM events WHERE sensor_id IS NOT NULL").fetchone()[0])
+            period_row = connection.execute("SELECT COALESCE(MIN(received_at),0), COALESCE(MAX(received_at),0) FROM events").fetchone()
+            period = {"min_ts": period_row[0], "max_ts": period_row[1]}
+    return {
+        "backend": "postgres" if is_postgres_enabled() else "sqlite",
+        "total_events": total,
+        "unique_sensors": sensors,
+        "min_received_at": float(period["min_ts"] or 0),
+        "max_received_at": float(period["max_ts"] or 0),
+    }
+
+
+def purge_all_events(store: Path) -> int:
+    with connect_store(store) as connection:
+        if is_postgres_enabled():
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM events")
+                return int(cursor.rowcount or 0)
+        if not store.exists():
+            return 0
+        cursor = connection.execute("DELETE FROM events")
         return int(cursor.rowcount or 0)

@@ -23,11 +23,11 @@ from center.core.policy import (
 from center.core.profiles import apply_profile, available_profiles
 from center.core.sensor_sync import sensor_sync
 from center.core.utils import load_json, now_ts, write_json
-from center.persistence.events import filter_events, purge_sensor_events, read_events, write_event
-from center.web.views import render_admin_page
+from center.persistence.events import database_stats, filter_events, purge_all_events, purge_sensor_events, read_events, write_event
+from center.web.views import render_admin_page, render_database_page
 
 
-POLICY_SAFE_GET_PATHS = {"", "/", "/settings", "/health", "/metrics", "/api/modules", "/api/profiles"}
+POLICY_SAFE_GET_PATHS = {"", "/", "/settings", "/db", "/health", "/metrics", "/api/modules", "/api/profiles", "/api/db/stats"}
 JSON_POST_PATHS = {"/api/events", "/api/sensors"}
 
 
@@ -114,6 +114,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path in ("", "/", "/settings"):
             self.send_html(render_admin_page(policy))
             return
+        if parsed.path == "/db":
+            self.send_html(render_database_page(policy))
+            return
         if parsed.path == "/health":
             self.handle_health(policy, errors)
             return
@@ -137,6 +140,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/api/events":
             self.handle_events_query(parsed.query)
+            return
+        if parsed.path == "/api/db/stats":
+            self.send_json(database_stats(self.store_path))
             return
         self.send_not_found()
 
@@ -198,6 +204,29 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     def do_PATCH(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
         if not self.require_admin_auth("PATCH", parsed.path):
+            return
+        if parsed.path == "/api/site":
+            payload, ok = self.read_json_object()
+            if not ok or payload is None:
+                return
+            policy = load_json(self.policy_path)
+            catalog = load_json(self.catalog_path)
+            site = policy.setdefault("site", {})
+            if "name" in payload:
+                site["name"] = str(payload.get("name") or site.get("name") or "")
+            if "central_url" in payload:
+                site["central_url"] = str(payload.get("central_url") or "")
+            if "management_network" in payload:
+                site["management_network"] = str(payload.get("management_network") or "")
+            if isinstance(payload.get("observability"), dict):
+                obs = site.setdefault("observability", {})
+                obs.update(payload["observability"])
+            errors = policy_errors(policy, catalog)
+            if errors:
+                self.send_json({"status": "invalid_policy", "errors": errors}, HTTPStatus.BAD_REQUEST)
+                return
+            policy = self.save_policy(policy)
+            self.send_json({"status": "saved", "site": policy.get("site", {}), "policy": policy})
             return
         parts = [part for part in parsed.path.split("/") if part]
         if len(parts) not in {5, 7} or parts[:2] != ["api", "sensors"] or parts[3] != "modules":
@@ -269,7 +298,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self.send_json({"status": "invalid_policy", "errors": errors}, HTTPStatus.BAD_REQUEST)
             return
         policy = self.save_policy(policy)
-        purge = parse_qs(parsed.query).get("purge_events", ["0"])[0] in {"1", "true", "yes"}
+        purge = parse_qs(parsed.query).get("purge_events", ["1"])[0] in {"1", "true", "yes"}
         purged_events = purge_sensor_events(self.store_path, sensor_id) if purge else 0
         self.send_json({"status": "deleted", "sensor_id": sensor_id, "purged_events": purged_events, "policy": policy})
 
@@ -280,14 +309,19 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         is_sensor_sync = self.is_sensor_sync_path(parsed.path)
         if parsed.path not in JSON_POST_PATHS and not is_sensor_sync:
             if not self.is_apply_profile_path(parsed.path):
-                self.send_not_found()
-                return
+                if parsed.path != "/api/db/purge":
+                    self.send_not_found()
+                    return
         payload, ok = self.read_json_object()
         if not ok or payload is None:
             return
 
         catalog = load_json(self.catalog_path)
         policy = load_json(self.policy_path)
+        if parsed.path == "/api/db/purge":
+            deleted = purge_all_events(self.store_path)
+            self.send_json({"status": "purged", "deleted_events": deleted, "stats": database_stats(self.store_path)})
+            return
         if self.is_apply_profile_path(parsed.path):
             self.handle_apply_profile(parsed.path, payload, policy, catalog)
             return
@@ -315,19 +349,19 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if find_sensor(policy, sensor_id):
             self.send_json({"error": "sensor already exists"}, HTTPStatus.CONFLICT)
             return
+        profile_id = str(payload.get("profile_id") or "").strip()
         clone_from = str(payload.get("clone_from") or "sensor1")
         source = find_sensor(policy, clone_from) or (policy.get("sensors") or [None])[0]
-        if not source:
+        if not source and not profile_id:
             self.send_json({"error": "no source sensor to clone desired_state from"}, HTTPStatus.BAD_REQUEST)
             return
         sensor = {
             "id": sensor_id,
             "host": payload.get("host", ""),
-            "architecture": payload.get("architecture", source.get("architecture", "")),
+            "architecture": payload.get("architecture", source.get("architecture", "") if source else ""),
             "enrollment": payload.get("enrollment", {"method": "agent-polling"}),
-            "desired_state": json.loads(json.dumps(payload.get("desired_state", source.get("desired_state", {})))),
+            "desired_state": json.loads(json.dumps(payload.get("desired_state", source.get("desired_state", {}) if source else {}))),
         }
-        profile_id = str(payload.get("profile_id") or "").strip()
         if profile_id:
             ok_apply, error = apply_profile(policy, catalog, sensor, profile_id)
             if not ok_apply:

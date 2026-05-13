@@ -4,6 +4,8 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+RUN pip install --no-cache-dir "psycopg[binary]==3.2.12"
+
 WORKDIR /app
 COPY catalog ./catalog
 COPY config ./config

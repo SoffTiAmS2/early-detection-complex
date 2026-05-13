@@ -11,7 +11,7 @@
 - `core/overview.py` - сводка состояния сенсоров и событий.
 - `core/metrics.py` - Prometheus metrics endpoint.
 - `core/paths.py`, `core/utils.py` - общие пути и утилиты.
-- `persistence/events.py` - SQLite-события.
+- `persistence/events.py` - события (PostgreSQL по умолчанию, SQLite fallback).
 - `server.py` - совместимый wrapper для старой команды запуска.
 
 Функции:
@@ -21,7 +21,7 @@
 - хранение рабочей политики `config/site.local.json`;
 - синхронизация сенсоров через один endpoint: статус на входе, desired state на выходе;
 - приём raw events из honeypot runtime;
-- хранение событий в SQLite `var/center/events.sqlite3`;
+- хранение событий в PostgreSQL (`CENTER_DB_DSN`), SQLite используется только как fallback;
 - настройка honeypot-модулей, сервисов и host-портов.
 
 Основные API:
@@ -42,6 +42,8 @@ PATCH /api/sensors/<id>/modules/<module_id>
 DELETE /api/sensors/<id>?purge_events=1
 POST /api/events
 GET  /api/events
+GET  /api/db/stats
+POST /api/db/purge
 ```
 
 Запуск:
@@ -52,6 +54,7 @@ python3 -m center.main --host 0.0.0.0 --port 8080
 
 При первом запуске `config/site.local.json` создаётся из `config/site.example.json`.
 Административную авторизацию можно включить переменными `CENTER_AUTH_USER` и `CENTER_AUTH_PASSWORD` или `CENTER_AUTH_TOKEN`.
+Подключение к PostgreSQL задаётся переменной `CENTER_DB_DSN`.
 
 Также доступен короткий запуск:
 

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{SITE_NAME}} · база событий</title>
+  <style>
+    body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, sans-serif; background: #f4f6f9; color: #17202a; }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; background: #fff; border-bottom: 1px solid #d8dee9; }
+    main { max-width: 1500px; margin: 0 auto; padding: 16px 18px 28px; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .card { background: #fff; border: 1px solid #d8dee9; border-radius: 8px; padding: 12px; }
+    .k { color: #627084; font-size: 12px; text-transform: uppercase; }
+    .v { font-size: 22px; font-weight: 700; }
+    .toolbar { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto auto; gap: 8px; margin-bottom: 10px; }
+    input, select, button { border: 1px solid #c8d2de; border-radius: 6px; padding: 8px; font: inherit; }
+    button { background: #0f766e; color: #fff; border-color: #0f766e; cursor: pointer; }
+    button.secondary { background: #fff; color: #17202a; border-color: #d8dee9; }
+    button.danger { background: #b42318; border-color: #b42318; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #d8dee9; border-radius: 8px; overflow: hidden; }
+    th, td { padding: 8px 6px; border-top: 1px solid #ecf0f4; font-size: 13px; text-align: left; vertical-align: top; }
+    th { background: #f7f9fc; color: #627084; border-top: 0; }
+    code { font-size: 12px; white-space: pre-wrap; }
+    .msg { min-height: 20px; color: #627084; margin: 8px 0; }
+    .toplinks { display: flex; gap: 8px; align-items: center; }
+    @media (max-width: 1100px) { .toolbar, .grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 680px) { .toolbar, .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div><strong>EDC · база и логи</strong> · {{SITE_NAME}}</div>
+    <nav class="toplinks">
+      <a href="/settings">Настройки</a>
+      <a href="/metrics" target="_blank" rel="noreferrer">Metrics</a>
+    </nav>
+  </header>
+  <main>
+    <section class="grid" id="stats"></section>
+    <section class="toolbar">
+      <input id="fSensor" placeholder="sensor_id">
+      <input id="fModule" placeholder="module">
+      <input id="fService" placeholder="service">
+      <input id="fType" placeholder="event_type">
+      <select id="fSeverity">
+        <option value="">severity:any</option>
+        <option value="high">high</option>
+        <option value="medium">medium</option>
+        <option value="low">low</option>
+      </select>
+      <input id="fLimit" type="number" min="1" max="1000" value="200">
+      <button class="secondary" id="refreshBtn">Обновить</button>
+      <button class="danger" id="purgeBtn">Очистить БД</button>
+    </section>
+    <div class="msg" id="msg"></div>
+    <table>
+      <thead>
+        <tr><th>time</th><th>sensor</th><th>module/service</th><th>type</th><th>src</th><th>sample</th></tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (m) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    function setMsg(t){ $('msg').textContent=t||''; }
+    async function req(path, opts={}){
+      const r = await fetch(path, {cache:'no-store', headers:{'Content-Type':'application/json', ...(opts.headers||{})}, ...opts});
+      const txt = await r.text(); const data = txt ? JSON.parse(txt) : {};
+      if(!r.ok) throw new Error(data.error || data.status || r.statusText);
+      return data;
+    }
+    function ts(v){ if(!v) return ''; return new Date(Number(v)*1000).toISOString(); }
+    function query(){
+      const p = new URLSearchParams();
+      if($('fSensor').value.trim()) p.set('sensor_id', $('fSensor').value.trim());
+      if($('fModule').value.trim()) p.set('module', $('fModule').value.trim());
+      if($('fService').value.trim()) p.set('service', $('fService').value.trim());
+      if($('fType').value.trim()) p.set('event_type', $('fType').value.trim());
+      if($('fSeverity').value) p.set('severity', $('fSeverity').value);
+      p.set('limit', String(Math.max(1, Math.min(1000, Number($('fLimit').value||200)))));
+      return '/api/events?' + p.toString();
+    }
+    async function refresh(){
+      const [stats, events] = await Promise.all([req('/api/db/stats'), req(query())]);
+      $('stats').innerHTML = [
+        `<div class="card"><div class="k">backend</div><div class="v">${esc(stats.backend)}</div></div>`,
+        `<div class="card"><div class="k">events</div><div class="v">${esc(stats.total_events)}</div></div>`,
+        `<div class="card"><div class="k">sensors</div><div class="v">${esc(stats.unique_sensors)}</div></div>`,
+        `<div class="card"><div class="k">window</div><div class="v">${esc(events.events?.length || 0)}</div></div>`
+      ].join('');
+      const rows = (events.events || []).slice().reverse().map((e) => `
+        <tr>
+          <td>${esc(ts(e.received_at || e.timestamp))}</td>
+          <td>${esc(e.sensor_id)}</td>
+          <td>${esc(e.module || '')}/${esc(e.service || '')}</td>
+          <td>${esc(e.event_type)}</td>
+          <td>${esc(e.src_ip || '')}:${esc(e.src_port || '')}</td>
+          <td><code>${esc(e.raw_sample || '')}</code></td>
+        </tr>
+      `).join('');
+      $('rows').innerHTML = rows || '<tr><td colspan="6">нет данных</td></tr>';
+      setMsg('');
+    }
+    async function purgeDb(){
+      if(!confirm('Удалить все события из БД?')) return;
+      const data = await req('/api/db/purge', {method:'POST', body:'{}'});
+      setMsg(`Удалено событий: ${data.deleted_events}`);
+      await refresh();
+    }
+    $('refreshBtn').addEventListener('click', () => refresh().catch((e) => setMsg(e.message)));
+    $('purgeBtn').addEventListener('click', () => purgeDb().catch((e) => setMsg(e.message)));
+    refresh().catch((e) => setMsg(e.message));
+  </script>
+</body>
+</html>

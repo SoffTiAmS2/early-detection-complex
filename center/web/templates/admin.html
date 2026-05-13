@@ -123,6 +123,7 @@
     .sample { margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 90px; overflow: auto; color: var(--muted); }
     .add-sensor { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 12px; }
     .message { min-height: 22px; margin: 8px 0 0; color: var(--muted); }
+    .sitebar { display:grid; grid-template-columns: 1.2fr 1fr 1fr 1fr auto; gap:8px; margin-bottom:12px; align-items:end; }
     @media (max-width: 1050px) {
       .layout, .cards { grid-template-columns: 1fr; }
       .grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
@@ -144,11 +145,21 @@
     <nav class="toplinks">
       <a class="button secondary" id="grafanaLink" href="#" target="_blank" rel="noreferrer">Grafana</a>
       <a class="button secondary" id="prometheusLink" href="#" target="_blank" rel="noreferrer">Prometheus</a>
+      <a class="button secondary" href="/db">База</a>
       <button class="secondary" id="refreshBtn">Обновить</button>
     </nav>
   </header>
   <main>
     <section class="grid" id="metrics"></section>
+    <section class="panel" style="margin-bottom:14px">
+      <div class="sitebar">
+        <label><span class="muted">Center URL</span><input id="siteCentralUrl" placeholder="http://192.168.0.196:8080"></label>
+        <label><span class="muted">Mgmt network</span><input id="siteMgmtNet" placeholder="192.168.0.0/24"></label>
+        <label><span class="muted">Grafana URL</span><input id="siteGrafanaUrl" placeholder="http://192.168.0.196:3000"></label>
+        <label><span class="muted">Prometheus URL</span><input id="sitePromUrl" placeholder="http://192.168.0.196:9090"></label>
+        <button id="saveSiteBtn">Сохранить site</button>
+      </div>
+    </section>
     <section class="layout">
       <div class="panel">
         <h2>Сенсоры</h2>
@@ -234,8 +245,8 @@
     }
 
     function renderSensors() {
-      const configured = new Set((state.policy?.sensors || []).map((sensor) => sensor.id));
-      const rows = (state.overview?.sensors || []).map((sensor) => {
+      const rows = (state.policy?.sensors || []).map((item) => {
+        const sensor = liveSensor(item.id) || { sensor_id: item.id, host: item.host, events: 0, health: 'unknown', status: 'unknown', modules: [] };
         const healthClass = sensor.health === 'online' ? 'ok' : (sensor.health === 'stale' ? 'warn' : 'bad');
         const modules = (sensor.modules || []).map((module) => `${module.id}:${module.status}`).join(', ');
         return `<tr>
@@ -243,7 +254,7 @@
           <td class="${healthClass}">${esc(sensor.health || sensor.status || 'unknown')}<br><span class="muted">${age(sensor.last_seen)}</span></td>
           <td>${esc(sensor.events || 0)}</td>
           <td><code>${esc(modules)}</code></td>
-          <td>${configured.has(sensor.sensor_id) ? '' : '<span class="muted">history only</span>'}</td>
+          <td></td>
         </tr>`;
       }).join('');
       $('sensors').innerHTML = `<table><thead><tr><th>ID</th><th>Статус</th><th>События</th><th>Модули</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="muted">нет сенсоров</td></tr>'}</tbody></table>`;
@@ -384,9 +395,25 @@
       const sensor = selectedPolicySensor();
       if (!sensor) return;
       if (!confirm(`Удалить ${sensor.id} из политики центра?`)) return;
-      await request(`/api/sensors/${encodeURIComponent(sensor.id)}?purge_events=0`, { method: 'DELETE' });
+      await request(`/api/sensors/${encodeURIComponent(sensor.id)}?purge_events=1`, { method: 'DELETE' });
       state.selectedSensor = '';
       setMessage(`Сенсор ${sensor.id} удалён из политики.`, 'ok');
+      await refresh();
+    }
+
+    async function saveSite() {
+      await request('/api/site', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          central_url: $('siteCentralUrl').value.trim(),
+          management_network: $('siteMgmtNet').value.trim(),
+          observability: {
+            grafana_url: $('siteGrafanaUrl').value.trim(),
+            prometheus_url: $('sitePromUrl').value.trim()
+          }
+        })
+      });
+      setMessage('site настройки сохранены.', 'ok');
       await refresh();
     }
 
@@ -403,6 +430,10 @@
       state.catalog = catalog;
       state.profiles = profilesPayload.profiles || [];
       const obs = state.policy?.site?.observability || {};
+      $('siteCentralUrl').value = state.policy?.site?.central_url || '';
+      $('siteMgmtNet').value = state.policy?.site?.management_network || '';
+      $('siteGrafanaUrl').value = obs.grafana_url || '';
+      $('sitePromUrl').value = obs.prometheus_url || '';
       $('grafanaLink').href = obs.grafana_url || 'http://127.0.0.1:3000';
       $('prometheusLink').href = obs.prometheus_url || 'http://127.0.0.1:9090';
       renderMetrics();
@@ -428,6 +459,7 @@
     });
     $('addSensorBtn').addEventListener('click', () => addSensor().catch((error) => setMessage(error.message, 'bad')));
     $('applyProfileBtn').addEventListener('click', () => applyProfile().catch((error) => setMessage(error.message, 'bad')));
+    $('saveSiteBtn').addEventListener('click', () => saveSite().catch((error) => setMessage(error.message, 'bad')));
     $('deleteSensorBtn').addEventListener('click', () => deleteSensor().catch((error) => setMessage(error.message, 'bad')));
     refresh().catch((error) => setMessage(error.message, 'bad'));
   </script>

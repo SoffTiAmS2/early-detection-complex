@@ -42,13 +42,22 @@
           [Service]
           Type=simple
           WorkingDirectory={{ edc_sensor_dir }}
+          EnvironmentFile=-/etc/edc-sensor.env
           Environment=PYTHONUNBUFFERED=1
-          ExecStart={{ edc_python_bin }} {{ edc_sensor_dir }}/sensor/agent.py --center {{ edc_center_url }} --sensor-id {{ edc_sensor_id | default(inventory_hostname) }} --state-dir {{ edc_sensor_state_dir }} --serve --interval {{ edc_agent_interval }}
+          ExecStart={{ edc_python_bin }} {{ edc_sensor_dir }}/sensor/agent.py --center ${EDC_CENTER_URL:-{{ edc_center_url }}} --sensor-id {{ edc_sensor_id | default(inventory_hostname) }} --state-dir {{ edc_sensor_state_dir }} --serve --interval {{ edc_agent_interval }}
           Restart=always
           RestartSec=5
 
           [Install]
           WantedBy=multi-user.target
+      notify: Restart sensor
+
+    - name: Write sensor environment file
+      ansible.builtin.copy:
+        dest: /etc/edc-sensor.env
+        mode: "0644"
+        content: |
+          EDC_CENTER_URL={{ edc_center_url }}
       notify: Restart sensor
 
     - name: Enable sensor agent

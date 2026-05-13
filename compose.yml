@@ -10,6 +10,11 @@ services:
     volumes:
       - ./config:/app/config
       - ./var/center:/app/var/center
+    environment:
+      CENTER_DB_DSN: postgresql://edc:edc@postgres:5432/edc
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   prometheus:
     image: prom/prometheus:v2.55.1
@@ -45,6 +50,25 @@ services:
     depends_on:
       - prometheus
 
+  postgres:
+    image: postgres:16
+    container_name: edc-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: edc
+      POSTGRES_USER: edc
+      POSTGRES_PASSWORD: edc
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edc -d edc"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
 volumes:
   prometheus_data:
   grafana_data:
+  postgres_data:
