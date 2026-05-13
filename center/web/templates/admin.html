@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{SITE_NAME}} · настройки EDC</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --text: #17202a;
+      --muted: #627084;
+      --line: #d8dee9;
+      --brand: #0f766e;
+      --brand-dark: #115e59;
+      --bad: #b42318;
+      --warn: #a15c00;
+      --ok: #147a3d;
+      --info: #075985;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      padding: 16px 24px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    h1 { margin: 0; font-size: 20px; font-weight: 760; }
+    h2 { margin: 0 0 10px; font-size: 16px; }
+    h3 { margin: 0; font-size: 14px; }
+    main { max-width: 1440px; margin: 0 auto; padding: 20px 24px 36px; }
+    button, .button {
+      border: 1px solid var(--brand);
+      background: var(--brand);
+      color: white;
+      border-radius: 6px;
+      padding: 8px 11px;
+      font: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+    }
+    button:hover, .button:hover { background: var(--brand-dark); }
+    button.secondary, .button.secondary { background: #fff; color: var(--text); border-color: var(--line); }
+    button.danger { background: var(--bad); border-color: var(--bad); }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 9px;
+      font: inherit;
+      background: #fff;
+      color: var(--text);
+    }
+    textarea {
+      min-height: 150px;
+      resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+    th { color: var(--muted); font-weight: 650; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    .muted { color: var(--muted); }
+    .toplinks { display: flex; flex-wrap: wrap; gap: 8px; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .layout { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(520px, 1.7fr); gap: 14px; align-items: start; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      overflow: hidden;
+    }
+    .metric .label { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+    .metric .value { font-size: 28px; font-weight: 780; margin-top: 2px; }
+    .toolbar { display: flex; gap: 10px; align-items: end; margin-bottom: 12px; }
+    .toolbar label { flex: 1; }
+    .cards { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 12px; }
+    .module {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+      padding: 12px;
+    }
+    .module-head { display: flex; justify-content: space-between; gap: 10px; align-items: start; margin-bottom: 8px; }
+    .status { border-radius: 999px; border: 1px solid var(--line); padding: 2px 8px; background: #fff; font-size: 12px; white-space: nowrap; }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .bad { color: var(--bad); }
+    .info { color: var(--info); }
+    .service-row {
+      display: grid;
+      grid-template-columns: 22px 1fr 96px;
+      gap: 8px;
+      align-items: center;
+      margin-top: 8px;
+    }
+    .service-row input[type="checkbox"], .module-enabled input { width: auto; }
+    .module-enabled { display: flex; gap: 8px; align-items: center; margin: 8px 0; color: var(--muted); }
+    .module-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .event { border-top: 1px solid var(--line); padding: 10px 0; font-size: 13px; }
+    .event:first-child { border-top: 0; }
+    .event-head { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .sample { margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 90px; overflow: auto; color: var(--muted); }
+    .add-sensor { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 12px; }
+    .message { min-height: 22px; margin: 8px 0 0; color: var(--muted); }
+    @media (max-width: 1050px) {
+      .layout, .cards { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+    }
+    @media (max-width: 680px) {
+      header { align-items: flex-start; flex-direction: column; padding: 14px 16px; }
+      main { padding: 16px; }
+      .grid, .add-sensor { grid-template-columns: 1fr; }
+      .toolbar { flex-direction: column; align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>EDC · настройки</h1>
+      <div class="muted">{{SITE_NAME}}</div>
+    </div>
+    <nav class="toplinks">
+      <a class="button secondary" id="grafanaLink" href="#" target="_blank" rel="noreferrer">Grafana</a>
+      <a class="button secondary" id="prometheusLink" href="#" target="_blank" rel="noreferrer">Prometheus</a>
+      <button class="secondary" id="refreshBtn">Обновить</button>
+    </nav>
+  </header>
+  <main>
+    <section class="grid" id="metrics"></section>
+    <section class="layout">
+      <div class="panel">
+        <h2>Сенсоры</h2>
+        <div id="sensors"></div>
+        <div class="add-sensor">
+          <label><span class="muted">ID</span><input id="newSensorId" placeholder="sensor-2"></label>
+          <label><span class="muted">Host</span><input id="newSensorHost" placeholder="192.168.0.240"></label>
+          <label><span class="muted">Clone from</span><input id="cloneFrom" placeholder="banana-pi-pro-1"></label>
+          <button id="addSensorBtn">Добавить</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="toolbar">
+          <label><span class="muted">Активный сенсор</span><select id="sensorSelect"></select></label>
+          <button class="danger" id="deleteSensorBtn">Удалить сенсор</button>
+        </div>
+        <div class="message" id="message"></div>
+        <div class="cards" id="modules"></div>
+      </div>
+    </section>
+    <section class="panel" style="margin-top:14px">
+      <h2>Последние события</h2>
+      <div id="events"></div>
+    </section>
+  </main>
+  <script>
+    const state = { policy: null, catalog: null, overview: null, selectedSensor: new URLSearchParams(location.search).get('sensor_id') || '' };
+    const $ = (id) => document.getElementById(id);
+    const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+    const age = (ts) => ts ? Math.max(0, Math.round(Date.now() / 1000 - Number(ts))) + ' сек. назад' : 'нет данных';
+
+    function setMessage(text, kind = '') {
+      $('message').textContent = text || '';
+      $('message').className = 'message ' + kind;
+    }
+
+    async function request(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        cache: 'no-store'
+      });
+      const text = await response.text();
+      const data = text ? JSON.parse(text) : {};
+      if (!response.ok) throw new Error(data.error || data.status || response.statusText);
+      return data;
+    }
+
+    function metric(label, value, cls = '') {
+      return `<div class="panel metric"><div class="label">${esc(label)}</div><div class="value ${cls}">${esc(value)}</div></div>`;
+    }
+
+    function selectedPolicySensor() {
+      const sensors = state.policy?.sensors || [];
+      return sensors.find((sensor) => sensor.id === state.selectedSensor) || sensors[0] || null;
+    }
+
+    function liveSensor(sensorId) {
+      return (state.overview?.sensors || []).find((sensor) => sensor.sensor_id === sensorId) || null;
+    }
+
+    function catalogModule(moduleId) {
+      return (state.catalog?.modules || []).find((module) => module.id === moduleId) || {};
+    }
+
+    function liveModule(sensorId, moduleId) {
+      return (liveSensor(sensorId)?.modules || []).find((module) => module.id === moduleId) || null;
+    }
+
+    function renderMetrics() {
+      const sensors = state.overview?.sensors || [];
+      const online = sensors.filter((sensor) => sensor.health === 'online').length;
+      const running = sensors.flatMap((sensor) => sensor.modules || []).filter((module) => module.status === 'running').length;
+      $('metrics').innerHTML = [
+        metric('Сенсоры online', online, online ? 'ok' : 'warn'),
+        metric('Запущено модулей', running, running ? 'ok' : 'warn'),
+        metric('События', state.overview?.event_count_window ?? 0, 'info'),
+        metric('Версия политики', state.policy?.version ?? 0, 'info')
+      ].join('');
+    }
+
+    function renderSensors() {
+      const configured = new Set((state.policy?.sensors || []).map((sensor) => sensor.id));
+      const rows = (state.overview?.sensors || []).map((sensor) => {
+        const healthClass = sensor.health === 'online' ? 'ok' : (sensor.health === 'stale' ? 'warn' : 'bad');
+        const modules = (sensor.modules || []).map((module) => `${module.id}:${module.status}`).join(', ');
+        return `<tr>
+          <td><strong>${esc(sensor.sensor_id)}</strong><br><span class="muted">${esc(sensor.host || '')}</span></td>
+          <td class="${healthClass}">${esc(sensor.health || sensor.status || 'unknown')}<br><span class="muted">${age(sensor.last_seen)}</span></td>
+          <td>${esc(sensor.events || 0)}</td>
+          <td><code>${esc(modules)}</code></td>
+          <td>${configured.has(sensor.sensor_id) ? '' : '<span class="muted">history only</span>'}</td>
+        </tr>`;
+      }).join('');
+      $('sensors').innerHTML = `<table><thead><tr><th>ID</th><th>Статус</th><th>События</th><th>Модули</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="muted">нет сенсоров</td></tr>'}</tbody></table>`;
+    }
+
+    function renderSelector() {
+      const sensors = state.policy?.sensors || [];
+      if (!state.selectedSensor && sensors[0]) state.selectedSensor = sensors[0].id;
+      $('sensorSelect').innerHTML = sensors.map((sensor) => `<option value="${esc(sensor.id)}" ${sensor.id === state.selectedSensor ? 'selected' : ''}>${esc(sensor.id)} · ${esc(sensor.host || '')}</option>`).join('');
+    }
+
+    function renderModules() {
+      const sensor = selectedPolicySensor();
+      if (!sensor) {
+        $('modules').innerHTML = '<div class="muted">Сенсор не выбран.</div>';
+        return;
+      }
+      const modules = sensor.desired_state?.modules || [];
+      $('modules').innerHTML = modules.map((module) => {
+        const catalog = catalogModule(module.id);
+        const live = liveModule(sensor.id, module.id);
+        const status = live?.status || (module.enabled === false ? 'disabled' : 'pending');
+        const statusClass = status === 'running' ? 'ok' : (status === 'skipped' || status === 'degraded' ? 'warn' : status === 'disabled' ? 'muted' : 'info');
+        const services = (module.services || []).map((service) => {
+          const liveService = (live?.services || []).find((item) => item.id === service.id);
+          return `<div class="service-row" data-service="${esc(service.id)}">
+            <input type="checkbox" class="service-enabled" ${service.enabled === false ? '' : 'checked'} title="enabled">
+            <div><strong>${esc(service.id)}</strong><br><span class="muted">${esc(liveService?.state || '')}</span></div>
+            <input class="service-port" type="number" min="1" max="65535" value="${esc(service.host_port || '')}">
+          </div>`;
+        }).join('');
+        return `<article class="module" data-module="${esc(module.id)}">
+          <div class="module-head">
+            <div><h3>${esc(catalog.title || module.id)}</h3><div class="muted">${esc(catalog.purpose || '')}</div></div>
+            <span class="status ${statusClass}">${esc(status)}</span>
+          </div>
+          <label class="module-enabled"><input type="checkbox" class="module-enabled-input" ${module.enabled === false ? '' : 'checked'}> модуль включён в политике</label>
+          <div>${services || '<span class="muted">нет сервисов</span>'}</div>
+          <details style="margin-top:10px">
+            <summary>Настройки JSON</summary>
+            <textarea class="settings-json">${esc(JSON.stringify(module.settings || {}, null, 2))}</textarea>
+          </details>
+          <div class="module-actions">
+            <button data-save-module="${esc(module.id)}">Сохранить модуль</button>
+          </div>
+        </article>`;
+      }).join('');
+    }
+
+    function renderEvents(eventsPayload) {
+      const events = eventsPayload?.events || [];
+      $('events').innerHTML = events.slice().reverse().map((event) => {
+        const sev = event.severity || 'status';
+        const cls = sev === 'high' ? 'bad' : sev === 'medium' ? 'warn' : 'info';
+        return `<div class="event">
+          <div class="event-head">
+            <span class="status ${cls}">${esc(sev)}</span>
+            <strong>${esc(event.event_type)}</strong>
+            <span>${esc(event.module || 'center')}/${esc(event.service || 'status')}</span>
+            <span class="muted">${esc(event.src_ip || '')} · ${age(event.received_at || event.timestamp)}</span>
+          </div>
+          <code class="sample">${esc(event.raw_sample || JSON.stringify(event.raw_event || event.honeypot_raw_event || {}, null, 2))}</code>
+        </div>`;
+      }).join('') || '<div class="muted">событий пока нет</div>';
+    }
+
+    async function saveModule(moduleId) {
+      const sensor = selectedPolicySensor();
+      const card = document.querySelector(`[data-module="${CSS.escape(moduleId)}"]`);
+      const settingsText = card.querySelector('.settings-json').value;
+      let settings;
+      try {
+        settings = settingsText.trim() ? JSON.parse(settingsText) : {};
+      } catch (error) {
+        setMessage(`JSON ошибка в ${moduleId}: ${error.message}`, 'bad');
+        return;
+      }
+      const services = [...card.querySelectorAll('.service-row')].map((row) => ({
+        id: row.dataset.service,
+        enabled: row.querySelector('.service-enabled').checked,
+        host_port: Number(row.querySelector('.service-port').value)
+      }));
+      await request(`/api/sensors/${encodeURIComponent(sensor.id)}/modules/${encodeURIComponent(moduleId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          enabled: card.querySelector('.module-enabled-input').checked,
+          settings,
+          services
+        })
+      });
+      setMessage(`Сохранено: ${sensor.id}/${moduleId}`, 'ok');
+      await refresh();
+    }
+
+    async function addSensor() {
+      const id = $('newSensorId').value.trim();
+      if (!id) return setMessage('Укажи ID нового сенсора.', 'bad');
+      await request('/api/sensors', {
+        method: 'POST',
+        body: JSON.stringify({
+          id,
+          host: $('newSensorHost').value.trim(),
+          clone_from: $('cloneFrom').value.trim() || state.selectedSensor
+        })
+      });
+      state.selectedSensor = id;
+      setMessage(`Сенсор ${id} добавлен в политику.`, 'ok');
+      await refresh();
+    }
+
+    async function deleteSensor() {
+      const sensor = selectedPolicySensor();
+      if (!sensor) return;
+      if (!confirm(`Удалить ${sensor.id} из политики центра?`)) return;
+      await request(`/api/sensors/${encodeURIComponent(sensor.id)}?purge_events=0`, { method: 'DELETE' });
+      state.selectedSensor = '';
+      setMessage(`Сенсор ${sensor.id} удалён из политики.`, 'ok');
+      await refresh();
+    }
+
+    async function refresh() {
+      const [overview, policyPayload, catalog, events] = await Promise.all([
+        request('/api/overview'),
+        request('/api/policy'),
+        request('/api/modules'),
+        request('/api/events?limit=50')
+      ]);
+      state.overview = overview;
+      state.policy = policyPayload.policy;
+      state.catalog = catalog;
+      const obs = state.policy?.site?.observability || {};
+      $('grafanaLink').href = obs.grafana_url || 'http://127.0.0.1:3000';
+      $('prometheusLink').href = obs.prometheus_url || 'http://127.0.0.1:9090';
+      renderMetrics();
+      renderSensors();
+      renderSelector();
+      renderModules();
+      renderEvents(events);
+    }
+
+    $('refreshBtn').addEventListener('click', () => refresh().catch((error) => setMessage(error.message, 'bad')));
+    $('sensorSelect').addEventListener('change', () => {
+      state.selectedSensor = $('sensorSelect').value;
+      const url = new URL(location.href);
+      url.searchParams.set('sensor_id', state.selectedSensor);
+      history.replaceState(null, '', url);
+      renderModules();
+    });
+    $('modules').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-save-module]');
+      if (button) saveModule(button.dataset.saveModule).catch((error) => setMessage(error.message, 'bad'));
+    });
+    $('addSensorBtn').addEventListener('click', () => addSensor().catch((error) => setMessage(error.message, 'bad')));
+    $('deleteSensorBtn').addEventListener('click', () => deleteSensor().catch((error) => setMessage(error.message, 'bad')));
+    refresh().catch((error) => setMessage(error.message, 'bad'));
+  </script>
+</body>
+</html>

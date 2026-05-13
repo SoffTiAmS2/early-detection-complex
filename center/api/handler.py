@@ -23,9 +23,10 @@ from center.core.policy import (
 from center.core.sensor_sync import sensor_sync
 from center.core.utils import load_json, now_ts, write_json
 from center.persistence.events import filter_events, purge_sensor_events, read_events, write_event
+from center.web.views import render_admin_page
 
 
-POLICY_SAFE_GET_PATHS = {"", "/", "/health", "/metrics", "/api/modules"}
+POLICY_SAFE_GET_PATHS = {"", "/", "/settings", "/health", "/metrics", "/api/modules"}
 JSON_POST_PATHS = {"/api/events", "/api/sensors"}
 
 
@@ -50,6 +51,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def send_html(self, payload: str, status: HTTPStatus = HTTPStatus.OK) -> None:
+        self.send_text(payload, "text/html; charset=utf-8", status)
 
     def require_admin_auth(self, method: str, path: str) -> bool:
         if not is_admin_route(method, path) or is_authorized(self.headers):
@@ -106,8 +110,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self.send_json({"status": "invalid_policy", "errors": errors}, HTTPStatus.CONFLICT)
             return
 
-        if parsed.path in ("", "/"):
-            self.send_json({"service": "early-detection-complex", "api": "/api/overview", "metrics": "/metrics"})
+        if parsed.path in ("", "/", "/settings"):
+            self.send_html(render_admin_page(policy))
             return
         if parsed.path == "/health":
             self.handle_health(policy, errors)
