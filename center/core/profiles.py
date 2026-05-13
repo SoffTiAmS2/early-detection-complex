@@ -7,6 +7,83 @@ from .policy import modules_by_id, services_by_id
 
 
 DEFAULT_BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
+    "full_stack": {
+        "title": "Full Stack",
+        "description": "All supported honeypots enabled together for maximal coverage.",
+        "desired_state": {
+            "runtime_mode": "docker",
+            "persona": {
+                "hostname": "edge-gateway-01",
+                "department": "Infrastructure",
+                "os": "Debian GNU/Linux",
+                "asset_tag": "EDGE-GW-01",
+            },
+            "modules": [
+                {
+                    "id": "cowrie",
+                    "enabled": True,
+                    "services": [
+                        {"id": "ssh", "enabled": True, "host_port": 2222},
+                        {"id": "telnet", "enabled": True, "host_port": 2223},
+                    ],
+                    "settings": {
+                        "hostname": "edge-gateway-01",
+                        "sensor_name": "edge-gateway-01",
+                        "ssh_version": "SSH-2.0-OpenSSH_8.4",
+                    },
+                },
+                {
+                    "id": "opencanary",
+                    "enabled": True,
+                    "services": [
+                        {"id": "http", "enabled": True, "host_port": 8081},
+                        {"id": "ftp", "enabled": True, "host_port": 2121},
+                        {"id": "smb", "enabled": True, "host_port": 1445},
+                        {"id": "redis", "enabled": True, "host_port": 6379},
+                        {"id": "mysql", "enabled": True, "host_port": 3306},
+                    ],
+                    "settings": {
+                        "device.node_id": "opencanary-edge-gateway-01",
+                        "http.banner": "nginx/1.18.0",
+                        "http.skin": "nasLogin",
+                    },
+                },
+                {
+                    "id": "heralding",
+                    "enabled": True,
+                    "services": [
+                        {"id": "ftp", "enabled": True, "host_port": 2122},
+                        {"id": "http", "enabled": True, "host_port": 8082},
+                        {"id": "pop3", "enabled": True, "host_port": 1110},
+                        {"id": "smtp", "enabled": True, "host_port": 2525},
+                    ],
+                    "settings": {
+                        "banner_profile": "enterprise-mail-and-ftp",
+                        "enabled_protocols": "ftp,http,pop3,smtp",
+                    },
+                },
+                {
+                    "id": "conpot",
+                    "enabled": True,
+                    "services": [
+                        {"id": "modbus", "enabled": True, "host_port": 1502},
+                        {"id": "http", "enabled": True, "host_port": 8800},
+                    ],
+                    "settings": {"protocol_profile": "modbus-http"},
+                },
+                {
+                    "id": "dionaea",
+                    "enabled": True,
+                    "services": [
+                        {"id": "smb", "enabled": True, "host_port": 2445},
+                        {"id": "http", "enabled": True, "host_port": 8083},
+                        {"id": "ftp", "enabled": True, "host_port": 2123},
+                    ],
+                    "settings": {"services_enabled": "smb,http,ftp"},
+                },
+            ],
+        },
+    },
     "printer": {
         "title": "Office Printer",
         "description": "MFP/profile with web admin, SMB spool path, and maintenance SSH.",
