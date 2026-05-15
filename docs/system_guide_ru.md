@@ -1,194 +1,262 @@
-# Early Detection Complex: единая книга проекта
+# Early Detection Complex: единая документация проекта
 
-Документ описывает проект целиком: назначение, архитектуру, запуск, сборку
-honeypot-контейнеров, работу центра, работу сенсора, Ansible, диагностику и
-рекомендации по чистке репозитория.
+Этот файл является основной и единственной подробной документацией проекта.
+Разрозненные документы из `docs/`, README внутри подпакетов и временные
+заметки удалены, чтобы проект можно было понять с одного места.
 
-`ВКРТекст.md` этим документом не заменяется и не редактируется. Это
-инженерная документация для разработки, тестирования и сопровождения кода.
+`ВКРТекст.md` не относится к инженерной документации проекта и не редактируется
+в рамках рефакторинга кода.
 
-## 1. Коротко о проекте
+## 1. Назначение
 
 Early Detection Complex, или EDC, - распределенный комплекс раннего выявления
-подозрительной сетевой активности. Он состоит из центрального узла и одного
-или нескольких сенсоров.
+подозрительной сетевой активности. Комплекс размещает управляемые сенсоры в
+локальной сети, запускает на них honeypot-сервисы и отправляет события на
+центральный узел.
 
-Центр хранит политику, принимает события, показывает состояние сенсоров и
-предоставляет API. Сенсор получает от центра desired-state, запускает реальные
-honeypot-контейнеры и отправляет события назад в центр.
+Основная идея простая: если к ложному сервису подключились, значит в сегменте
+есть активность, которую стоит проверить. Это может быть сканирование,
+попытка входа, обращение к промышленному протоколу, проверка SMTP, попытка
+найти Docker API или другой сетевой probe.
 
-Проект не является SIEM, IPS или полноценной системой реагирования. Его задача
-- дать ранний сигнал: если кто-то подключился к ложному сервису, это уже
-событие для анализа.
+EDC не является SIEM, IPS, EDR или firewall. Он не блокирует атаку. Он создает
+ранний сигнал, сохраняет контекст события и дает администратору понятную
+картину по сенсорам.
 
-## 2. Текущий стек
+## 2. Текущий рабочий стек
 
-Основной стек модулей:
+Актуальный стек honeypot-модулей:
 
-| Модуль | Назначение | Тип запуска |
+| Модуль | Что изображает | Основные сервисы |
 |---|---|---|
-| Cowrie | SSH/Telnet honeypot | локальная Docker-сборка |
-| Conpot | ICS/SCADA honeypot | локальная Docker-сборка |
-| Mailoney | SMTP honeypot | локальная Docker-сборка |
-| HoneyPy | набор простых honeypot-сервисов | локальная Docker-сборка |
-| Glutton | мультисервисный honeypot | локальная Docker-сборка |
+| `cowrie` | Linux-узел с SSH/Telnet | SSH, Telnet |
+| `conpot` | промышленный/инженерный узел | Modbus, S7-like, BACnet, HTTP |
+| `mailoney` | почтовый шлюз | SMTP |
+| `honeypy` | набор простых сервисов | HTTP, MySQL, Redis, FTP, Telnet |
+| `glutton` | мультисервисный сетевой honeypot | Docker API, MQTT, Kubernetes API, RDP, VNC, SIP |
 
-Старые модули `opencanary`, `heralding`, `dionaea` выведены из активного
-стека. Их не надо возвращать в рабочую политику, если цель - развивать новый
-стек `cowrie/conpot/mailoney/honeypy/glutton`.
+Старый стек `opencanary`, `heralding`, `dionaea` удален из активного проекта.
+Если в локальном `config/site.local.json` остались эти модули, такая policy
+считается старой и не пройдет валидацию с текущим `catalog/honeypots.json`.
 
-## 3. Главная идея архитектуры
+## 3. Архитектура
 
 ```text
-администратор
-    |
-    v
-center:8080
-    | хранит policy и события
-    | отдает desired-state
-    v
-sensor-agent
-    | генерирует docker-compose.yml
-    | запускает контейнеры honeypot
-    | читает логи модулей
-    v
-реальные honeypot-контейнеры
-    ^
-    |
-источник сетевого probe/сканирования
+                         HTTP/API
+администратор ─────────────────────────► center:8080
+                                           │
+                                           │ policy + events
+                                           ▼
+                                     PostgreSQL
+
+sensor-agent ── POST /api/sensors/<id>/sync ──► center
+      │                                           ▲
+      │ desired-state                            │ POST /api/events
+      ▼                                           │
+Docker-runtime ── docker compose ──► honeypot-контейнеры
+      ▲                                           │
+      └──────────── файлы логов runtime ◄─────────┘
 ```
 
-Центр не открывает honeypot-порты. Порты открываются только на сенсоре.
+Разделение ответственности:
 
-Сенсор не должен сам решать, какие сервисы запускать. Он берет это из
-desired-state, который центр формирует из `config/site.local.json` и
-`catalog/honeypots.json`.
+| Компонент | Ответственность |
+|---|---|
+| Центр | policy, catalog, API, веб-страницы, события, состояние сенсоров |
+| Сенсорный агент | sync с центром, выбор runtime, запуск runtime, status |
+| Docker-runtime | генерация compose/configs, запуск контейнеров, чтение логов |
+| Native-runtime | запасной легкий режим без контейнеров |
+| Catalog | описание доступных модулей и сервисов |
+| Policy | конкретные сенсоры, порты, профили и настройки стенда |
 
-## 4. Основные каталоги
+Центр не открывает honeypot-порты. Honeypot-порты открываются только на
+сенсоре.
+
+## 4. Текущее дерево проекта
+
+```text
+.
+├── README.md
+├── Makefile
+├── compose.yml
+├── pyproject.toml
+├── requirements.txt
+├── ansible/
+├── catalog/
+├── center/
+├── config/
+├── docs/
+├── scripts/
+├── sensor/
+└── tools/
+```
+
+Назначение каталогов:
 
 | Путь | Назначение |
 |---|---|
-| `center/` | HTTP API, веб-страницы, policy, события |
-| `sensor/` | sensor-agent, Docker-runtime, native-runtime |
-| `sensor/images/` | Dockerfiles реальных honeypot-модулей |
-| `catalog/honeypots.json` | каталог поддерживаемых модулей и сервисов |
-| `config/site.example.json` | пример рабочей политики |
-| `config/site.local.json` | локальная рабочая политика стенда, не хранится в git |
 | `ansible/` | установка центра и сенсоров на удаленные Linux-узлы |
-| `scripts/` | вспомогательные команды проверки, сборки и диагностики |
-| `tools/` | проверки политики и e2e smoke-тест |
-| `docs/system_guide_ru.md` | главный документ проекта |
-| `artifacts/` | тяжелые сборочные архивы, не коммитить |
-| `var/` | локальные базы и runtime state, не коммитить |
+| `catalog/` | каталог поддерживаемых honeypot-модулей |
+| `center/` | центральный HTTP/API узел |
+| `config/` | пример policy; локальная policy не хранится в git |
+| `docs/` | этот документ |
+| `scripts/` | shell-команды для сборки, запуска и диагностики |
+| `sensor/` | sensor-agent и runtime-код |
+| `tools/` | проверка policy и e2e smoke-тест |
 
-## 5. Центр
+## 5. Файлы верхнего уровня
 
-Центр - это Python HTTP-приложение. Точка входа:
+| Файл | Назначение |
+|---|---|
+| `.dockerignore` | исключения при сборке Docker image центра |
+| `.env.example` | пример переменных окружения |
+| `.gitignore` | исключения git |
+| `Makefile` | короткие команды разработки |
+| `README.md` | короткий вход в проект |
+| `compose.yml` | запуск центра и PostgreSQL |
+| `pyproject.toml` | метаданные Python-проекта |
+| `requirements.txt` | Python-зависимости |
+| `ВКРТекст.md` | текст ВКР, не часть инженерной чистки |
 
-```text
-center/main.py
-center/app.py
-center/api/handler.py
-```
+## 6. Центр
+
+Центр запускается как Python-приложение и обслуживает веб-страницы и API.
+
+Основные файлы:
+
+| Файл | Назначение |
+|---|---|
+| `center/main.py` | CLI: host, port, пути к policy/catalog/store |
+| `center/app.py` | создание HTTP-сервера |
+| `center/server.py` | серверная точка запуска |
+| `center/api/handler.py` | все HTTP-маршруты |
+| `center/core/auth.py` | Basic/Bearer авторизация |
+| `center/core/overview.py` | сводка для интерфейса |
+| `center/core/paths.py` | пути по умолчанию и лимиты |
+| `center/core/policy.py` | валидация policy и desired-state |
+| `center/core/profiles.py` | встроенные профили сенсоров |
+| `center/core/sensor_sync.py` | обработка sync от agent |
+| `center/core/utils.py` | JSON и время |
+| `center/persistence/store.py` | PostgreSQL/SQLite подключение и миграции |
+| `center/persistence/events.py` | запись, чтение, фильтрация и очистка событий |
+| `center/web/views.py` | рендеринг HTML-шаблонов |
+| `center/web/templates/admin.html` | настройки центра и сенсоров |
+| `center/web/templates/database.html` | просмотр событий |
+| `center/web/templates/mask.html` | настройки легенды honeypot |
+| `center/Dockerfile` | Docker image центра |
+
+## 7. API центра
 
 Основные маршруты:
 
-| Маршрут | Назначение |
-|---|---|
-| `GET /health` | проверка статуса центра и policy |
-| `GET /settings` | страница настройки центра и сенсоров |
-| `GET /mask` | страница настройки легенды honeypot |
-| `GET /db` | страница просмотра и очистки событий |
-| `GET /api/policy` | получить текущую policy |
-| `PUT /api/policy` | заменить policy |
-| `GET /api/sensors` | получить состояние сенсоров |
-| `POST /api/sensors` | добавить сенсор |
-| `DELETE /api/sensors/<id>` | удалить сенсор из policy |
-| `POST /api/sensors/<id>/sync` | sync от sensor-agent |
-| `POST /api/events` | прием событий от runtime |
-| `GET /api/events` | выборка событий |
+| Метод | Маршрут | Назначение |
+|---|---|---|
+| `GET` | `/health` | статус центра и policy |
+| `GET` | `/settings` | основная веб-страница |
+| `GET` | `/mask` | веб-страница маскировки |
+| `GET` | `/db` | веб-страница базы событий |
+| `GET` | `/api/modules` | catalog модулей |
+| `GET` | `/api/profiles` | встроенные и policy-профили |
+| `GET` | `/api/policy` | текущая policy |
+| `PUT` | `/api/policy` | заменить policy |
+| `PATCH` | `/api/site` | изменить site-настройки |
+| `GET` | `/api/overview` | агрегированная сводка |
+| `GET` | `/api/sensors` | список сенсоров и их состояние |
+| `POST` | `/api/sensors` | добавить сенсор |
+| `DELETE` | `/api/sensors/<id>` | удалить сенсор |
+| `PATCH` | `/api/sensors/<id>/modules/<module>` | изменить модуль |
+| `PATCH` | `/api/sensors/<id>/modules/<module>/services/<service>` | изменить сервис |
+| `POST` | `/api/sensors/<id>/sync` | sync от sensor-agent |
+| `POST` | `/api/sensors/<id>/apply-profile` | применить профиль |
+| `POST` | `/api/events` | принять событие |
+| `GET` | `/api/events` | получить события |
+| `GET` | `/api/db/stats` | статистика БД |
+| `POST` | `/api/db/purge` | очистить события |
+| `POST` | `/api/mask` | сохранить настройки маскировки |
 
-Центр пишет события в PostgreSQL, если задан `CENTER_DB_DSN`. Если PostgreSQL
-не включен, используется SQLite fallback.
+Для административных маршрутов используется авторизация из `center/core/auth.py`.
+Лабораторный режим допускает Basic Auth или Bearer Token.
 
-Docker Compose по умолчанию запускает:
+## 8. Хранение событий
+
+По умолчанию `compose.yml` запускает PostgreSQL:
 
 ```text
-edc-center
 edc-postgres
+edc-center
 ```
 
-## 6. Хранение данных
+Центр подключается к PostgreSQL через:
 
-В PostgreSQL и SQLite используется одна логическая таблица `events`.
+```text
+CENTER_DB_DSN=postgresql://edc:edc@postgres:5432/edc
+```
 
-Основные поля события:
+Если `CENTER_DB_DSN` не задан или не начинается с `postgres`, используется
+SQLite fallback в `var/center/events.sqlite3`.
+
+Таблица `events` содержит:
 
 | Поле | Смысл |
 |---|---|
+| `id` | внутренний номер события |
 | `received_at` | время приема центром |
-| `timestamp` | время события на стороне сенсора, если есть |
+| `timestamp` | время события от сенсора |
 | `event_type` | тип события |
-| `sensor_id` | идентификатор сенсора |
+| `sensor_id` | сенсор |
 | `module` | honeypot-модуль |
-| `service` | сервис внутри модуля |
-| `severity` | важность события |
-| `src_ip` | источник подключения |
+| `service` | сервис |
+| `severity` | важность |
+| `src_ip` | IP источника |
 | `src_port` | порт источника |
-| `dst_port` | порт назначения на сенсоре |
-| `raw_sample` | короткий фрагмент события |
-| `raw_event` | исходный JSON события |
+| `dst_port` | порт назначения |
+| `raw_sample` | короткий фрагмент |
+| `raw_event` | исходный JSON |
 
-Центр не обязан понимать все форматы логов каждого honeypot. Runtime сохраняет
-исходное событие в `raw_event`, а нормализованные поля используются для
-фильтров и интерфейса.
+## 9. Catalog и policy
 
-## 7. Policy и catalog
+`catalog/honeypots.json` описывает возможности системы: модули, сервисы,
+порты контейнеров, порты по умолчанию и schema настроек.
 
-`catalog/honeypots.json` отвечает на вопрос: какие модули и сервисы вообще
-поддерживаются проектом.
+`config/site.example.json` - пример рабочей policy. Из него создается
+локальный `config/site.local.json`.
 
-`config/site.local.json` отвечает на вопрос: какие сенсоры и сервисы включены
-на конкретном стенде.
+`config/site.local.json` не хранится в git, потому что в нем адреса,
+конкретные сенсоры, рабочие порты и локальные эксперименты.
 
-Правильный порядок:
+Создание локальной policy:
 
 ```bash
 cp config/site.example.json config/site.local.json
 python3 tools/validate_policy.py --policy config/site.local.json
 ```
 
-Если `config/site.local.json` принадлежит другому пользователю:
+Если файл принадлежит другому пользователю:
 
 ```bash
 sudo chown "$USER":users config/site.local.json
 ```
 
-Для текущего нового стека в policy должны быть модули:
+## 10. Сенсорный агент
+
+Главный файл:
 
 ```text
-cowrie
-conpot
-mailoney
-honeypy
-glutton
+sensor/agent.py
 ```
 
-## 8. Сенсор
+Агент делает цикл:
 
-Сенсор запускает `sensor/agent.py`.
+1. Формирует sync payload.
+2. Отправляет `POST /api/sensors/<sensor_id>/sync`.
+3. Получает desired-state.
+4. Запускает Docker-runtime или Native-runtime.
+5. Собирает active services.
+6. Отправляет status.
+7. При изменении desired-state перезапускает runtime.
+8. При остановке останавливает runtime.
 
-Основной цикл:
-
-1. Отправить sync в центр.
-2. Получить desired-state.
-3. Выбрать runtime.
-4. Запустить runtime.
-5. Периодически отправлять status.
-6. Читать события runtime и отправлять их в центр.
-7. При изменении desired-state перезапустить runtime.
-
-Команда ручного запуска:
+Ручной запуск:
 
 ```bash
 python3 sensor/agent.py \
@@ -199,80 +267,150 @@ python3 sensor/agent.py \
   --interval 20
 ```
 
-Systemd-сервис на сенсоре обычно запускает ту же команду.
+Разовый dry-run:
 
-## 9. Docker-runtime
-
-Docker-runtime находится в:
-
-```text
-sensor/runtime.py
-sensor/runtime_configs.py
-sensor/runtime_helpers.py
-sensor/runtime_status.py
+```bash
+python3 sensor/agent.py \
+  --center http://<center-ip>:8080 \
+  --sensor-id banana-pi-pro-1 \
+  --once
 ```
 
-Он делает следующее:
+## 11. Docker-runtime
 
-1. Проверяет наличие Docker и Docker Compose.
-2. Создает runtime-каталог.
+Файлы:
+
+| Файл | Назначение |
+|---|---|
+| `sensor/runtime.py` | основной Docker-runtime |
+| `sensor/runtime_configs.py` | генерация конфигов модулей |
+| `sensor/runtime_helpers.py` | image map, ports, helpers |
+| `sensor/runtime_status.py` | чтение состояния контейнеров |
+
+Docker-runtime:
+
+1. Проверяет Docker и Docker Compose.
+2. Создает `state_dir/docker-runtime/`.
 3. Копирует build context из `sensor/images/<module>/`.
-4. Генерирует конфиги модулей.
+4. Генерирует конфиги в `docker-runtime/<module>/config/`.
 5. Генерирует `docker-compose.yml`.
 6. Удаляет старые контейнеры с label `edc.sensor_id=<sensor_id>`.
 7. Запускает контейнеры.
-8. Читает файлы логов модулей.
-9. Отправляет события в центр.
+8. Читает логи из `docker-runtime/<module>/logs/`.
+9. Преобразует строки логов в события и отправляет их в центр.
 
-Важно: Docker-runtime не должен имитировать сервисы своим Python-кодом. Он
-должен запускать реальные honeypot-контейнеры.
+Docker-runtime не должен подменять реальные honeypot-проекты заглушками.
 
-## 10. Native-runtime
+## 12. Dockerfiles honeypot-модулей
 
-`sensor/native_runtime.py` - облегченный режим для ARMv7 или узлов без
-рабочих Docker-образов.
+| Путь | Назначение |
+|---|---|
+| `sensor/images/cowrie/Dockerfile` | сборка Cowrie |
+| `sensor/images/conpot/Dockerfile` | сборка Conpot |
+| `sensor/images/mailoney/Dockerfile` | сборка Mailoney |
+| `sensor/images/mailoney/entrypoint.sh` | запуск Mailoney |
+| `sensor/images/honeypy/Dockerfile` | сборка HoneyPy |
+| `sensor/images/honeypy/entrypoint.sh` | запуск HoneyPy |
+| `sensor/images/glutton/Dockerfile` | сборка Glutton |
 
-Native-runtime полезен как запасной лабораторный режим, но основной
-демонстрационный путь проекта сейчас - Docker-runtime с реальными
-honeypot-контейнерами.
+Если контейнер собирается, но не стартует, сначала смотреть:
 
-В policy режим выбирается так:
-
-```json
-"runtime_mode": "docker"
+```bash
+docker ps -a
+docker logs --tail 120 <container>
+docker inspect <container> --format '{{json .State}}'
 ```
 
-или:
+## 13. Native-runtime
+
+Файл:
+
+```text
+sensor/native_runtime.py
+```
+
+Native-runtime открывает TCP-порты стандартной библиотекой Python и фиксирует
+подключения. Это запасной режим для слабых ARMv7-узлов или ситуации, когда
+реальные контейнеры временно не собраны.
+
+Основной путь проекта - Docker-runtime. Native-runtime нужен как fallback и
+для быстрых лабораторных проверок.
+
+Включение в policy:
 
 ```json
 "runtime_mode": "native"
 ```
 
-## 11. Ansible
+Основной режим:
 
-Ansible в этом проекте - не отдельная бизнес-логика, а способ установки.
+```json
+"runtime_mode": "docker"
+```
 
-Он нужен, чтобы:
+## 14. Профили сенсоров
 
-- установить Docker и зависимости;
-- клонировать проект на центр и сенсоры;
-- записать systemd unit `edc-sensor.service`;
-- запустить agent на сенсоре;
-- удалить сенсор при выводе из эксплуатации.
+Профили находятся в `center/core/profiles.py`.
 
-Главная команда:
+Встроенные профили:
+
+| Профиль | Назначение |
+|---|---|
+| `full_stack` | полный набор `cowrie/conpot/mailoney/honeypy/glutton` |
+| `printer` | маска принтера/МФУ |
+| `camera` | маска IP-камеры |
+| `backup_server` | маска backup/storage сервера |
+
+Профиль можно применить через API:
+
+```bash
+curl -X POST http://<center>:8080/api/sensors/<sensor-id>/apply-profile \
+  -H 'Content-Type: application/json' \
+  -d '{"profile_id":"full_stack"}'
+```
+
+## 15. Ansible
+
+Ansible - это способ установки, а не часть runtime-логики.
+
+Файлы:
+
+| Файл | Назначение |
+|---|---|
+| `ansible/ansible.cfg` | настройки Ansible |
+| `ansible/inventory.example.yml` | пример inventory |
+| `ansible/group_vars/all.yml` | общие переменные |
+| `ansible/playbooks/site.yml` | общий playbook |
+| `ansible/playbooks/center.yml` | установка центра |
+| `ansible/playbooks/classify_sensors.yml` | определение класса сенсора |
+| `ansible/playbooks/sensors.yml` | установка sensor-agent |
+| `ansible/playbooks/remove_sensor.yml` | удаление сенсора |
+
+Запуск полного playbook:
 
 ```bash
 cd ansible
 ansible-playbook playbooks/site.yml --ask-pass --ask-become-pass
 ```
 
-Если не хочешь использовать Ansible, можно запускать центр через Docker Compose
-и sensor-agent вручную. Ansible не обязателен для понимания архитектуры.
-
-## 12. Запуск центра
+Удаление сенсора:
 
 ```bash
+cd ansible
+ansible-playbook playbooks/remove_sensor.yml \
+  --limit banana-pi-pro-1 \
+  --ask-pass \
+  --ask-become-pass
+```
+
+Ручной запуск без Ansible допустим и часто проще для отладки.
+
+## 16. Запуск центра
+
+Первичный запуск:
+
+```bash
+cp config/site.example.json config/site.local.json
 make up
 ```
 
@@ -290,15 +428,21 @@ docker compose logs -f center
 make down
 ```
 
-## 13. Сборка ARMv7 Docker bundle
+Прямой запуск без Docker:
 
-Скрипт:
+```bash
+python3 -m center.main --host 127.0.0.1 --port 8080
+```
+
+## 17. Сборка ARMv7 bundle
+
+Скрипт сборки:
 
 ```bash
 scripts/prebuild_armv7_bundle.sh 2>&1 | tee artifacts/build-armv7-$(date +%F-%H%M%S).log
 ```
 
-Результат:
+Ожидаемый архив:
 
 ```text
 artifacts/edc-armv7-images-YYYY-MM-DD-HHMMSS.tar.gz
@@ -321,7 +465,7 @@ docker load -i artifacts/edc-armv7-images-YYYY-MM-DD-HHMMSS.tar.gz
 docker image ls --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}' | grep '^edc/'
 ```
 
-## 14. Проверка Docker-runtime
+## 18. Проверка sensor runtime
 
 На сенсоре:
 
@@ -332,13 +476,13 @@ sudo systemctl status edc-sensor --no-pager
 journalctl -u edc-sensor -n 120 --no-pager
 ```
 
-Проверка контейнеров:
+Контейнеры:
 
 ```bash
 docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' | grep edc
 ```
 
-Проверка портов:
+Порты:
 
 ```bash
 ss -lntup | egrep '2222|2223|15020|10102|47808|8800|2525|8082|3307|6380|2124|2324|2375|1883|6443|3389|5900|5060'
@@ -355,91 +499,119 @@ curl -v --max-time 5 http://<sensor-ip>:8082/
 printf 'INFO\r\n' | nc -w 5 <sensor-ip> 6380
 ```
 
-Проверка событий на центре:
+События:
 
 ```bash
 curl -sS 'http://127.0.0.1:8080/api/events?limit=100' > artifacts/events-after-docker-runtime.json
 ```
 
-## 15. Что присылать для анализа ошибок
+## 19. Что присылать при ошибках
 
-Если сборка или запуск падает, нужен не пересказ, а артефакты:
+Для сборки:
 
 ```text
 artifacts/build-armv7-*.log
+```
+
+Для запуска:
+
+```text
 docker image ls по edc/*
 docker ps -a по edc-контейнерам
 journalctl -u edc-sensor -n 120 --no-pager
-docker logs --tail 120 для упавших контейнеров
+docker logs --tail 120 <упавший контейнер>
+docker inspect <упавший контейнер> --format '{{json .State}}'
 artifacts/events-after-docker-runtime.json
 ```
 
-Этого достаточно, чтобы исправлять конкретный Dockerfile, command, volume или
-парсер логов.
-
-## 16. Быстрые проверки разработчика
+Для policy:
 
 ```bash
-make check
-python3 tools/e2e_reconfigure_test.py
+python3 tools/validate_policy.py --policy config/site.local.json
+curl http://<center>:8080/health
 ```
 
-Что проверяет `make check`:
+## 20. Команды разработки
 
-- синтаксис Python;
-- валидность `config/site.example.json`;
-- валидность `compose.yml`.
+```bash
+make help
+make up
+make down
+make logs
+make check
+make e2e
+make clean
+```
 
-Локальная policy конкретного стенда проверяется отдельно:
+`make check` проверяет:
+
+- Python compile для `center`, `sensor`, `tools`;
+- `config/site.example.json` против `catalog/honeypots.json`;
+- `docker compose config`.
+
+Локальная policy проверяется отдельно:
 
 ```bash
 EDC_CHECK_LOCAL_POLICY=1 make check
 ```
 
-Так сделано специально: `config/site.local.json` может принадлежать другому
-пользователю, содержать временную лабораторную конфигурацию или старый стенд.
-Качество репозитория проверяется по `config/site.example.json`.
+Это сделано специально: `config/site.local.json` является рабочим файлом
+стенда и может временно отличаться от чистого примера.
 
-Что проверяет e2e:
+## 21. Тесты
 
-- запуск центра на свободном порту;
-- sync сенсора;
-- изменение policy через API;
-- генерацию Docker Compose для реальных модулей.
+Основной smoke-тест:
 
-## 17. Диагностика типовых проблем
+```bash
+python3 tools/e2e_reconfigure_test.py
+```
 
-| Симптом | Где смотреть | Что вероятно |
+Он проверяет:
+
+- запуск центра на случайном локальном порту;
+- `/health`;
+- `POST /api/sensors/<id>/sync`;
+- отображение сенсора через `/api/sensors`;
+- PATCH API для модулей и сервисов;
+- генерацию Docker Compose для реального стека.
+
+В некоторых песочницах тесту нужно право открыть локальный TCP socket.
+
+## 22. Диагностика
+
+Типовые проблемы:
+
+| Симптом | Где смотреть | Вероятная причина |
 |---|---|---|
-| `/health` возвращает `invalid_policy` | `config/site.local.json`, `tools/validate_policy.py` | policy не совпадает с catalog |
-| Сенсор не появляется в центре | `journalctl -u edc-sensor` | неверный center URL, sensor_id не зарегистрирован |
-| Контейнер не стартует | `docker ps -a`, `docker logs` | ошибка Dockerfile, command или volume |
-| Порт не слушается | `ss -lntup`, `docker ps` | модуль упал или порт занят |
-| Событие не появилось | логи модуля и `/api/events` | runtime не прочитал log file или модуль не пишет лог |
-| ARMv7 образ не собирается | `artifacts/build-armv7-*.log` | upstream dependency не поддерживает ARMv7 |
+| `/health` показывает `invalid_policy` | `tools/validate_policy.py` | policy не совпадает с catalog |
+| Сенсор не регистрируется | `journalctl -u edc-sensor` | неверный URL центра или sensor_id |
+| Нет контейнеров | `docker compose`, `docker ps -a` | Docker недоступен или compose не сгенерирован |
+| Контейнер exited | `docker logs` | ошибка Dockerfile, entrypoint или конфига |
+| Порт не слушается | `ss -lntup` | сервис отключен, контейнер упал, порт занят |
+| Нет событий | логи модуля и `/api/events` | модуль не пишет лог или runtime не читает нужный файл |
+| ARMv7 build failed | build log | upstream-зависимость не собирается под ARMv7 |
 
-## 18. Карта важных файлов кода
+Полезные скрипты:
 
-| Файл | Зачем нужен |
-|---|---|
-| `center/api/handler.py` | маршруты HTTP API и веб-страниц |
-| `center/core/policy.py` | валидация policy, desired-state, изменение модулей |
-| `center/core/profiles.py` | готовые профили сенсоров |
-| `center/core/sensor_sync.py` | обработка sync от sensor-agent |
-| `center/persistence/store.py` | подключение PostgreSQL/SQLite и миграции |
-| `center/persistence/events.py` | запись, чтение, фильтрация и очистка событий |
-| `sensor/agent.py` | основной цикл sensor-agent |
-| `sensor/runtime.py` | Docker-runtime |
-| `sensor/runtime_configs.py` | генерация конфигов модулей |
-| `sensor/runtime_helpers.py` | справочники образов и helpers |
-| `sensor/runtime_status.py` | чтение состояния Docker-контейнеров |
-| `sensor/native_runtime.py` | запасной native-runtime |
-| `scripts/prebuild_armv7_bundle.sh` | сборка ARMv7 bundle |
-| `tools/e2e_reconfigure_test.py` | smoke-тест центра и runtime |
+```bash
+scripts/center_sensor_audit.sh http://<center>:8080
+scripts/sensor_doctor.sh banana-pi-pro-1
+scripts/run_sensor_runtime.sh
+```
 
-## 19. Что нельзя коммитить
+## 23. Правила чистоты проекта
 
-Не коммитить:
+В git должны храниться:
+
+- исходный код;
+- Dockerfiles;
+- примерная policy;
+- catalog;
+- Ansible playbooks;
+- единая документация;
+- тесты и скрипты.
+
+В git не должны храниться:
 
 ```text
 artifacts/
@@ -451,55 +623,50 @@ config/site.local.json.bak-*
 ВКРТекст.md
 ```
 
-Причины:
+`README.md` оставлен коротким специально. Подробности должны быть здесь, а не
+размазаны по нескольким устаревающим файлам.
 
-- `artifacts/` содержит тяжелые tar.gz образы;
-- `var/` содержит runtime state и базы;
-- `__pycache__/` и `*.pyc` генерируются Python;
-- `site.local.json` является рабочей политикой конкретного стенда;
-- `ВКРТекст.md` - отдельный текст ВКР, его нельзя менять в рамках рефакторинга.
+## 24. Что было удалено при чистке
 
-## 20. Кандидаты на удаление после проверки
+Удалены устаревшие и дублирующие документы:
 
-Пока я не удаляю эти файлы автоматически, потому что часть может быть нужна
-для истории или защиты. Но для чистого продукта их стоит убрать или заменить
-ссылкой на этот документ.
+```text
+docs/architecture.md
+docs/beginner_guide.md
+docs/docker_honeypot_test_plan.md
+docs/file_map.md
+docs/network.md
+docs/references.md
+docs/roadmap.md
+docs/test_stand.md
+catalog/README.md
+center/README.md
+sensor/README.md
+```
 
-| Файл или каталог | Почему можно удалить |
-|---|---|
-| `docs/architecture.md` | устаревшее описание старого стека, дублирует эту книгу |
-| `docs/beginner_guide.md` | частично дублирует запуск и структуру |
-| `docs/file_map.md` | дублирует карту файлов из раздела 18 |
-| `docs/network.md` | содержит устаревшие упоминания `/metrics` |
-| `docs/roadmap.md` | полезно только как черновик планов |
-| `docs/test_stand.md` | содержит старые `opencanary/dionaea/heralding` |
-| `catalog/README.md` | короткий README, его смысл покрыт разделами 7 и 18 |
-| `center/README.md` | дублирует описание центра из этой книги |
-| `sensor/README.md` | после проверки стоит заменить ссылкой на эту книгу |
-| `config/site.local.json.bak-old-stack` | локальный backup старой policy, не нужен в git |
-| `center/1.txt`, `sensor/1.txt` | временные файлы, уже игнорируются |
-| `artifacts/*.tar.gz` | тяжелые сборочные артефакты, хранить вне git |
-| `__pycache__/`, `*.pyc` | генерируемый Python-кэш |
+Удалены локальные временные файлы:
 
-Рекомендуемый порядок удаления:
+```text
+center/1.txt
+sensor/1.txt
+config/site.local.json.bak-old-stack
+artifacts/edc-armv7-images-2026-05-14-202946.tar.gz
+```
 
-1. Сначала провести сборку и тесты нового Docker-стека.
-2. Сохранить нужные результаты тестов вне git.
-3. Удалить устаревшие docs или заменить их короткими ссылками на
-   `docs/system_guide_ru.md`.
-4. Проверить `make check`.
-5. Сделать отдельный commit `Clean obsolete docs and local artifacts`.
+Причина удаления: эти файлы либо дублировали данный документ, либо описывали
+старый стек, либо были локальными артефактами.
 
-## 21. Минимальный сценарий для понимания проекта
+## 25. Минимальный путь нового разработчика
 
-1. Прочитать `config/site.example.json`.
-2. Прочитать `catalog/honeypots.json`.
-3. Запустить центр: `make up`.
-4. Проверить: `curl http://127.0.0.1:8080/health`.
-5. Собрать ARMv7 bundle или локальные образы.
-6. Запустить `sensor/agent.py --serve`.
-7. Проверить `docker ps`.
-8. Сделать probe на honeypot-порт.
-9. Посмотреть `/api/events`.
+1. Открыть `README.md`.
+2. Перейти в `docs/system_guide_ru.md`.
+3. Прочитать разделы 1-13.
+4. Скопировать `config/site.example.json` в `config/site.local.json`.
+5. Выполнить `make check`.
+6. Запустить центр `make up`.
+7. Собрать или загрузить Docker-образы сенсора.
+8. Запустить sensor-agent.
+9. Сделать probe-тесты.
+10. Посмотреть события в `/db` или `/api/events`.
 
-Если эти девять шагов понятны, понятна вся система.
+Если этот путь проходит, проект находится в рабочем состоянии.

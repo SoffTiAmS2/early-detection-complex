@@ -1,4 +1,4 @@
-- name: Install EDC center and observability stack
+- name: Install EDC center
   hosts: centers
   become: true
   tasks:
@@ -28,7 +28,7 @@
         remote_src: true
         force: false
 
-    - name: Start center, Prometheus and Grafana
+    - name: Start center and PostgreSQL
       ansible.builtin.command:
         cmd: docker compose -f "{{ edc_center_compose_file }}" up -d --build
         chdir: "{{ edc_install_dir }}"

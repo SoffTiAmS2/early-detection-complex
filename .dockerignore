@@ -2,6 +2,8 @@
 __pycache__/
 *.py[cod]
 .env
+artifacts/
+var/
 logs/
 center/storage/
 central-node/
@@ -11,6 +13,8 @@ sensors/*/logs/
 config/network.yml
 config/sensors.yml
 config/site.local.json
+config/site.local.json.bak-*
 docs-*-org-*-latest.md
 .pytest_cache/
 archive/
+ВКРТекст.md

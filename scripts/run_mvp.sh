@@ -9,6 +9,6 @@ center_pid=$!
 trap 'kill "$center_pid" 2>/dev/null || true' EXIT
 
 sleep 1
-python3 sensor/agent.py --center http://127.0.0.1:8080 --sensor-id sensor1 --once
+python3 sensor/agent.py --center http://127.0.0.1:8080 --sensor-id banana-pi-pro-1 --once
 curl -fsS http://127.0.0.1:8080/api/sensors
 printf '\n'
