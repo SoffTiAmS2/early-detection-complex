@@ -1,112 +1,54 @@
-# Early Detection Complex / Комплекс Раннего Обнаружения
+# Early Detection Complex
 
-Распределённый комплекс раннего обнаружения подозрительной сетевой активности на основе honeypot.
+Распределенный комплекс раннего выявления подозрительной сетевой активности на
+основе управляемых honeypot-сенсоров.
 
-## Что Сейчас Главное
+Главная документация проекта находится в одном файле:
 
-Проект больше не строится вокруг MVP-веб-панели. Центр - это API/control-plane:
+```text
+docs/system_guide_ru.md
+```
 
-- хранит policy и raw events;
-- хранит policy и raw events в PostgreSQL;
-- принимает `POST /api/sensors/<id>/sync` от сенсоров;
-- устанавливается и сопровождается через Ansible.
+Начинай с него. Там описаны архитектура, запуск, сборка Docker-образов,
+Ansible, диагностика, тесты, карта файлов и список кандидатов на удаление.
 
-Сенсор запускает реальные honeypot-контейнеры через Docker Compose. Для Banana Pi Pro Cowrie собирается локально из `sensor/images/cowrie/Dockerfile` с фиксированными входами и выходами: `cowrie.cfg`, `userdb.txt`, `var/log/cowrie`, `tty`, `downloads`.
+## Быстрый запуск центра
 
-## Запуск Центра
-
-Проще всего:
-
-```sh
+```bash
+cp config/site.example.json config/site.local.json
 make up
+curl http://127.0.0.1:8080/health
 ```
 
-Если `make` не установлен:
+Центр будет доступен на `http://127.0.0.1:8080`.
 
-```sh
-docker compose up -d --build
-```
+## Быстрые проверки
 
-После запуска:
-
-```text
-API: http://<ip-центра>:8080
-```
-
-Локально без Docker:
-
-```sh
-python3 -m center.main --host 0.0.0.0 --port 8080
-```
-
-Для первого знакомства смотри [docs/beginner_guide.md](docs/beginner_guide.md).
-
-Рабочая политика центра хранится в `config/site.local.json`. Если файла нет, центр при первом запуске скопирует его из `config/site.example.json`.
-
-## Что Нужно На Плате
-
-Минимум:
-
-```text
-ОС Linux + сеть + SSH + пользователь с sudo или root
-```
-
-Поддерживается установка на Banana Pi Pro с Armbian. Docker и `edc-sensor.service` ставятся Ansible playbook-ом.
-
-На 32-bit ARM Cowrie собирается локально. Остальные honeypot images запускаются через тот же Docker-runtime; если конкретный upstream image не поддерживает ARMv7, ошибка будет видна в статусе сенсора и событиях.
-
-## Установка Через Ansible
-
-```sh
-cd ansible
-ansible-playbook playbooks/site.yml --ask-pass --ask-become-pass
-```
-
-Удаление сенсора с остановкой runtime, удалением файлов и очисткой policy:
-
-```sh
-cd ansible
-ansible-playbook playbooks/remove_sensor.yml --limit banana-pi-pro-1 --ask-pass --ask-become-pass
-```
-
-## Структура
-
-```text
-center/     # отдельное Python-приложение центра
-sensor/     # agent и Docker runtime, которые запускаются на плате
-ansible/    # установка, классификация и удаление центра/сенсоров
-catalog/    # описание поддерживаемых honeypot-модулей и их настроек
-config/     # политика стенда: сенсоры, профили, порты, persona
-scripts/    # локальные helper-скрипты
-tools/      # проверки политики и e2e reconfigure-тест
-docs/       # архитектура, карта файлов, стенд, roadmap
-compose.yml # центр + PostgreSQL
-Makefile    # короткие команды запуска и проверки
-pyproject.toml, requirements.txt # упаковка Python-проекта и зависимости (psycopg)
-```
-
-Старые прототипы и сгенерированные runtime-файлы больше не хранятся в git.
-
-## Honeypot Runtime / Запуск Honeypot
-
-Сенсор не имитирует протоколы сам. Он запускает реальные upstream Docker images:
-
-```text
-Cowrie     local build from sensor/images/cowrie/Dockerfile
-Conpot     honeynet/conpot:latest
-Mailoney   local build from sensor/images/mailoney/Dockerfile
-HoneyPy    local build from sensor/images/honeypy/Dockerfile
-Glutton    local build from sensor/images/glutton/Dockerfile
-```
-
-Sensor-agent удаляет старые контейнеры комплекса с label `edc.sensor_id=<sensor_id>`, применяет новую конфигурацию, читает файлы логов модулей и отправляет сырые события в центр.
-
-Краткое операционное описание смотри в `docs/system_guide_ru.md`.
-
-## Проверки
-
-```sh
+```bash
 make check
 python3 tools/e2e_reconfigure_test.py
-scripts/sensor_doctor.sh <sensor-id>
+```
+
+## Текущий honeypot-стек
+
+```text
+cowrie
+conpot
+mailoney
+honeypy
+glutton
+```
+
+Старый стек `opencanary/heralding/dionaea` не является активным направлением
+проекта.
+
+## Что не коммитить
+
+```text
+artifacts/
+var/
+__pycache__/
+*.pyc
+config/site.local.json
+ВКРТекст.md
 ```

@@ -111,7 +111,7 @@ def assert_compose_materializes(desired: dict[str, Any], state_dir: Path) -> Non
     runtime.prepare_module_dirs()
     runtime.write_compose()
     compose = runtime.compose_path.read_text(encoding="utf-8")
-    expected = ["edc/cowrie:local", "edc/opencanary:local", "2222:2222", "8081:80", "build:"]
+    expected = ["edc/cowrie:local", "edc/mailoney:local", "2222:2222", "2525:2525", "build:"]
     missing = [item for item in expected if item not in compose]
     if missing:
         raise RuntimeError(f"compose missing expected real runtime entries: {missing}\n{compose}")
@@ -141,10 +141,10 @@ def main() -> int:
                         "persona": {"hostname": "e2e-filesrv"},
                         "modules": [
                             {
-                                "id": "opencanary",
+                                "id": "mailoney",
                                 "enabled": True,
-                                "services": [{"id": "http", "host_port": 8081}],
-                                "settings": {"http.banner": "Apache/2.4.57", "portscan.synrate": 5},
+                                "services": [{"id": "smtp", "host_port": 2525}],
+                                "settings": {"hostname": "mail-e2e", "smtp_banner": "220 mail-e2e ESMTP"},
                             },
                             {
                                 "id": "cowrie",
@@ -198,20 +198,20 @@ def main() -> int:
             if not any(item.get("sensor_id") == "sensor1" and item.get("status") == "online" for item in sensors):
                 raise RuntimeError(f"sensor sync did not update status: {sensors}")
             bad_status = patch_expect_error(
-                f"http://127.0.0.1:{center_port}/api/sensors/sensor1/modules/opencanary",
-                {"settings": {"portscan.synrate": "wrong"}},
+                f"http://127.0.0.1:{center_port}/api/sensors/sensor1/modules/mailoney/services/smtp",
+                {"host_port": "wrong"},
             )
             if bad_status != 400:
                 raise RuntimeError(f"invalid settings returned {bad_status}, expected 400")
             disabled = patch_json(
-                f"http://127.0.0.1:{center_port}/api/sensors/sensor1/modules/opencanary",
+                f"http://127.0.0.1:{center_port}/api/sensors/sensor1/modules/mailoney",
                 {"enabled": False},
             )
             if disabled.get("status") != "saved":
                 raise RuntimeError(f"disable patch failed: {disabled}")
             enabled = patch_json(
-                f"http://127.0.0.1:{center_port}/api/sensors/sensor1/modules/opencanary",
-                {"enabled": True, "settings": {"http.banner": "lighttpd/1.4.76", "portscan.synrate": 7}},
+                f"http://127.0.0.1:{center_port}/api/sensors/sensor1/modules/mailoney",
+                {"enabled": True, "settings": {"hostname": "mail-e2e-2", "smtp_banner": "220 mail-e2e-2 ESMTP"}},
             )
             if enabled.get("status") != "saved":
                 raise RuntimeError(f"enable patch failed: {enabled}")

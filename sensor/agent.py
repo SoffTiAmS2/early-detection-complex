@@ -223,7 +223,7 @@ def main() -> None:
     while True:
         try:
             run_once(args.center, args.sensor_id, args.state_dir)
-        except Exception as exc:  # noqa: BLE001 - MVP agent keeps reporting instead of crashing the loop.
+        except Exception as exc:  # noqa: BLE001 - the agent keeps reporting instead of crashing the loop.
             print(f"sensor-agent: loop failed: {exc}", flush=True)
         if args.once:
             return

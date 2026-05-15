@@ -3,12 +3,14 @@ __pycache__/
 .env
 logs/
 var/
+artifacts/
 central-node/
 sensors/
 sensors/*/logs/
 config/network.yml
 config/sensors.yml
 config/site.local.json
+config/site.local.json.bak-*
 docs-*-org-*-latest.md
 ВКРТекст.md
 1.txt

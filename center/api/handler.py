@@ -351,8 +351,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "sensor already exists"}, HTTPStatus.CONFLICT)
             return
         profile_id = str(payload.get("profile_id") or "").strip()
-        clone_from = str(payload.get("clone_from") or "sensor1")
-        source = find_sensor(policy, clone_from) or (policy.get("sensors") or [None])[0]
+        clone_from = str(payload.get("clone_from") or "").strip()
+        source = find_sensor(policy, clone_from) if clone_from else None
+        source = source or (policy.get("sensors") or [None])[0]
         if not source and not profile_id:
             self.send_json({"error": "no source sensor to clone desired_state from"}, HTTPStatus.BAD_REQUEST)
             return
