@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{SITE_NAME}} · профили маскировки</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --text: #17202a;
+      --muted: #627084;
+      --line: #d8dee9;
+      --brand: #0f766e;
+      --brand-dark: #115e59;
+      --bad: #b42318;
+      --ok: #147a3d;
+      --info: #075985;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: center;
+      padding: 16px 24px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+    }
+    main { max-width: 1440px; margin: 0 auto; padding: 20px 24px 36px; }
+    h1 { margin: 0; font-size: 20px; font-weight: 760; }
+    h2 { margin: 0; font-size: 18px; }
+    h3 { margin: 0; font-size: 16px; }
+    button, .button {
+      border: 1px solid var(--brand);
+      background: var(--brand);
+      color: #fff;
+      border-radius: 6px;
+      padding: 8px 11px;
+      font: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+    }
+    button:hover, .button:hover { background: var(--brand-dark); }
+    .secondary { background: #fff; color: var(--text); border-color: var(--line); }
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 9px;
+      font: inherit;
+      background: #fff;
+      color: var(--text);
+    }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    .muted { color: var(--muted); }
+    .toplinks, .toolbar, .tags, .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .toolbar {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 14px;
+      align-items: end;
+    }
+    .toolbar label { min-width: 280px; flex: 1; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(280px, 1fr)); gap: 14px; }
+    .profile {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-height: 420px;
+    }
+    .profile-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
+    .type {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: #fbfcfe;
+      white-space: nowrap;
+      font-size: 12px;
+      color: var(--info);
+    }
+    .tag {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      background: #fbfcfe;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .box { border-top: 1px solid var(--line); padding-top: 10px; }
+    .list { margin: 6px 0 0; padding-left: 18px; }
+    .list li { margin: 3px 0; }
+    .message { margin: 0 0 12px; min-height: 22px; color: var(--muted); }
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+    @media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, minmax(260px, 1fr)); } }
+    @media (max-width: 720px) {
+      header { align-items: flex-start; flex-direction: column; padding: 14px 16px; }
+      main { padding: 16px; }
+      .grid, .split { grid-template-columns: 1fr; }
+      .toolbar label { min-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Профили маскировки</h1>
+      <div class="muted">{{SITE_NAME}}</div>
+    </div>
+    <nav class="toplinks">
+      <a class="button secondary" href="/">Dashboard</a>
+      <a class="button secondary" href="/mask">Техническая маскировка</a>
+      <a class="button secondary" href="/db">База</a>
+      <button class="secondary" id="refreshBtn">Обновить</button>
+    </nav>
+  </header>
+  <main>
+    <section class="toolbar">
+      <label>
+        <span class="muted">Сенсор для применения профиля</span>
+        <select id="sensorSelect"></select>
+      </label>
+      <div class="muted">Администратор выбирает устройство, а центр превращает его в desired-state для агента.</div>
+    </section>
+    <div class="message" id="message"></div>
+    <section class="grid" id="profiles"></section>
+  </main>
+  <script>
+    const state = { sensors: [], profiles: [] };
+    const $ = (id) => document.getElementById(id);
+    const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+    function setMessage(text, kind = '') {
+      $('message').textContent = text || '';
+      $('message').className = `message ${kind}`;
+    }
+
+    async function request(path, options = {}) {
+      const response = await fetch(path, {
+        ...options,
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        cache: 'no-store'
+      });
+      const text = await response.text();
+      const data = text ? JSON.parse(text) : {};
+      if (!response.ok) throw new Error(data.error || data.status || response.statusText);
+      return data;
+    }
+
+    function renderSensors() {
+      const sensors = state.sensors || [];
+      $('sensorSelect').innerHTML = sensors.map((sensor) => {
+        const profile = sensor.desired_state?.active_profile || sensor.desired_state?.profile || sensor.active_profile || 'без профиля';
+        return `<option value="${esc(sensor.id)}">${esc(sensor.id)} · ${esc(profile)}</option>`;
+      }).join('');
+    }
+
+    function renderProfile(profile) {
+      const ports = (profile.exposed_ports || []).map((item) => `${item.port}${item.protocol === 'udp' ? '/udp' : ''}`).join(', ');
+      const honeypots = (profile.honeypots || []).join(', ');
+      const banners = profile.banners || {};
+      const limits = profile.resource_limits || {};
+      const goals = (profile.detection_goals || []).map((goal) => `<li>${esc(goal)}</li>`).join('');
+      const services = (profile.exposed_ports || []).map((item) => `<li><code>${esc(item.port)}</code> ${esc(item.service)} → ${esc(item.honeypot)}</li>`).join('');
+      const errors = (profile.errors || []).map((error) => `<li class="bad">${esc(error)}</li>`).join('');
+      return `<article class="profile" data-profile-id="${esc(profile.id)}">
+        <div class="profile-head">
+          <div>
+            <h2>${esc(profile.title || profile.name || profile.id)}</h2>
+            <div class="muted">${esc(profile.description || '')}</div>
+          </div>
+          <span class="type">${esc(profile.device_type || '')}</span>
+        </div>
+        <div class="tags">
+          <span class="tag">ports: ${esc(ports || 'none')}</span>
+          <span class="tag">containers: ${esc(honeypots || 'none')}</span>
+        </div>
+        <div class="split">
+          <div class="box">
+            <strong>Легенда</strong>
+            <ul class="list">
+              <li>hostname: <code>${esc(banners.hostname || profile.legend?.hostname || '')}</code></li>
+              <li>vendor: ${esc(profile.legend?.vendor || '')}</li>
+              <li>title: ${esc(banners.http_title || banners.smtp_banner || banners.device_banner || '')}</li>
+            </ul>
+          </div>
+          <div class="box">
+            <strong>Ресурсы</strong>
+            <ul class="list">
+              <li>memory: <code>${esc(limits.memory_limit || 'default')}</code></li>
+              <li>cpu: <code>${esc(limits.cpu_limit || 'default')}</code></li>
+            </ul>
+          </div>
+        </div>
+        <div class="box">
+          <strong>Откроет сервисы</strong>
+          <ul class="list">${services || '<li class="muted">нет портов</li>'}</ul>
+        </div>
+        <div class="box">
+          <strong>Назначение</strong>
+          <ul class="list">${goals || '<li class="muted">нет описания</li>'}</ul>
+        </div>
+        ${errors ? `<div class="box"><strong class="bad">Ошибки профиля</strong><ul class="list">${errors}</ul></div>` : ''}
+        <div class="actions" style="margin-top:auto">
+          <button data-apply-profile="${esc(profile.id)}" ${errors ? 'disabled' : ''}>Применить к сенсору</button>
+          <span class="muted"><code>${esc(profile.id)}</code></span>
+        </div>
+      </article>`;
+    }
+
+    function renderProfiles() {
+      $('profiles').innerHTML = state.profiles.map(renderProfile).join('') || '<div class="muted">Профили не найдены.</div>';
+    }
+
+    async function applyProfile(profileId) {
+      const sensorId = $('sensorSelect').value;
+      if (!sensorId) return setMessage('Сначала добавь сенсор в политику.', 'bad');
+      await request(`/api/sensors/${encodeURIComponent(sensorId)}/apply-profile`, {
+        method: 'POST',
+        body: JSON.stringify({ profile_id: profileId })
+      });
+      setMessage(`Профиль ${profileId} применен к ${sensorId}.`, 'ok');
+      await refresh();
+    }
+
+    async function refresh() {
+      const [policyPayload, profilesPayload] = await Promise.all([
+        request('/api/policy'),
+        request('/api/device-mask-profiles')
+      ]);
+      state.sensors = policyPayload.policy?.sensors || [];
+      state.profiles = profilesPayload.profiles || [];
+      renderSensors();
+      renderProfiles();
+    }
+
+    $('profiles').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-apply-profile]');
+      if (button) applyProfile(button.dataset.applyProfile).catch((error) => setMessage(error.message, 'bad'));
+    });
+    $('refreshBtn').addEventListener('click', () => refresh().catch((error) => setMessage(error.message, 'bad')));
+    refresh().catch((error) => setMessage(error.message, 'bad'));
+  </script>
+</body>
+</html>

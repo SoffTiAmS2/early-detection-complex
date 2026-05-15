@@ -143,6 +143,7 @@
       <div class="muted">{{SITE_NAME}}</div>
     </div>
     <nav class="toplinks">
+      <a class="button secondary" href="/profiles">Профили</a>
       <a class="button secondary" href="/mask">Маскировка</a>
       <a class="button secondary" href="/db">База</a>
       <button class="secondary" id="refreshBtn">Обновить</button>
@@ -261,16 +262,23 @@
       const rows = (state.policy?.sensors || []).map((item) => {
         const sensor = liveSensor(item.id) || { sensor_id: item.id, host: item.host, events: 0, health: 'unknown', status: 'unknown', modules: [] };
         const healthClass = sensor.health === 'online' ? 'ok' : (sensor.health === 'stale' ? 'warn' : 'bad');
+        const policySensor = (state.policy?.sensors || []).find((candidate) => candidate.id === item.id) || {};
+        const profile = policySensor?.desired_state?.active_profile || policySensor?.desired_state?.profile || policySensor?.active_profile || '';
+        const ports = (policySensor?.desired_state?.exposed_ports || [])
+          .map((port) => port.port)
+          .filter(Boolean)
+          .join(', ');
         const modules = (sensor.modules || []).map((module) => `${module.id}:${module.status}`).join(', ');
         return `<tr>
           <td><strong>${esc(sensor.sensor_id)}</strong><br><span class="muted">${esc(sensor.host || '')}</span></td>
           <td class="${healthClass}">${esc(sensor.health || sensor.status || 'unknown')}<br><span class="muted">${age(sensor.last_seen)}</span></td>
+          <td>${esc(profile || 'без профиля')}<br><span class="muted">${esc(ports || 'порты не заданы')}</span></td>
           <td>${esc(sensor.events || 0)}</td>
           <td><code>${esc(modules)}</code></td>
           <td></td>
         </tr>`;
       }).join('');
-      $('sensors').innerHTML = `<table><thead><tr><th>ID</th><th>Статус</th><th>События</th><th>Модули</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="5" class="muted">нет сенсоров</td></tr>'}</tbody></table>`;
+      $('sensors').innerHTML = `<table><thead><tr><th>ID</th><th>Статус</th><th>Профиль / порты</th><th>События</th><th>Модули</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="muted">нет сенсоров</td></tr>'}</tbody></table>`;
     }
 
     function renderSelector() {

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGES_DIR="${ROOT_DIR}/sensor/images"
+IMAGES_DIR="${ROOT_DIR}/sensor/dockerfiles"
 BUNDLE_DIR="${ROOT_DIR}/artifacts"
 DATE_TAG="$(date +%F-%H%M%S)"
 BUNDLE_PATH="${BUNDLE_DIR}/edc-armv7-images-${DATE_TAG}.tar.gz"

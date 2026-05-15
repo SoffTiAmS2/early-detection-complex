@@ -12,11 +12,13 @@ def create_server(
     host: str,
     port: int,
     catalog_path: Path,
+    profile_path: Path,
     policy_path: Path,
     store_path: Path,
 ) -> ThreadingHTTPServer:
     """Create a configured HTTP server instance."""
     ControlPlaneHandler.catalog_path = catalog_path
+    ControlPlaneHandler.profile_path = profile_path
     ControlPlaneHandler.policy_path = policy_path
     ControlPlaneHandler.store_path = store_path
     return ThreadingHTTPServer((host, port), ControlPlaneHandler)

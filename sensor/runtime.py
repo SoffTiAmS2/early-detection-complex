@@ -228,6 +228,11 @@ class DockerRuntime:
             block.append("    environment:")
             for key, value in environment.items():
                 block.append(f"      {key}: {yaml_scalar(value)}")
+        resource_limits = self.compose_resource_limits(module)
+        if resource_limits.get("memory_limit"):
+            block.append(f"    mem_limit: {yaml_scalar(resource_limits['memory_limit'])}")
+        if resource_limits.get("cpu_limit"):
+            block.append(f"    cpus: {yaml_scalar(resource_limits['cpu_limit'])}")
         command = self.compose_command(module)
         if command:
             block.append(f"    command: {command}")
@@ -305,6 +310,15 @@ class DockerRuntime:
             }
         return {}
 
+    def compose_resource_limits(self, module: dict[str, Any]) -> dict[str, Any]:
+        settings = module.get("settings", {}) if isinstance(module.get("settings"), dict) else {}
+        limits = settings.get("resource_limits") if isinstance(settings.get("resource_limits"), dict) else {}
+        desired_limits = self.desired.get("resource_limits") if isinstance(self.desired.get("resource_limits"), dict) else {}
+        return {
+            "memory_limit": limits.get("memory_limit") or desired_limits.get("memory_limit"),
+            "cpu_limit": limits.get("cpu_limit") or desired_limits.get("cpu_limit"),
+        }
+
     def compose_command(self, module: dict[str, Any]) -> str:
         module_id = str(module.get("id"))
         if module_id == "conpot":
@@ -326,8 +340,11 @@ class DockerRuntime:
             ("conpot", "http"): 8800,
             ("conpot", "s7comm"): 10200,
             ("conpot", "bacnet"): 47808,
+            ("conpot", "ethernet_ip"): 44818,
             ("mailoney", "smtp"): 2525,
             ("honeypy", "http"): 8082,
+            ("honeypy", "https"): 8443,
+            ("honeypy", "http_alt"): 8080,
             ("honeypy", "mysql"): 3307,
             ("honeypy", "redis"): 6380,
             ("honeypy", "ftp"): 2124,
@@ -338,6 +355,30 @@ class DockerRuntime:
             ("glutton", "rdp"): 3389,
             ("glutton", "vnc"): 5900,
             ("glutton", "sip"): 5060,
+            ("glutton", "snmp"): 161,
+            ("glutton", "lpd"): 515,
+            ("glutton", "ipp"): 631,
+            ("glutton", "jetdirect"): 9100,
+            ("glutton", "rtsp"): 554,
+            ("glutton", "camera_service"): 8000,
+            ("glutton", "discovery"): 8899,
+            ("glutton", "winbox"): 8291,
+            ("glutton", "rsync"): 873,
+            ("glutton", "nfs"): 2049,
+            ("glutton", "smb"): 445,
+            ("glutton", "netbios"): 139,
+            ("glutton", "msrpc"): 135,
+            ("glutton", "wsdiscovery"): 5357,
+            ("glutton", "winrm"): 5985,
+            ("glutton", "postgres"): 5432,
+            ("glutton", "pop3"): 110,
+            ("glutton", "imap"): 143,
+            ("glutton", "smtps"): 465,
+            ("glutton", "submission"): 587,
+            ("glutton", "imaps"): 993,
+            ("glutton", "pop3s"): 995,
+            ("glutton", "afp"): 548,
+            ("glutton", "nas_web"): 5000,
         }
         return defaults.get((module_id, service_id), selected_host_port(self.module_by_id(module_id) or {}, service_id, 0))
 

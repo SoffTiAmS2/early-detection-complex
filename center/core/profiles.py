@@ -1,153 +1,277 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
+from .paths import DEFAULT_DEVICE_PROFILES
 from .policy import modules_by_id, services_by_id
-
-
-DEFAULT_BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
-    "full_stack": {
-        "title": "Full Stack",
-        "description": "Cowrie + Conpot + Mailoney + HoneyPy + Glutton.",
-        "desired_state": {
-            "runtime_mode": "docker",
-            "persona": {"hostname": "edge-gateway-01", "department": "Infrastructure", "os": "Debian GNU/Linux", "asset_tag": "EDGE-GW-01"},
-            "modules": [
-                {"id": "cowrie", "enabled": True, "services": [{"id": "ssh", "enabled": True, "host_port": 2222}, {"id": "telnet", "enabled": True, "host_port": 2223}], "settings": {"hostname": "edge-gateway-01"}},
-                {"id": "conpot", "enabled": True, "services": [{"id": "modbus", "enabled": True, "host_port": 15020}, {"id": "s7comm", "enabled": True, "host_port": 10102}, {"id": "bacnet", "enabled": True, "host_port": 47808}, {"id": "http", "enabled": True, "host_port": 8800}], "settings": {"template": "default"}},
-                {"id": "mailoney", "enabled": True, "services": [{"id": "smtp", "enabled": True, "host_port": 2525}], "settings": {"hostname": "mail-gw-01"}},
-                {"id": "honeypy", "enabled": True, "services": [{"id": "http", "enabled": True, "host_port": 8082}, {"id": "mysql", "enabled": True, "host_port": 3307}, {"id": "redis", "enabled": True, "host_port": 6380}, {"id": "ftp", "enabled": True, "host_port": 2124}, {"id": "telnet", "enabled": True, "host_port": 2324}], "settings": {"sensor_name": "web-stack-01"}},
-                {"id": "glutton", "enabled": True, "services": [{"id": "docker_api", "enabled": True, "host_port": 2375}, {"id": "mqtt", "enabled": True, "host_port": 1883}, {"id": "k8s_api", "enabled": True, "host_port": 6443}, {"id": "rdp", "enabled": True, "host_port": 3389}, {"id": "vnc", "enabled": True, "host_port": 5900}, {"id": "sip", "enabled": True, "host_port": 5060}], "settings": {}}
-            ],
-        },
-    },
-    "printer": {
-        "title": "Printer",
-        "description": "Printer-like mask with management access and SMTP trap.",
-        "desired_state": {
-            "runtime_mode": "docker",
-            "persona": {"hostname": "prn-mfp-01", "department": "Office", "os": "Embedded Linux", "asset_tag": "PRN-MFP-01"},
-            "modules": [
-                {"id": "cowrie", "enabled": True, "services": [{"id": "ssh", "enabled": True, "host_port": 22}, {"id": "telnet", "enabled": False, "host_port": 2223}], "settings": {"hostname": "prn-mfp-01", "ssh_version": "SSH-2.0-OpenSSH_7.4p1 Debian-10+deb9u7"}},
-                {"id": "honeypy", "enabled": True, "services": [{"id": "http", "enabled": True, "host_port": 80}, {"id": "ftp", "enabled": True, "host_port": 21}, {"id": "mysql", "enabled": False, "host_port": 3307}, {"id": "redis", "enabled": False, "host_port": 6380}, {"id": "telnet", "enabled": False, "host_port": 2324}], "settings": {"sensor_name": "printer-web-01"}},
-                {"id": "mailoney", "enabled": True, "services": [{"id": "smtp", "enabled": True, "host_port": 25}], "settings": {"hostname": "mail-relay-prn-01"}}
-            ],
-        },
-    },
-    "camera": {
-        "title": "Camera",
-        "description": "IP-camera style profile with lightweight protocol set.",
-        "desired_state": {
-            "runtime_mode": "docker",
-            "persona": {"hostname": "cam-lobby-01", "department": "Security", "os": "Embedded Linux", "asset_tag": "CCTV-LOBBY-01"},
-            "modules": [
-                {"id": "cowrie", "enabled": True, "services": [{"id": "ssh", "enabled": True, "host_port": 22}, {"id": "telnet", "enabled": False, "host_port": 2223}], "settings": {"hostname": "cam-lobby-01", "ssh_version": "SSH-2.0-dropbear_2020.81"}},
-                {"id": "honeypy", "enabled": True, "services": [{"id": "http", "enabled": True, "host_port": 80}, {"id": "ftp", "enabled": False, "host_port": 2124}, {"id": "mysql", "enabled": False, "host_port": 3307}, {"id": "redis", "enabled": False, "host_port": 6380}, {"id": "telnet", "enabled": False, "host_port": 2324}], "settings": {"sensor_name": "camera-ui-01"}}
-            ],
-        },
-    },
-    "backup_server": {
-        "title": "Backup Server",
-        "description": "Storage/backup footprint with broader protocol exposure.",
-        "desired_state": {
-            "runtime_mode": "docker",
-            "persona": {"hostname": "backup-srv-01", "department": "Infrastructure", "os": "Debian GNU/Linux", "asset_tag": "BCK-SRV-01"},
-            "modules": [
-                {"id": "cowrie", "enabled": True, "services": [{"id": "ssh", "enabled": True, "host_port": 22}, {"id": "telnet", "enabled": False, "host_port": 2223}], "settings": {"hostname": "backup-srv-01"}},
-                {"id": "glutton", "enabled": True, "services": [{"id": "docker_api", "enabled": True, "host_port": 2375}, {"id": "mqtt", "enabled": True, "host_port": 1883}, {"id": "k8s_api", "enabled": False, "host_port": 6443}, {"id": "rdp", "enabled": True, "host_port": 3389}, {"id": "vnc", "enabled": True, "host_port": 5900}, {"id": "sip", "enabled": False, "host_port": 5060}], "settings": {}},
-                {"id": "mailoney", "enabled": True, "services": [{"id": "smtp", "enabled": True, "host_port": 25}], "settings": {"hostname": "mail-backup-01"}}
-            ],
-        },
-    },
-}
+from .utils import load_json
 
 
 def _deep_copy(value: Any) -> Any:
-    return json.loads(json.dumps(value))
+    return json.loads(json.dumps(value, ensure_ascii=False))
 
 
-def _defaults_for_module(catalog_module: dict[str, Any]) -> dict[str, Any]:
+def load_device_profile_catalog(path: Path | str = DEFAULT_DEVICE_PROFILES) -> dict[str, Any]:
+    return load_json(Path(path))
+
+
+def _schema_defaults(catalog_module: dict[str, Any]) -> dict[str, Any]:
+    settings: dict[str, Any] = {}
+    for field in catalog_module.get("config_schema", []):
+        if isinstance(field, dict) and field.get("key"):
+            settings[str(field["key"])] = _deep_copy(field.get("default", ""))
+    return settings
+
+
+def _profile_id(profile: dict[str, Any]) -> str:
+    return str(profile.get("id") or profile.get("name") or "").strip()
+
+
+def profile_errors(profile: dict[str, Any], catalog: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    profile_id = _profile_id(profile) or "<unknown>"
+    module_index = modules_by_id(catalog)
+
+    if not _profile_id(profile):
+        errors.append("profile id is required")
+    if not isinstance(profile.get("exposed_ports"), list):
+        errors.append(f"{profile_id}: exposed_ports must be a list")
+        return errors
+
+    seen_ports: set[tuple[str, int]] = set()
+    for item in profile.get("exposed_ports", []):
+        if not isinstance(item, dict):
+            errors.append(f"{profile_id}: exposed port must be an object")
+            continue
+        module_id = str(item.get("honeypot") or "").strip()
+        service_id = str(item.get("module_service") or item.get("service") or "").strip()
+        protocol = str(item.get("protocol") or "tcp").strip().lower()
+        try:
+            host_port = int(item.get("port"))
+        except (TypeError, ValueError):
+            errors.append(f"{profile_id}: {module_id}/{service_id}: port must be an integer")
+            continue
+        if not 1 <= host_port <= 65535:
+            errors.append(f"{profile_id}: {module_id}/{service_id}: port out of range")
+        key = (protocol, host_port)
+        if key in seen_ports:
+            errors.append(f"{profile_id}: duplicate exposed port {protocol}/{host_port}")
+        seen_ports.add(key)
+        catalog_module = module_index.get(module_id)
+        if not catalog_module:
+            errors.append(f"{profile_id}: unknown honeypot module: {module_id}")
+            continue
+        if service_id not in services_by_id(catalog_module):
+            errors.append(f"{profile_id}: {module_id}: unknown service: {service_id}")
+    return errors
+
+
+def _module_settings(profile: dict[str, Any], catalog_module: dict[str, Any]) -> dict[str, Any]:
+    module_id = str(catalog_module.get("id"))
+    profile_id = _profile_id(profile)
+    legend = profile.get("legend") if isinstance(profile.get("legend"), dict) else {}
+    banners = profile.get("banners") if isinstance(profile.get("banners"), dict) else {}
+    fingerprints = profile.get("service_fingerprints") if isinstance(profile.get("service_fingerprints"), dict) else {}
+    templates = profile.get("config_templates") if isinstance(profile.get("config_templates"), dict) else {}
+    resource_limits = profile.get("resource_limits") if isinstance(profile.get("resource_limits"), dict) else {}
+    exposed_ports = [item for item in profile.get("exposed_ports", []) if isinstance(item, dict) and item.get("honeypot") == module_id]
+
+    settings = _schema_defaults(catalog_module)
+    settings.update(
+        {
+            "profile_id": profile_id,
+            "profile_name": profile.get("name") or profile.get("title") or profile_id,
+            "device_type": profile.get("device_type", ""),
+            "template_id": templates.get(module_id, profile_id),
+            "resource_limits": _deep_copy(resource_limits),
+        }
+    )
+
+    hostname = str(banners.get("hostname") or legend.get("hostname") or profile_id)
+    if module_id == "cowrie":
+        settings["hostname"] = hostname
+        settings["ssh_version"] = str(banners.get("ssh_banner") or banners.get("telnet_banner") or settings.get("ssh_version") or "SSH-2.0-OpenSSH_8.4")
+        settings.setdefault("userdb_entries", "root:x:!root\nadmin:x:admin")
+    elif module_id == "mailoney":
+        settings["hostname"] = hostname
+        settings["smtp_banner"] = str(banners.get("smtp_banner") or f"220 {hostname} ESMTP")
+    elif module_id == "honeypy":
+        settings["sensor_name"] = hostname
+        settings["http_title"] = str(banners.get("http_title") or profile.get("title") or hostname)
+        settings["fake_paths"] = _deep_copy(fingerprints.get("paths", []))
+        settings["login_prompts"] = _deep_copy(banners.get("login_prompts", []))
+        settings["banners"] = _deep_copy(banners)
+        settings["service_fingerprints"] = _deep_copy(fingerprints)
+    elif module_id == "glutton":
+        settings["exposed_ports"] = _deep_copy(exposed_ports)
+        settings["banners"] = _deep_copy(banners)
+        settings["service_fingerprints"] = _deep_copy(fingerprints)
+    elif module_id == "conpot":
+        settings["template"] = str(templates.get("conpot") or settings.get("template") or "default")
+        settings["banners"] = _deep_copy(banners)
+        settings["service_fingerprints"] = _deep_copy(fingerprints)
+
+    return settings
+
+
+def render_profile_desired_state(profile: dict[str, Any], catalog: dict[str, Any], config_version: int | None = None) -> dict[str, Any]:
+    profile_id = _profile_id(profile)
+    module_index = modules_by_id(catalog)
+    grouped: dict[str, list[dict[str, Any]]] = {}
+
+    for item in profile.get("exposed_ports", []):
+        if not isinstance(item, dict):
+            continue
+        module_id = str(item.get("honeypot") or "").strip()
+        service_id = str(item.get("module_service") or item.get("service") or "").strip()
+        if module_id not in module_index:
+            continue
+        catalog_service = services_by_id(module_index[module_id]).get(service_id)
+        if not catalog_service:
+            continue
+        grouped.setdefault(module_id, []).append(
+            {
+                "id": service_id,
+                "enabled": True,
+                "host_port": int(item.get("port")),
+                "profile_service": item.get("service", service_id),
+                "description": item.get("description", ""),
+            }
+        )
+
+    modules = []
+    for module_id in profile.get("honeypots", []):
+        catalog_module = module_index.get(str(module_id))
+        if not catalog_module:
+            continue
+        services = grouped.get(str(module_id), [])
+        if not services:
+            continue
+        modules.append(
+            {
+                "id": str(module_id),
+                "enabled": True,
+                "services": services,
+                "settings": _module_settings(profile, catalog_module),
+            }
+        )
+
+    services_summary = []
+    for module in modules:
+        ports = {str(service["host_port"]): service.get("id") for service in module.get("services", [])}
+        templates = profile.get("config_templates") if isinstance(profile.get("config_templates"), dict) else {}
+        services_summary.append(
+            {
+                "name": module["id"],
+                "enabled": True,
+                "ports": ports,
+                "template": templates.get(module["id"]),
+            }
+        )
+
+    version = int(config_version or profile.get("version") or 1)
     return {
-        "id": catalog_module["id"],
-        "enabled": True,
-        "services": [
-            {"id": service["id"], "enabled": True, "host_port": service.get("default_host_port", service.get("container_port"))}
-            for service in catalog_module.get("services", [])
-        ],
-        "settings": {field["key"]: field.get("default", "") for field in catalog_module.get("config_schema", []) if isinstance(field, dict) and field.get("key")},
+        "runtime_mode": "docker",
+        "active_profile": profile_id,
+        "profile": profile_id,
+        "profile_name": profile.get("name") or profile.get("title") or profile_id,
+        "device_type": profile.get("device_type", ""),
+        "config_version": version,
+        "persona": _deep_copy(profile.get("legend", {})),
+        "legend": _deep_copy(profile.get("legend", {})),
+        "exposed_ports": _deep_copy(profile.get("exposed_ports", [])),
+        "honeypots": _deep_copy(profile.get("honeypots", [])),
+        "banners": _deep_copy(profile.get("banners", {})),
+        "service_fingerprints": _deep_copy(profile.get("service_fingerprints", {})),
+        "docker_template": _deep_copy(profile.get("docker_template", {})),
+        "config_templates": _deep_copy(profile.get("config_templates", {})),
+        "resource_limits": _deep_copy(profile.get("resource_limits", {})),
+        "logging": _deep_copy(profile.get("logging", {"raw": True, "normalized": True})),
+        "services": services_summary,
+        "modules": modules,
     }
 
 
-def _merge_module(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
-    merged = _deep_copy(base)
-    merged["enabled"] = bool(override.get("enabled", merged.get("enabled", True)))
-    services = {str(item.get("id")): item for item in merged.get("services", [])}
-    for service in override.get("services", []):
-        service_id = str(service.get("id"))
-        if service_id not in services:
-            services[service_id] = {"id": service_id, "enabled": True}
-        services[service_id]["enabled"] = bool(service.get("enabled", services[service_id].get("enabled", True)))
-        if "host_port" in service:
-            services[service_id]["host_port"] = int(service["host_port"])
-    merged["services"] = list(services.values())
-    settings = merged.setdefault("settings", {})
-    settings.update(override.get("settings", {}))
-    return merged
-
-
-def _apply_profile_template(catalog: dict[str, Any], template: dict[str, Any]) -> dict[str, Any]:
-    module_index = modules_by_id(catalog)
-    base_modules = {_id: _defaults_for_module(module) for _id, module in module_index.items()}
-    desired_template = template.get("desired_state", {})
-    module_overrides = desired_template.get("modules", [])
-    service_templates = {str(item.get("id")): item for item in module_overrides}
-    merged_modules = []
-    for module_id, base in base_modules.items():
-        override = service_templates.get(module_id)
-        merged_modules.append(_merge_module(base, override) if override else base)
-    for module_id, override in service_templates.items():
-        if module_id not in base_modules:
-            fallback_services = []
-            catalog_module = module_index.get(module_id)
-            if catalog_module:
-                fallback_services = [{"id": service_id, "enabled": True, "host_port": service.get("default_host_port", service.get("container_port"))} for service_id, service in services_by_id(catalog_module).items()]
-            merged_modules.append({"id": module_id, "enabled": bool(override.get("enabled", True)), "services": _deep_copy(override.get("services", fallback_services)), "settings": _deep_copy(override.get("settings", {}))})
-    return {"runtime_mode": desired_template.get("runtime_mode", "docker"), "persona": _deep_copy(desired_template.get("persona", {})), "modules": merged_modules}
-
-
-def available_profiles(policy: dict[str, Any], catalog: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _catalog_profiles(profile_catalog: dict[str, Any], catalog: dict[str, Any], config_version: int) -> dict[str, dict[str, Any]]:
     profiles: dict[str, dict[str, Any]] = {}
-    for profile_id, template in DEFAULT_BUILTIN_PROFILES.items():
-        profiles[profile_id] = {
-            "id": profile_id,
-            "title": template.get("title", profile_id),
-            "description": template.get("description", ""),
-            "desired_state": _apply_profile_template(catalog, template),
-            "source": "builtin",
-        }
-    for profile in policy.get("profiles", []):
-        profile_id = str(profile.get("id", "")).strip()
+    for profile in profile_catalog.get("profiles", []):
+        if not isinstance(profile, dict):
+            continue
+        profile_id = _profile_id(profile)
         if not profile_id:
             continue
-        if not isinstance(profile.get("desired_state"), dict):
-            continue
+        errors = profile_errors(profile, catalog)
         profiles[profile_id] = {
+            **_deep_copy(profile),
             "id": profile_id,
-            "title": str(profile.get("title") or profile_id),
-            "description": str(profile.get("description") or ""),
-            "desired_state": _deep_copy(profile["desired_state"]),
-            "source": "policy",
+            "title": profile.get("title") or profile.get("name") or profile_id,
+            "source": "catalog",
+            "errors": errors,
+            "desired_state": render_profile_desired_state(profile, catalog, config_version),
         }
     return profiles
 
 
-def apply_profile(policy: dict[str, Any], catalog: dict[str, Any], sensor: dict[str, Any], profile_id: str) -> tuple[bool, str]:
-    profiles = available_profiles(policy, catalog)
+def _policy_profiles(policy: dict[str, Any], catalog: dict[str, Any], config_version: int) -> dict[str, dict[str, Any]]:
+    profiles: dict[str, dict[str, Any]] = {}
+    for profile in policy.get("profiles", []):
+        if not isinstance(profile, dict):
+            continue
+        profile_id = _profile_id(profile)
+        if not profile_id:
+            continue
+        if isinstance(profile.get("desired_state"), dict):
+            desired_state = _deep_copy(profile["desired_state"])
+            desired_state.setdefault("profile", profile_id)
+            desired_state.setdefault("active_profile", profile_id)
+            desired_state.setdefault("config_version", config_version)
+            errors: list[str] = []
+        else:
+            errors = profile_errors(profile, catalog)
+            desired_state = render_profile_desired_state(profile, catalog, config_version)
+        profiles[profile_id] = {
+            **_deep_copy(profile),
+            "id": profile_id,
+            "title": profile.get("title") or profile.get("name") or profile_id,
+            "source": "policy",
+            "errors": errors,
+            "desired_state": desired_state,
+        }
+    return profiles
+
+
+def available_profiles(
+    policy: dict[str, Any],
+    catalog: dict[str, Any],
+    profile_catalog: dict[str, Any] | None = None,
+) -> dict[str, dict[str, Any]]:
+    config_version = int(policy.get("version", 1))
+    profile_catalog = profile_catalog if isinstance(profile_catalog, dict) else load_device_profile_catalog()
+    profiles = _catalog_profiles(profile_catalog, catalog, config_version)
+    profiles.update(_policy_profiles(policy, catalog, config_version))
+    return profiles
+
+
+def apply_profile(
+    policy: dict[str, Any],
+    catalog: dict[str, Any],
+    sensor: dict[str, Any],
+    profile_id: str,
+    profile_catalog: dict[str, Any] | None = None,
+) -> tuple[bool, str]:
+    profiles = available_profiles(policy, catalog, profile_catalog)
     selected = profiles.get(profile_id)
     if not selected:
         return False, f"unknown profile_id: {profile_id}"
-    sensor["desired_state"] = _deep_copy(selected["desired_state"])
-    sensor["desired_state"]["profile"] = profile_id
+    if selected.get("errors"):
+        return False, "; ".join(str(item) for item in selected["errors"])
+    next_version = int(policy.get("version", 1)) + 1
+    desired_state = _deep_copy(selected["desired_state"])
+    desired_state["active_profile"] = profile_id
+    desired_state["profile"] = profile_id
+    desired_state["config_version"] = next_version
+    sensor["active_profile"] = profile_id
+    sensor["desired_state"] = desired_state
     return True, ""
-

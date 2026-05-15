@@ -17,5 +17,5 @@ COPY entrypoint.sh /usr/local/bin/honeypy-entrypoint
 RUN chmod +x /usr/local/bin/honeypy-entrypoint \
     && mkdir -p /logs
 
-EXPOSE 8082 3307 6380 2124 2324
+EXPOSE 8082 8443 8080 3307 6380 2124 2324
 CMD ["honeypy-entrypoint"]

@@ -8,6 +8,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
+      - ./catalog:/app/catalog:ro
       - ./config:/app/config
       - ./var/center:/app/var/center
     environment:

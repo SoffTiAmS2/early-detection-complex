@@ -10,6 +10,7 @@
       "id": "banana-pi-pro-1",
       "host": "192.168.0.239",
       "architecture": "armv7l",
+      "active_profile": "ip-camera",
       "enrollment": {
         "method": "ansible",
         "ssh_user": "banana",
@@ -17,98 +18,191 @@
       },
       "desired_state": {
         "runtime_mode": "docker",
-        "profile": "full_stack",
+        "active_profile": "ip-camera",
+        "profile": "ip-camera",
+        "profile_name": "IP Camera",
+        "device_type": "ip-camera",
+        "config_version": 1,
         "persona": {
-          "hostname": "edge-gateway-01",
-          "department": "Infrastructure",
-          "os": "Debian GNU/Linux",
-          "asset_tag": "EDGE-GW-01"
+          "summary": "Сетевая камера видеонаблюдения",
+          "vendor": "Hikvision-like / Dahua-like",
+          "hostname": "CAM-ENTRANCE-01",
+          "location": "entrance",
+          "os_family": "embedded-linux"
         },
+        "legend": {
+          "summary": "Сетевая камера видеонаблюдения",
+          "vendor": "Hikvision-like / Dahua-like",
+          "hostname": "CAM-ENTRANCE-01",
+          "location": "entrance",
+          "os_family": "embedded-linux"
+        },
+        "exposed_ports": [
+          { "port": 80, "protocol": "tcp", "service": "web-panel", "honeypot": "honeypy", "module_service": "http", "description": "web panel" },
+          { "port": 554, "protocol": "tcp", "service": "rtsp", "honeypot": "glutton", "module_service": "rtsp", "description": "RTSP" },
+          { "port": 8000, "protocol": "tcp", "service": "camera-service", "honeypot": "glutton", "module_service": "camera_service", "description": "camera service" },
+          { "port": 8080, "protocol": "tcp", "service": "alternative-web", "honeypot": "honeypy", "module_service": "http_alt", "description": "alternative web" },
+          { "port": 8899, "protocol": "tcp", "service": "discovery", "honeypot": "glutton", "module_service": "discovery", "description": "discovery/service" },
+          { "port": 23, "protocol": "tcp", "service": "telnet", "honeypot": "cowrie", "module_service": "telnet", "description": "Telnet" }
+        ],
+        "honeypots": ["glutton", "honeypy", "cowrie"],
+        "banners": {
+          "http_title": "Network Camera",
+          "telnet_banner": "Welcome to IP Camera",
+          "hostname": "CAM-ENTRANCE-01",
+          "rtsp_server": "Hikvision-like RTSP"
+        },
+        "service_fingerprints": {
+          "web": "DVR / NVR / IP Camera",
+          "telnet": "embedded Linux login",
+          "rtsp": "ONVIF-like video endpoint"
+        },
+        "docker_template": {
+          "modules": ["cowrie", "glutton", "honeypy"],
+          "compose_project": "edc-${sensor_id}",
+          "network_mode": "bridge"
+        },
+        "config_templates": {
+          "cowrie": "camera-telnet",
+          "glutton": "camera-rtsp-and-discovery",
+          "honeypy": "fake-camera-web"
+        },
+        "resource_limits": {
+          "memory_limit": "512m",
+          "cpu_limit": "0.80"
+        },
+        "logging": {
+          "raw": true,
+          "normalized": true
+        },
+        "services": [
+          {
+            "name": "cowrie",
+            "enabled": true,
+            "ports": {
+              "23": "telnet"
+            },
+            "template": "camera-telnet"
+          },
+          {
+            "name": "glutton",
+            "enabled": true,
+            "ports": {
+              "554": "rtsp",
+              "8000": "camera_service",
+              "8899": "discovery"
+            },
+            "template": "camera-rtsp-and-discovery"
+          },
+          {
+            "name": "honeypy",
+            "enabled": true,
+            "ports": {
+              "80": "http",
+              "8080": "http_alt"
+            },
+            "template": "fake-camera-web"
+          }
+        ],
         "modules": [
           {
             "id": "cowrie",
             "enabled": true,
             "services": [
-              { "id": "ssh", "enabled": true, "host_port": 2222 },
-              { "id": "telnet", "enabled": true, "host_port": 2223 }
+              { "id": "telnet", "enabled": true, "host_port": 23, "profile_service": "telnet", "description": "Telnet" }
             ],
             "settings": {
-              "hostname": "edge-gateway-01",
-              "ssh_version": "SSH-2.0-OpenSSH_8.4",
+              "hostname": "CAM-ENTRANCE-01",
+              "ssh_version": "Welcome to IP Camera",
               "userdb_entries": "root:x:!root\nadmin:x:admin",
               "raw_cowrie_cfg": "",
               "image_mode": "local",
               "base_image": "arm32v7/debian:bookworm-slim",
-              "cowrie_ref": "v2.6.1"
-            }
-          },
-          {
-            "id": "conpot",
-            "enabled": true,
-            "services": [
-              { "id": "modbus", "enabled": true, "host_port": 15020 },
-              { "id": "s7comm", "enabled": true, "host_port": 10102 },
-              { "id": "bacnet", "enabled": true, "host_port": 47808 },
-              { "id": "http", "enabled": true, "host_port": 8800 }
-            ],
-            "settings": {
-              "template": "default",
-              "raw_conpot_cfg": "",
-              "hpfriends.enabled": false,
-              "hpfriends.host": "hpfriends.honeycloud.net",
-              "hpfriends.port": 20000,
-              "hpfriends.channels": "conpot.events"
-            }
-          },
-          {
-            "id": "mailoney",
-            "enabled": true,
-            "services": [
-              { "id": "smtp", "enabled": true, "host_port": 2525 }
-            ],
-            "settings": {
-              "hostname": "mail-gw-01",
-              "smtp_banner": "220 mail.example.local ESMTP",
-              "log_path": "/logs/mailoney.log",
-              "raw_mailoney_cfg": "",
-              "image_mode": "local",
-              "base_image": "python:3.11-slim"
-            }
-          },
-          {
-            "id": "honeypy",
-            "enabled": true,
-            "services": [
-              { "id": "http", "enabled": true, "host_port": 8082 },
-              { "id": "mysql", "enabled": true, "host_port": 3307 },
-              { "id": "redis", "enabled": true, "host_port": 6380 },
-              { "id": "ftp", "enabled": true, "host_port": 2124 },
-              { "id": "telnet", "enabled": true, "host_port": 2324 }
-            ],
-            "settings": {
-              "sensor_name": "web-stack-01",
-              "log_path": "/logs/honeypy.log",
-              "raw_honeypy_yml": "",
-              "image_mode": "local",
-              "base_image": "python:3.11-slim"
+              "cowrie_ref": "v2.6.1",
+              "profile_id": "ip-camera",
+              "profile_name": "IP Camera",
+              "device_type": "ip-camera",
+              "template_id": "camera-telnet",
+              "resource_limits": {
+                "memory_limit": "512m",
+                "cpu_limit": "0.80"
+              }
             }
           },
           {
             "id": "glutton",
             "enabled": true,
             "services": [
-              { "id": "docker_api", "enabled": true, "host_port": 2375 },
-              { "id": "mqtt", "enabled": true, "host_port": 1883 },
-              { "id": "k8s_api", "enabled": true, "host_port": 6443 },
-              { "id": "rdp", "enabled": true, "host_port": 3389 },
-              { "id": "vnc", "enabled": true, "host_port": 5900 },
-              { "id": "sip", "enabled": true, "host_port": 5060 }
+              { "id": "rtsp", "enabled": true, "host_port": 554, "profile_service": "rtsp", "description": "RTSP" },
+              { "id": "camera_service", "enabled": true, "host_port": 8000, "profile_service": "camera-service", "description": "camera service" },
+              { "id": "discovery", "enabled": true, "host_port": 8899, "profile_service": "discovery", "description": "discovery/service" }
             ],
             "settings": {
               "log_path": "/logs/glutton.json",
               "raw_glutton_yml": "",
               "image_mode": "local",
-              "base_image": "golang:1.22-bookworm"
+              "base_image": "golang:1.23-bookworm",
+              "profile_id": "ip-camera",
+              "profile_name": "IP Camera",
+              "device_type": "ip-camera",
+              "template_id": "camera-rtsp-and-discovery",
+              "resource_limits": {
+                "memory_limit": "512m",
+                "cpu_limit": "0.80"
+              },
+              "exposed_ports": [
+                { "port": 554, "protocol": "tcp", "service": "rtsp", "honeypot": "glutton", "module_service": "rtsp", "description": "RTSP" },
+                { "port": 8000, "protocol": "tcp", "service": "camera-service", "honeypot": "glutton", "module_service": "camera_service", "description": "camera service" },
+                { "port": 8899, "protocol": "tcp", "service": "discovery", "honeypot": "glutton", "module_service": "discovery", "description": "discovery/service" }
+              ],
+              "banners": {
+                "http_title": "Network Camera",
+                "telnet_banner": "Welcome to IP Camera",
+                "hostname": "CAM-ENTRANCE-01",
+                "rtsp_server": "Hikvision-like RTSP"
+              },
+              "service_fingerprints": {
+                "web": "DVR / NVR / IP Camera",
+                "telnet": "embedded Linux login",
+                "rtsp": "ONVIF-like video endpoint"
+              }
+            }
+          },
+          {
+            "id": "honeypy",
+            "enabled": true,
+            "services": [
+              { "id": "http", "enabled": true, "host_port": 80, "profile_service": "web-panel", "description": "web panel" },
+              { "id": "http_alt", "enabled": true, "host_port": 8080, "profile_service": "alternative-web", "description": "alternative web" }
+            ],
+            "settings": {
+              "sensor_name": "CAM-ENTRANCE-01",
+              "http_title": "Network Camera",
+              "template_id": "fake-camera-web",
+              "fake_paths": [],
+              "login_prompts": [],
+              "log_path": "/logs/honeypy.log",
+              "raw_honeypy_yml": "",
+              "image_mode": "local",
+              "base_image": "python:3.11-slim",
+              "profile_id": "ip-camera",
+              "profile_name": "IP Camera",
+              "device_type": "ip-camera",
+              "resource_limits": {
+                "memory_limit": "512m",
+                "cpu_limit": "0.80"
+              },
+              "banners": {
+                "http_title": "Network Camera",
+                "telnet_banner": "Welcome to IP Camera",
+                "hostname": "CAM-ENTRANCE-01",
+                "rtsp_server": "Hikvision-like RTSP"
+              },
+              "service_fingerprints": {
+                "web": "DVR / NVR / IP Camera",
+                "telnet": "embedded Linux login",
+                "rtsp": "ONVIF-like video endpoint"
+              }
             }
           }
         ]

@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from center.core.auth import auth_required_response, is_admin_route, is_authorized
 from center.core.overview import overview_payload, sensors_payload
-from center.core.paths import DEFAULT_CATALOG, DEFAULT_POLICY, DEFAULT_STORE, MAX_EVENT_LIMIT
+from center.core.paths import DEFAULT_CATALOG, DEFAULT_DEVICE_PROFILES, DEFAULT_POLICY, DEFAULT_STORE, MAX_EVENT_LIMIT
 from center.core.policy import (
     bump_policy_version,
     ensure_desired_module,
@@ -23,15 +23,28 @@ from center.core.profiles import apply_profile, available_profiles
 from center.core.sensor_sync import sensor_sync
 from center.core.utils import load_json, now_ts, write_json
 from center.persistence.events import database_stats, filter_events, purge_all_events, purge_sensor_events, read_events, write_event
-from center.web.views import render_admin_page, render_database_page, render_mask_page
+from center.web.views import render_admin_page, render_database_page, render_mask_page, render_profiles_page
 
 
-POLICY_SAFE_GET_PATHS = {"", "/", "/settings", "/db", "/mask", "/health", "/api/modules", "/api/profiles", "/api/db/stats"}
+POLICY_SAFE_GET_PATHS = {
+    "",
+    "/",
+    "/settings",
+    "/db",
+    "/mask",
+    "/profiles",
+    "/health",
+    "/api/modules",
+    "/api/profiles",
+    "/api/device-mask-profiles",
+    "/api/db/stats",
+}
 JSON_POST_PATHS = {"/api/events", "/api/sensors", "/api/mask"}
 
 
 class ControlPlaneHandler(BaseHTTPRequestHandler):
     catalog_path = DEFAULT_CATALOG
+    profile_path = DEFAULT_DEVICE_PROFILES
     policy_path = DEFAULT_POLICY
     store_path = DEFAULT_STORE
 
@@ -119,6 +132,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path == "/mask":
             self.send_html(render_mask_page(policy))
             return
+        if parsed.path == "/profiles":
+            self.send_html(render_profiles_page(policy))
+            return
         if parsed.path == "/health":
             self.handle_health(policy, errors)
             return
@@ -128,8 +144,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/modules":
             self.send_json(catalog)
             return
-        if parsed.path == "/api/profiles":
-            self.send_json({"profiles": list(available_profiles(policy, catalog).values())})
+        if parsed.path in {"/api/profiles", "/api/device-mask-profiles"}:
+            profile_catalog = load_json(self.profile_path)
+            self.send_json({"profiles": list(available_profiles(policy, catalog, profile_catalog).values())})
             return
         if parsed.path == "/api/policy":
             self.send_json({"policy": policy, "errors": errors})
@@ -365,7 +382,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             "desired_state": json.loads(json.dumps(payload.get("desired_state", source.get("desired_state", {}) if source else {}))),
         }
         if profile_id:
-            ok_apply, error = apply_profile(policy, catalog, sensor, profile_id)
+            ok_apply, error = apply_profile(policy, catalog, sensor, profile_id, load_json(self.profile_path))
             if not ok_apply:
                 self.send_json({"error": error}, HTTPStatus.BAD_REQUEST)
                 return
@@ -394,7 +411,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if not profile_id:
             self.send_json({"error": "profile_id is required"}, HTTPStatus.BAD_REQUEST)
             return
-        ok_apply, error = apply_profile(policy, catalog, sensor, profile_id)
+        ok_apply, error = apply_profile(policy, catalog, sensor, profile_id, load_json(self.profile_path))
         if not ok_apply:
             self.send_json({"error": error}, HTTPStatus.BAD_REQUEST)
             return

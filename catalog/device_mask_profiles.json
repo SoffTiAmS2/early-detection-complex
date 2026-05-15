@@ -1,0 +1,581 @@
+{
+  "version": 1,
+  "entity": "DeviceMaskProfile",
+  "profiles": [
+    {
+      "id": "printer",
+      "name": "Printer",
+      "title": "Принтер",
+      "device_type": "printer",
+      "description": "Сетевой офисный принтер: HP LaserJet, JetDirect, Web Panel, SNMP.",
+      "legend": {
+        "summary": "Сетевой офисный принтер",
+        "vendor": "HP LaserJet-like",
+        "hostname": "PRN-FLOOR-2",
+        "location": "office-floor-2",
+        "os_family": "embedded-linux"
+      },
+      "exposed_ports": [
+        { "port": 80, "protocol": "tcp", "service": "fake-web-panel", "honeypot": "honeypy", "module_service": "http", "description": "fake web panel" },
+        { "port": 443, "protocol": "tcp", "service": "fake-https-panel", "honeypot": "honeypy", "module_service": "https", "description": "fake HTTPS panel" },
+        { "port": 515, "protocol": "tcp", "service": "lpd", "honeypot": "glutton", "module_service": "lpd", "description": "LPD" },
+        { "port": 631, "protocol": "tcp", "service": "ipp", "honeypot": "glutton", "module_service": "ipp", "description": "IPP" },
+        { "port": 9100, "protocol": "tcp", "service": "jetdirect", "honeypot": "glutton", "module_service": "jetdirect", "description": "JetDirect" },
+        { "port": 161, "protocol": "udp", "service": "snmp", "honeypot": "glutton", "module_service": "snmp", "description": "SNMP enumeration" }
+      ],
+      "honeypots": ["glutton", "honeypy"],
+      "banners": {
+        "http_banner": "HP LaserJet Enterprise M506",
+        "http_title": "HP Embedded Web Server",
+        "snmp_sysdescr": "HP ETHERNET MULTI-ENVIRONMENT",
+        "hostname": "PRN-FLOOR-2"
+      },
+      "service_fingerprints": {
+        "web": "HP Embedded Web Server",
+        "snmp": "HP ETHERNET MULTI-ENVIRONMENT",
+        "jetdirect": "raw printer port 9100"
+      },
+      "docker_template": {
+        "modules": ["glutton", "honeypy"],
+        "compose_project": "edc-${sensor_id}",
+        "network_mode": "bridge"
+      },
+      "config_templates": {
+        "honeypy": "fake-printer-web",
+        "glutton": "printer-tcp-catchall"
+      },
+      "resource_limits": {
+        "memory_limit": "384m",
+        "cpu_limit": "0.60"
+      },
+      "logging": {
+        "raw": true,
+        "normalized": true
+      },
+      "detection_goals": [
+        "ловить сканеры сети",
+        "ловить обращения к 9100",
+        "ловить SNMP enumeration",
+        "ловить попытки найти web-панель принтера"
+      ]
+    },
+    {
+      "id": "scanner",
+      "name": "Scanner",
+      "title": "Сканер / МФУ",
+      "device_type": "scanner",
+      "description": "Офисный сетевой сканер или МФУ: Canon iR-ADV, Xerox WorkCentre, Epson Network Scanner.",
+      "legend": {
+        "summary": "Офисный сетевой сканер",
+        "vendor": "Canon iR-ADV C3520 / Xerox WorkCentre-like",
+        "hostname": "MFP-OFFICE-01",
+        "location": "office",
+        "os_family": "embedded-linux"
+      },
+      "exposed_ports": [
+        { "port": 80, "protocol": "tcp", "service": "web-panel", "honeypot": "honeypy", "module_service": "http", "description": "fake web panel" },
+        { "port": 443, "protocol": "tcp", "service": "https-panel", "honeypot": "honeypy", "module_service": "https", "description": "fake HTTPS panel" },
+        { "port": 515, "protocol": "tcp", "service": "lpd", "honeypot": "glutton", "module_service": "lpd", "description": "LPD" },
+        { "port": 631, "protocol": "tcp", "service": "ipp", "honeypot": "glutton", "module_service": "ipp", "description": "IPP" },
+        { "port": 9100, "protocol": "tcp", "service": "jetdirect", "honeypot": "glutton", "module_service": "jetdirect", "description": "JetDirect" },
+        { "port": 21, "protocol": "tcp", "service": "ftp", "honeypot": "honeypy", "module_service": "ftp", "description": "scan-to-FTP bait" },
+        { "port": 161, "protocol": "udp", "service": "snmp", "honeypot": "glutton", "module_service": "snmp", "description": "SNMP enumeration" }
+      ],
+      "honeypots": ["glutton", "honeypy"],
+      "banners": {
+        "http_title": "Canon iR-ADV C3520",
+        "hostname": "MFP-OFFICE-01",
+        "login_prompts": ["admin/admin", "admin/123456"],
+        "snmp_sysdescr": "Canon Network Multi Function Printer"
+      },
+      "service_fingerprints": {
+        "web": "Canon Remote UI-like",
+        "ftp": "scanner file drop",
+        "snmp": "MFP device enumeration"
+      },
+      "docker_template": {
+        "modules": ["glutton", "honeypy"],
+        "compose_project": "edc-${sensor_id}",
+        "network_mode": "bridge"
+      },
+      "config_templates": {
+        "honeypy": "fake-scanner-web-login",
+        "glutton": "scanner-tcp-catchall"
+      },
+      "resource_limits": {
+        "memory_limit": "384m",
+        "cpu_limit": "0.60"
+      },
+      "logging": {
+        "raw": true,
+        "normalized": true
+      },
+      "detection_goals": [
+        "ловить обращения к web-панели МФУ",
+        "логировать попытки default credentials",
+        "ловить SNMP и FTP-разведку"
+      ]
+    },
+    {
+      "id": "ip-camera",
+      "name": "IP Camera",
+      "title": "IP-камера",
+      "device_type": "ip-camera",
+      "description": "Сетевая камера видеонаблюдения: RTSP, HTTP admin panel, ONVIF-like behavior.",
+      "legend": {
+        "summary": "Сетевая камера видеонаблюдения",
+        "vendor": "Hikvision-like / Dahua-like",
+        "hostname": "CAM-ENTRANCE-01",
+        "location": "entrance",
+        "os_family": "embedded-linux"
+      },
+      "exposed_ports": [
+        { "port": 80, "protocol": "tcp", "service": "web-panel", "honeypot": "honeypy", "module_service": "http", "description": "web panel" },
+        { "port": 554, "protocol": "tcp", "service": "rtsp", "honeypot": "glutton", "module_service": "rtsp", "description": "RTSP" },
+        { "port": 8000, "protocol": "tcp", "service": "camera-service", "honeypot": "glutton", "module_service": "camera_service", "description": "camera service" },
+        { "port": 8080, "protocol": "tcp", "service": "alternative-web", "honeypot": "honeypy", "module_service": "http_alt", "description": "alternative web" },
+        { "port": 8899, "protocol": "tcp", "service": "discovery", "honeypot": "glutton", "module_service": "discovery", "description": "discovery/service" },
+        { "port": 23, "protocol": "tcp", "service": "telnet", "honeypot": "cowrie", "module_service": "telnet", "description": "Telnet" }
+      ],
+      "honeypots": ["glutton", "honeypy", "cowrie"],
+      "banners": {
+        "http_title": "Network Camera",
+        "telnet_banner": "Welcome to IP Camera",
+        "hostname": "CAM-ENTRANCE-01",
+        "rtsp_server": "Hikvision-like RTSP"
+      },
+      "service_fingerprints": {
+        "web": "DVR / NVR / IP Camera",
+        "telnet": "embedded Linux login",
+        "rtsp": "ONVIF-like video endpoint"
+      },
+      "docker_template": {
+        "modules": ["cowrie", "glutton", "honeypy"],
+        "compose_project": "edc-${sensor_id}",
+        "network_mode": "bridge"
+      },
+      "config_templates": {
+        "cowrie": "camera-telnet",
+        "glutton": "camera-rtsp-and-discovery",
+        "honeypy": "fake-camera-web"
+      },
+      "resource_limits": {
+        "memory_limit": "512m",
+        "cpu_limit": "0.80"
+      },
+      "logging": {
+        "raw": true,
+        "normalized": true
+      },
+      "detection_goals": [
+        "ловить Mirai-like активность",
+        "ловить telnet brute-force",
+        "ловить RTSP probes",
+        "ловить обращения к admin-панели камеры"
+      ]
+    },
+    {
+      "id": "router",
+      "name": "Router",
+      "title": "Роутер",
+      "device_type": "router",
+      "description": "Сетевой маршрутизатор: SSH, Telnet, HTTP admin, SNMP, MikroTik-like Winbox.",
+      "legend": {
+        "summary": "Сетевой маршрутизатор",
+        "vendor": "MikroTik-like / RouterOS-like",
+        "hostname": "RTR-BRANCH-01",
+        "location": "branch-office",
+        "os_family": "network-os"
+      },
+      "exposed_ports": [
+        { "port": 22, "protocol": "tcp", "service": "ssh", "honeypot": "cowrie", "module_service": "ssh", "description": "SSH" },
+        { "port": 23, "protocol": "tcp", "service": "telnet", "honeypot": "cowrie", "module_service": "telnet", "description": "Telnet" },
+        { "port": 80, "protocol": "tcp", "service": "web-admin", "honeypot": "honeypy", "module_service": "http", "description": "Web admin" },
+        { "port": 443, "protocol": "tcp", "service": "web-admin-https", "honeypot": "honeypy", "module_service": "https", "description": "Web admin HTTPS" },
+        { "port": 161, "protocol": "udp", "service": "snmp", "honeypot": "glutton", "module_service": "snmp", "description": "SNMP" },
+        { "port": 8291, "protocol": "tcp", "service": "winbox-like", "honeypot": "glutton", "module_service": "winbox", "description": "MikroTik-like Winbox" },
+        { "port": 8080, "protocol": "tcp", "service": "alternative-admin", "honeypot": "honeypy", "module_service": "http_alt", "description": "alternative admin" }
+      ],
+      "honeypots": ["cowrie", "glutton", "honeypy"],
+      "banners": {
+        "hostname": "RTR-BRANCH-01",
+        "ssh_banner": "SSH-2.0-RouterOS-like",
+        "telnet_banner": "Router Login",
+        "http_title": "Router Login",
+        "snmp_sysdescr": "Router / Gateway / Edge Device"
+      },
+      "service_fingerprints": {
+        "ssh": "RouterOS-like / OpenSSH-like",
+        "web": "Router Login",
+        "snmp": "Router / Gateway / Edge Device",
+        "winbox": "MikroTik-like management port"
+      },
+      "docker_template": {
+        "modules": ["cowrie", "glutton", "honeypy"],
+        "compose_project": "edc-${sensor_id}",
+        "network_mode": "bridge"
+      },
+      "config_templates": {
+        "cowrie": "router-ssh-telnet",
+        "glutton": "router-snmp-winbox",
+        "honeypy": "fake-router-web"
+      },
+      "resource_limits": {
+        "memory_limit": "512m",
+        "cpu_limit": "0.80"
+      },
+      "logging": {
+        "raw": true,
+        "normalized": true
+      },
+      "detection_goals": [
+        "ловить brute-force SSH/Telnet",
+        "ловить сканирование админок",
+        "ловить попытки default router credentials",
+        "ловить обращения к нестандартным портам роутеров"
+      ]
+    },
+    {
+      "id": "backup-server",
+      "name": "Backup Server",
+      "title": "Backup Server",
+      "device_type": "backup-server",
+      "description": "Сервер резервного копирования: SSH, SMB-like bait, FTP, rsync, NFS, Web panel.",
+      "legend": {
+        "summary": "Сервер резервного копирования",
+        "vendor": "Debian backup appliance-like",
+        "hostname": "BACKUP-SRV-01",
+        "location": "server-room",
+        "os_family": "linux"
+      },
+      "exposed_ports": [
+        { "port": 22, "protocol": "tcp", "service": "ssh", "honeypot": "cowrie", "module_service": "ssh", "description": "SSH" },
+        { "port": 21, "protocol": "tcp", "service": "ftp", "honeypot": "honeypy", "module_service": "ftp", "description": "FTP" },
+        { "port": 80, "protocol": "tcp", "service": "web-panel", "honeypot": "honeypy", "module_service": "http", "description": "Web panel" },
+        { "port": 443, "protocol": "tcp", "service": "web-panel-https", "honeypot": "honeypy", "module_service": "https", "description": "Web panel HTTPS" },
+        { "port": 873, "protocol": "tcp", "service": "rsync", "honeypot": "glutton", "module_service": "rsync", "description": "rsync" },
+        { "port": 2049, "protocol": "tcp", "service": "nfs-like", "honeypot": "glutton", "module_service": "nfs", "description": "NFS-like" },
+        { "port": 445, "protocol": "tcp", "service": "smb-like", "honeypot": "glutton", "module_service": "smb", "description": "SMB-like" }
+      ],
+      "honeypots": ["cowrie", "glutton", "honeypy"],
+      "banners": {
+        "hostname": "BACKUP-SRV-01",
+        "http_title": "Backup Management Console",
+        "ssh_banner": "SSH-2.0-OpenSSH_8.4"
+      },
+      "service_fingerprints": {
+        "web": "Backup Management Console",
+        "paths": ["/backup", "/storage", "/admin"],
+        "shares": ["backups", "archives", "restore"]
+      },
+      "docker_template": {
+        "modules": ["cowrie", "glutton", "honeypy"],
+        "compose_project": "edc-${sensor_id}",
+        "network_mode": "bridge"
+      },
+      "config_templates": {
+        "cowrie": "backup-server-ssh",
+        "glutton": "backup-storage-protocols",
+        "honeypy": "fake-backup-console"
+      },
+      "resource_limits": {
+        "memory_limit": "640m",
+        "cpu_limit": "0.90"
+      },
+      "logging": {
+        "raw": true,
+        "normalized": true
+      },
+      "detection_goals": [
+        "ловить интерес к резервным копиям",
+        "ловить попытки доступа к FTP/rsync/NFS/SMB",
+        "ловить SSH brute-force"
+      ]
+    },
+    {
+      "id": "workstation",
+      "name": "Workstation",
+      "title": "Рабочая станция",
+      "device_type": "workstation",
+      "description": "Обычная рабочая станция пользователя: RDP-like, SMB-like, fake hostname, Windows basic ports.",
+      "legend": {
+        "summary": "Обычная рабочая станция пользователя",
+        "vendor": "Windows workstation-like",
+        "hostname": "WS-BUH-014",
+        "alternate_hostnames": ["WS-MANAGER-07", "DESKTOP-82FQK3"],
+        "location": "office-vlan",
+        "os_family": "windows"
+      },
+      "exposed_ports": [
+        { "port": 135, "protocol": "tcp", "service": "msrpc", "honeypot": "glutton", "module_service": "msrpc", "description": "MSRPC" },
+        { "port": 139, "protocol": "tcp", "service": "netbios", "honeypot": "glutton", "module_service": "netbios", "description": "NetBIOS" },
+        { "port": 445, "protocol": "tcp", "service": "smb-like", "honeypot": "glutton", "module_service": "smb", "description": "SMB-like" },
+        { "port": 3389, "protocol": "tcp", "service": "rdp-like", "honeypot": "glutton", "module_service": "rdp", "description": "RDP-like" },
+        { "port": 5357, "protocol": "tcp", "service": "ws-discovery", "honeypot": "glutton", "module_service": "wsdiscovery", "description": "WSDAPI" },
+        { "port": 5985, "protocol": "tcp", "service": "winrm", "honeypot": "glutton", "module_service": "winrm", "description": "WinRM" }
+      ],
+      "honeypots": ["glutton", "honeypy"],
+      "banners": {
+        "hostname": "WS-BUH-014",
+        "os_fingerprint": "Windows 10 / Windows 11-like",
+        "fake_shares": ["Users", "Public", "Documents", "Scans"]
+      },
+      "service_fingerprints": {
+        "smb": "Windows workstation SMB-like",
+        "rdp": "RDP-like handshake",
+        "winrm": "Windows Remote Management"
+      },
+      "docker_template": {
+        "modules": ["glutton", "honeypy"],
+        "compose_project": "edc-${sensor_id}",
+        "network_mode": "bridge"
+      },
+      "config_templates": {
+        "glutton": "windows-workstation-catchall",
+        "honeypy": "fake-workstation-web"
+      },
+      "resource_limits": {
+        "memory_limit": "512m",
+        "cpu_limit": "0.80"
+      },
+      "logging": {
+        "raw": true,
+        "normalized": true
+      },
+      "detection_goals": [
+        "ловить внутреннее сканирование",
+        "ловить lateral movement",
+        "ловить попытки SMB/RDP enumeration"
+      ]
+    },
+    {
+      "id": "linux-server",
+      "name": "Linux Server",
+      "title": "Linux Server",
+      "device_type": "linux-server",
+      "description": "Обычный Linux-сервер: SSH, HTTP, FTP, exposed database/cache bait.",
+      "legend": {
+        "summary": "Обычный Linux-сервер",
+        "vendor": "Ubuntu/Debian server-like",
+        "hostname": "web-prod-01",
+        "alternate_hostnames": ["db-node-02", "internal-api-01"],
+        "location": "server-vlan",
+        "os_family": "linux"
+      },
+      "exposed_ports": [
+        { "port": 22, "protocol": "tcp", "service": "ssh", "honeypot": "cowrie", "module_service": "ssh", "description": "SSH" },
+        { "port": 80, "protocol": "tcp", "service": "http", "honeypot": "honeypy", "module_service": "http", "description": "HTTP" },
+        { "port": 443, "protocol": "tcp", "service": "https", "honeypot": "honeypy", "module_service": "https", "description": "HTTPS" },
+        { "port": 21, "protocol": "tcp", "service": "ftp", "honeypot": "honeypy", "module_service": "ftp", "description": "FTP" },
+        { "port": 3306, "protocol": "tcp", "service": "mysql", "honeypot": "honeypy", "module_service": "mysql", "description": "MySQL" },
+        { "port": 5432, "protocol": "tcp", "service": "postgres", "honeypot": "glutton", "module_service": "postgres", "description": "PostgreSQL" },
+        { "port": 6379, "protocol": "tcp", "service": "redis", "honeypot": "honeypy", "module_service": "redis", "description": "Redis" }
+      ],
+      "honeypots": ["cowrie", "glutton", "honeypy"],
+      "banners": {
+        "hostname": "web-prod-01",
+        "ssh_banner": "SSH-2.0-OpenSSH_8.4",
+        "http_title": "nginx default page / Apache2 Ubuntu Default Page"
+      },
+      "service_fingerprints": {
+        "ssh": "OpenSSH",
+        "web": "nginx default page / Apache2 Ubuntu Default Page",
+        "database": "MySQL/PostgreSQL/Redis bait"
+      },
+      "docker_template": {
+        "modules": ["cowrie", "glutton", "honeypy"],
+        "compose_project": "edc-${sensor_id}",
+        "network_mode": "bridge"
+      },
+      "config_templates": {
+        "cowrie": "linux-server-ssh",
+        "glutton": "linux-server-extra-ports",
+        "honeypy": "linux-web-and-db"
+      },
+      "resource_limits": {
+        "memory_limit": "640m",
+        "cpu_limit": "0.90"
+      },
+      "logging": {
+        "raw": true,
+        "normalized": true
+      },
+      "detection_goals": [
+        "ловить SSH brute-force",
+        "ловить сканирование web/db/redis",
+        "ловить попытки эксплуатации открытых сервисов"
+      ]
+    },
+    {
+      "id": "mail-server",
+      "name": "Mail Server",
+      "title": "Mail Server",
+      "device_type": "mail-server",
+      "description": "Почтовый сервер: SMTP, fake mail banner, relay attempts, credential probing.",
+      "legend": {
+        "summary": "Почтовый сервер",
+        "vendor": "Postfix/Dovecot-like",
+        "hostname": "MAIL-GW-01",
+        "alternate_hostnames": ["MX-01"],
+        "location": "dmz",
+        "os_family": "linux"
+      },
+      "exposed_ports": [
+        { "port": 25, "protocol": "tcp", "service": "smtp", "honeypot": "mailoney", "module_service": "smtp", "description": "SMTP" },
+        { "port": 110, "protocol": "tcp", "service": "pop3", "honeypot": "glutton", "module_service": "pop3", "description": "POP3" },
+        { "port": 143, "protocol": "tcp", "service": "imap", "honeypot": "glutton", "module_service": "imap", "description": "IMAP" },
+        { "port": 465, "protocol": "tcp", "service": "smtps", "honeypot": "glutton", "module_service": "smtps", "description": "SMTPS" },
+        { "port": 587, "protocol": "tcp", "service": "submission", "honeypot": "glutton", "module_service": "submission", "description": "Submission" },
+        { "port": 993, "protocol": "tcp", "service": "imaps", "honeypot": "glutton", "module_service": "imaps", "description": "IMAPS" },
+        { "port": 995, "protocol": "tcp", "service": "pop3s", "honeypot": "glutton", "module_service": "pop3s", "description": "POP3S" }
+      ],
+      "honeypots": ["mailoney", "glutton", "honeypy"],
+      "banners": {
+        "smtp_banner": "220 mail.company.local ESMTP",
+        "hostname": "MAIL-GW-01",
+        "http_title": "Mail Gateway"
+      },
+      "service_fingerprints": {
+        "smtp": "mail.company.local ESMTP",
+        "imap_pop3": "mail credential probing bait",
+        "relay": "open relay attempts"
+      },
+      "docker_template": {
+        "modules": ["mailoney", "glutton", "honeypy"],
+        "compose_project": "edc-${sensor_id}",
+        "network_mode": "bridge"
+      },
+      "config_templates": {
+        "mailoney": "fake-mail-smtp",
+        "glutton": "mail-protocol-catchall",
+        "honeypy": "mail-gateway-web"
+      },
+      "resource_limits": {
+        "memory_limit": "512m",
+        "cpu_limit": "0.80"
+      },
+      "logging": {
+        "raw": true,
+        "normalized": true
+      },
+      "detection_goals": [
+        "ловить SMTP scanning",
+        "ловить open relay attempts",
+        "ловить credential probing"
+      ]
+    },
+    {
+      "id": "industrial-controller",
+      "name": "Industrial Controller",
+      "title": "Industrial Controller",
+      "device_type": "industrial-controller",
+      "description": "Промышленный контроллер / SCADA-узел: Modbus, S7, SNMP, fake PLC identity.",
+      "legend": {
+        "summary": "Промышленный контроллер / SCADA-узел",
+        "vendor": "Siemens S7-like PLC",
+        "hostname": "PLC-LINE-01",
+        "location": "ics-segment",
+        "os_family": "industrial"
+      },
+      "exposed_ports": [
+        { "port": 502, "protocol": "tcp", "service": "modbus", "honeypot": "conpot", "module_service": "modbus", "description": "Modbus" },
+        { "port": 102, "protocol": "tcp", "service": "s7comm", "honeypot": "conpot", "module_service": "s7comm", "description": "Siemens S7" },
+        { "port": 161, "protocol": "udp", "service": "snmp", "honeypot": "glutton", "module_service": "snmp", "description": "SNMP" },
+        { "port": 80, "protocol": "tcp", "service": "web-panel", "honeypot": "conpot", "module_service": "http", "description": "Web panel" },
+        { "port": 44818, "protocol": "tcp", "service": "ethernet-ip", "honeypot": "conpot", "module_service": "ethernet_ip", "description": "EtherNet/IP-like" }
+      ],
+      "honeypots": ["conpot", "glutton"],
+      "banners": {
+        "hostname": "PLC-LINE-01",
+        "device_banner": "Siemens S7-like PLC",
+        "http_title": "Industrial Gateway"
+      },
+      "service_fingerprints": {
+        "modbus": "Modbus device",
+        "s7": "Siemens S7-like PLC",
+        "ethernet_ip": "industrial gateway"
+      },
+      "docker_template": {
+        "modules": ["conpot", "glutton"],
+        "compose_project": "edc-${sensor_id}",
+        "network_mode": "bridge"
+      },
+      "config_templates": {
+        "conpot": "industrial-controller",
+        "glutton": "ics-snmp-catchall"
+      },
+      "resource_limits": {
+        "memory_limit": "768m",
+        "cpu_limit": "1.00"
+      },
+      "logging": {
+        "raw": true,
+        "normalized": true
+      },
+      "detection_goals": [
+        "ловить ICS-сканирование",
+        "ловить обращения к Modbus/S7",
+        "ловить интерес к промышленным протоколам"
+      ]
+    },
+    {
+      "id": "nas-storage",
+      "name": "NAS Storage",
+      "title": "NAS Storage",
+      "device_type": "nas-storage",
+      "description": "Сетевое хранилище: SMB, NFS, AFP, web management, SSH.",
+      "legend": {
+        "summary": "Сетевое хранилище",
+        "vendor": "Synology/QNAP-like",
+        "hostname": "NAS-STORAGE-01",
+        "location": "storage-vlan",
+        "os_family": "embedded-linux"
+      },
+      "exposed_ports": [
+        { "port": 22, "protocol": "tcp", "service": "ssh", "honeypot": "cowrie", "module_service": "ssh", "description": "SSH" },
+        { "port": 80, "protocol": "tcp", "service": "web-panel", "honeypot": "honeypy", "module_service": "http", "description": "Web panel" },
+        { "port": 443, "protocol": "tcp", "service": "web-panel-https", "honeypot": "honeypy", "module_service": "https", "description": "Web panel HTTPS" },
+        { "port": 445, "protocol": "tcp", "service": "smb-like", "honeypot": "glutton", "module_service": "smb", "description": "SMB-like" },
+        { "port": 139, "protocol": "tcp", "service": "netbios", "honeypot": "glutton", "module_service": "netbios", "description": "NetBIOS" },
+        { "port": 2049, "protocol": "tcp", "service": "nfs-like", "honeypot": "glutton", "module_service": "nfs", "description": "NFS-like" },
+        { "port": 548, "protocol": "tcp", "service": "afp", "honeypot": "glutton", "module_service": "afp", "description": "AFP" },
+        { "port": 5000, "protocol": "tcp", "service": "nas-web", "honeypot": "glutton", "module_service": "nas_web", "description": "NAS web management" }
+      ],
+      "honeypots": ["cowrie", "glutton", "honeypy"],
+      "banners": {
+        "hostname": "NAS-STORAGE-01",
+        "http_title": "Storage Manager",
+        "fake_shares": ["backups", "media", "public", "users"],
+        "ssh_banner": "SSH-2.0-OpenSSH_8.4"
+      },
+      "service_fingerprints": {
+        "web": "Synology/QNAP-like Storage Manager",
+        "shares": ["backups", "media", "public", "users"],
+        "storage_protocols": "SMB/NFS/AFP bait"
+      },
+      "docker_template": {
+        "modules": ["cowrie", "glutton", "honeypy"],
+        "compose_project": "edc-${sensor_id}",
+        "network_mode": "bridge"
+      },
+      "config_templates": {
+        "cowrie": "nas-ssh",
+        "glutton": "nas-storage-protocols",
+        "honeypy": "fake-nas-web"
+      },
+      "resource_limits": {
+        "memory_limit": "640m",
+        "cpu_limit": "0.90"
+      },
+      "logging": {
+        "raw": true,
+        "normalized": true
+      },
+      "detection_goals": [
+        "ловить интерес к файловым хранилищам",
+        "ловить SMB/NFS/AFP enumeration",
+        "ловить попытки входа в web management"
+      ]
+    }
+  ]
+}

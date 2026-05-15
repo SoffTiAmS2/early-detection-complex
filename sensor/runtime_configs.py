@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from runtime_helpers import SUPPORTED_IMAGES, as_bool, selected_service_ids
+from runtime_helpers import SUPPORTED_IMAGES, as_bool, selected_service_ids, selected_services
 
 
 def prepare_module_dirs(runtime_dir: Path, desired: dict[str, Any], sensor_id: str, errors: list[dict[str, Any]]) -> None:
@@ -31,7 +31,7 @@ def module_by_id(desired: dict[str, Any], module_id: str) -> dict[str, Any] | No
 
 
 def prepare_image_contexts(runtime_dir: Path, errors: list[dict[str, Any]]) -> None:
-    image_root = Path(__file__).resolve().parent / "images"
+    image_root = Path(__file__).resolve().parent / "dockerfiles"
     for module_id in SUPPORTED_IMAGES:
         source = image_root / module_id
         target = runtime_dir / module_id / "image"
@@ -147,15 +147,22 @@ def write_honeypy_config(runtime_dir: Path, desired: dict[str, Any], sensor_id: 
     if not module:
         return
     settings = module.get("settings", {})
+    enabled = selected_service_ids(module)
+    services = selected_services(module)
+    service_lines = [f"  {service.get('id')}: true" for service in services]
     lines = [
         f"sensor_name: {settings.get('sensor_name', sensor_id)}",
         f"log_path: {settings.get('log_path', '/logs/honeypy.log')}",
+        f"http_title: {json.dumps(settings.get('http_title', 'Honeypot Web Panel'), ensure_ascii=False)}",
+        f"template_id: {json.dumps(settings.get('template_id', 'generic-web'), ensure_ascii=False)}",
+        "fake_paths:",
+        *[f"  - {json.dumps(str(path), ensure_ascii=False)}" for path in settings.get("fake_paths", []) if str(path)],
+        "login_prompts:",
+        *[f"  - {json.dumps(str(item), ensure_ascii=False)}" for item in settings.get("login_prompts", []) if str(item)],
+        f"banners: {json.dumps(settings.get('banners', {}), ensure_ascii=False)}",
+        f"service_fingerprints: {json.dumps(settings.get('service_fingerprints', {}), ensure_ascii=False)}",
         "services:",
-        f"  http: {'true' if 'http' in selected_service_ids(module) else 'false'}",
-        f"  mysql: {'true' if 'mysql' in selected_service_ids(module) else 'false'}",
-        f"  redis: {'true' if 'redis' in selected_service_ids(module) else 'false'}",
-        f"  ftp: {'true' if 'ftp' in selected_service_ids(module) else 'false'}",
-        f"  telnet: {'true' if 'telnet' in selected_service_ids(module) else 'false'}",
+        *(service_lines or [f"  http: {'true' if 'http' in enabled else 'false'}"]),
     ]
     raw = str(settings.get("raw_honeypy_yml") or "").strip()
     if raw:
@@ -170,17 +177,25 @@ def write_glutton_config(runtime_dir: Path, desired: dict[str, Any], sensor_id: 
         return
     settings = module.get("settings", {})
     enabled = selected_service_ids(module)
+    enabled_services = selected_services(module)
     cfg = {
         "sensor_id": sensor_id,
         "log_path": settings.get("log_path", "/logs/glutton.json"),
-        "services": {
-            "docker_api": "docker_api" in enabled,
-            "mqtt": "mqtt" in enabled,
-            "k8s_api": "k8s_api" in enabled,
-            "rdp": "rdp" in enabled,
-            "vnc": "vnc" in enabled,
-            "sip": "sip" in enabled,
-        },
+        "profile_id": settings.get("profile_id", desired.get("active_profile", desired.get("profile", ""))),
+        "device_type": settings.get("device_type", desired.get("device_type", "")),
+        "services": {str(service_id): service_id in enabled for service_id in sorted(enabled)},
+        "listeners": [
+            {
+                "id": str(service.get("id")),
+                "host_port": service.get("host_port"),
+                "protocol": service.get("protocol", "tcp"),
+                "description": service.get("description", ""),
+            }
+            for service in enabled_services
+        ],
+        "exposed_ports": settings.get("exposed_ports", desired.get("exposed_ports", [])),
+        "banners": settings.get("banners", desired.get("banners", {})),
+        "service_fingerprints": settings.get("service_fingerprints", desired.get("service_fingerprints", {})),
     }
     raw = str(settings.get("raw_glutton_yml") or "").strip()
     config_dir = runtime_dir / "glutton" / "config"
