@@ -9,7 +9,6 @@
 - `api/handler.py` - REST API и маршруты веб-интерфейса.
 - `core/policy.py` - политика сенсоров и desired-state.
 - `core/overview.py` - сводка состояния сенсоров и событий.
-- `core/metrics.py` - Prometheus metrics endpoint.
 - `core/paths.py`, `core/utils.py` - общие пути и утилиты.
 - `persistence/events.py` - события (PostgreSQL по умолчанию, SQLite fallback).
 - `server.py` - совместимый wrapper для старой команды запуска.
@@ -29,7 +28,6 @@
 ```text
 GET  /
 GET  /health
-GET  /metrics
 GET  /api/overview
 GET  /api/modules
 GET  /api/profiles

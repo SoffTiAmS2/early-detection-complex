@@ -1,9 +1,9 @@
 """Лёгкий native runtime для слабых ARMv7-сенсоров.
 
-Он не пытается заменить полноценные Cowrie/OpenCanary/Heralding. Его задача -
+Он не пытается заменить полноценные контейнерные honeypots. Его задача -
 держать реальные TCP-порты открытыми на платах вроде Banana Pi Pro, фиксировать
-подключения и простые credential attempts, когда Docker images недоступны для
-linux/arm/v7.
+подключения и простые credential attempts, когда контейнерный runtime временно
+недоступен.
 """
 
 from __future__ import annotations

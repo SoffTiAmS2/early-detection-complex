@@ -7,7 +7,6 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from center.core.auth import auth_required_response, is_admin_route, is_authorized
-from center.core.metrics import prometheus_metrics
 from center.core.overview import overview_payload, sensors_payload
 from center.core.paths import DEFAULT_CATALOG, DEFAULT_POLICY, DEFAULT_STORE, MAX_EVENT_LIMIT
 from center.core.policy import (
@@ -27,7 +26,7 @@ from center.persistence.events import database_stats, filter_events, purge_all_e
 from center.web.views import render_admin_page, render_database_page, render_mask_page
 
 
-POLICY_SAFE_GET_PATHS = {"", "/", "/settings", "/db", "/mask", "/health", "/metrics", "/api/modules", "/api/profiles", "/api/db/stats"}
+POLICY_SAFE_GET_PATHS = {"", "/", "/settings", "/db", "/mask", "/health", "/api/modules", "/api/profiles", "/api/db/stats"}
 JSON_POST_PATHS = {"/api/events", "/api/sensors", "/api/mask"}
 
 
@@ -123,9 +122,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path == "/health":
             self.handle_health(policy, errors)
             return
-        if parsed.path == "/metrics":
-            self.handle_metrics(policy)
-            return
         if parsed.path == "/api/overview":
             self.handle_overview(policy, catalog)
             return
@@ -170,10 +166,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
     def handle_sensors(self, policy: dict[str, Any]) -> None:
         events = read_events(self.store_path, limit=MAX_EVENT_LIMIT)
         self.send_json(sensors_payload(policy, events))
-
-    def handle_metrics(self, policy: dict[str, Any]) -> None:
-        events = read_events(self.store_path, limit=MAX_EVENT_LIMIT)
-        self.send_text(prometheus_metrics(policy, events), "text/plain; version=0.0.4; charset=utf-8")
 
     def handle_events_query(self, query: str) -> None:
         params = parse_qs(query)
@@ -466,7 +458,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return settings if isinstance(settings, dict) else {}
 
         cowrie = payload.get("cowrie") if isinstance(payload.get("cowrie"), dict) else {}
-        opencanary = payload.get("opencanary") if isinstance(payload.get("opencanary"), dict) else {}
+        honeypy = payload.get("honeypy") if isinstance(payload.get("honeypy"), dict) else {}
+        mailoney = payload.get("mailoney") if isinstance(payload.get("mailoney"), dict) else {}
+        glutton = payload.get("glutton") if isinstance(payload.get("glutton"), dict) else {}
 
         cowrie_settings = module_settings("cowrie")
         for key in ("hostname", "ssh_version", "userdb_entries"):
@@ -477,12 +471,19 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if "fake_ftp_files" in cowrie:
             cowrie_settings["fake_ftp_files"] = str(cowrie.get("fake_ftp_files") or "")
 
-        opencanary_settings = module_settings("opencanary")
-        for key in ("http.banner", "ftp.banner", "mysql.banner", "ssh.version", "telnet.banner", "http.skin"):
-            if key in opencanary:
-                opencanary_settings[key] = str(opencanary.get(key) or "")
-        if "raw_opencanary_conf" in opencanary:
-            opencanary_settings["raw_opencanary_conf"] = str(opencanary.get("raw_opencanary_conf") or "")
+        honeypy_settings = module_settings("honeypy")
+        for key in ("sensor_name", "raw_honeypy_yml"):
+            if key in honeypy:
+                honeypy_settings[key] = str(honeypy.get(key) or "")
+
+        mailoney_settings = module_settings("mailoney")
+        for key in ("hostname", "smtp_banner", "raw_mailoney_cfg"):
+            if key in mailoney:
+                mailoney_settings[key] = str(mailoney.get(key) or "")
+
+        glutton_settings = module_settings("glutton")
+        if "raw_glutton_yml" in glutton:
+            glutton_settings["raw_glutton_yml"] = str(glutton.get("raw_glutton_yml") or "")
 
         errors = policy_errors(policy, catalog)
         if errors:

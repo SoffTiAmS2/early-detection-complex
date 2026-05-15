@@ -13,42 +13,24 @@ RUNTIME_VERSION = "docker-runtime-v1"
 PROJECT_PREFIX = "edc"
 SUPPORTED_IMAGES = {
     "cowrie": "edc/cowrie:local",
-    "opencanary": "edc/opencanary:local",
-    "dionaea": "edc/dionaea:local",
     "conpot": "edc/conpot:local",
-    "heralding": "edc/heralding:local",
+    "mailoney": "edc/mailoney:local",
+    "honeypy": "edc/honeypy:local",
+    "glutton": "edc/glutton:local",
 }
 UPSTREAM_IMAGES = {
     "cowrie": "arm32v7/debian:bookworm-slim",
-    "opencanary": "thinkst/opencanary:latest",
-    "dionaea": "ghcr.io/telekom-security/dionaea:24.04.1",
     "conpot": "honeynet/conpot:latest",
-    "heralding": "dtagdevsec/heralding:24.04.1",
+    "mailoney": "python:3.11-slim",
+    "honeypy": "python:3.11-slim",
+    "glutton": "golang:1.22-bookworm",
 }
 MODULE_LOG_HINTS = {
     "cowrie": "/home/cowrie/cowrie/var/log/cowrie/cowrie.json",
-    "opencanary": "/var/tmp/opencanary.log",
-    "dionaea": "/opt/dionaea/var/log/dionaea",
-    "conpot": "container stdout",
-    "heralding": "container stdout",
-}
-HERALDING_CAPABILITIES = {
-    "ftp": 21,
-    "telnet": 23,
-    "pop3": 110,
-    "pop3s": 995,
-    "postgresql": 5432,
-    "imap": 143,
-    "imaps": 993,
-    "ssh": 22,
-    "http": 80,
-    "https": 443,
-    "smtp": 25,
-    "smtps": 465,
-    "vnc": 5900,
-    "socks5": 1080,
-    "mysql": 3306,
-    "rdp": 3389,
+    "conpot": "/logs/conpot.json",
+    "mailoney": "/logs/mailoney.log",
+    "honeypy": "/logs/honeypy.log",
+    "glutton": "/logs/glutton.json",
 }
 ARM32_ARCHES = {"armv7l", "armv6l", "armhf", "armv7"}
 ARM32_UNSUPPORTED_MODULES: set[str] = set()

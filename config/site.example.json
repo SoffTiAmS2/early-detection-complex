@@ -1,272 +1,118 @@
 {
+  "version": 1,
+  "site": {
+    "name": "early-detection-complex",
+    "central_url": "http://192.168.0.196:8080",
+    "management_network": "192.168.0.0/24"
+  },
   "sensors": [
     {
+      "id": "banana-pi-pro-1",
+      "host": "192.168.0.239",
       "architecture": "armv7l",
-      "desired_state": {
-        "modules": [
-          {
-            "enabled": true,
-            "id": "cowrie",
-            "services": [
-              {
-                "host_port": 2222,
-                "id": "ssh"
-              },
-              {
-                "host_port": 2223,
-                "id": "telnet"
-              }
-            ],
-            "settings": {
-              "auth_class": "UserDB",
-              "auth_class_parameters": "2, 5, 10",
-              "authentication_timeout": 120,
-              "backend": "shell",
-              "backend_pass_env": "COWRIE_BACKEND_PASS",
-              "backend_ssh_host": "localhost",
-              "backend_ssh_port": 2022,
-              "backend_telnet_host": "localhost",
-              "backend_telnet_port": 2023,
-              "backend_user": "root",
-              "contents_path": "honeyfs",
-              "download_limit_size": 10485760,
-              "download_path": "${honeypot:state_path}/downloads",
-              "fake_addr": "192.168.66.254",
-              "filesystem": "${honeypot:data_path}/fs.pickle",
-              "hardware_platform": "x86_64",
-              "hostname": "office-filesrv-01",
-              "image_mode": "local",
-              "base_image": "arm32v7/debian:bookworm-slim",
-              "cowrie_ref": "v2.6.1",
-              "idle_timeout": 180,
-              "internet_facing_ip": "",
-              "internet_facing_ipv6": "",
-              "kernel_build_string": "#1 SMP Debian 3.2.68-1+deb7u1",
-              "kernel_version": "3.2.0-4-amd64",
-              "logtype": "rotating",
-              "operating_system": "GNU/Linux",
-              "out_addr": "",
-              "processes": "${honeypot:data_path}/cmdoutput.json",
-              "prompt": "",
-              "proxy_backend": "pool",
-              "raw_cowrie_cfg": "",
-              "sensor_name": "office-filesrv-01",
-              "shell_arch": "linux-x64-lsb",
-              "shell_ssh_version": "OpenSSH_7.9p1, OpenSSL 1.1.1a 20 Nov 2018",
-              "ssh_version": "SSH-2.0-OpenSSH_8.4",
-              "timezone": "UTC",
-              "ttylog": true,
-              "ttylog_path": "${honeypot:state_path}/tty",
-              "txtcmds_path": "txtcmds",
-              "userdb_entries": "root:x:!root\nbackup:x:backup123\nadmin:x:admin"
-            }
-          },
-          {
-            "enabled": true,
-            "id": "opencanary",
-            "services": [
-              {
-                "host_port": 8081,
-                "id": "http"
-              },
-              {
-                "host_port": 2121,
-                "id": "ftp"
-              },
-              {
-                "host_port": 6379,
-                "id": "redis"
-              },
-              {
-                "host_port": 3306,
-                "id": "mysql"
-              }
-            ],
-            "settings": {
-              "device.listen_addr": "",
-              "device.node_id": "opencanary-sensor1",
-              "ftp.banner": "FTP server ready",
-              "http.banner": "nginx/1.18.0",
-              "http.skin": "nasLogin",
-              "httpproxy.skin": "squid",
-              "https.certificate": "/etc/ssl/opencanary/opencanary.pem",
-              "https.key": "/etc/ssl/opencanary/opencanary.key",
-              "https.skin": "nasLogin",
-              "ip.ignorelist": "192.168.0.196",
-              "logger.file": "/var/tmp/opencanary.log",
-              "logger.json_tcp_host": "127.0.0.1",
-              "logger.json_tcp_port": 1514,
-              "logger.mode": "file",
-              "logger.webhook_url": "",
-              "mysql.banner": "5.5.43-0ubuntu0.14.04.1",
-              "portscan.enabled": false,
-              "portscan.logfile": "/var/log/kern.log",
-              "portscan.lorate": 3,
-              "portscan.nmaposrate": 5,
-              "portscan.synrate": 5,
-              "raw_opencanary_conf": "",
-              "smb.auditfile": "/var/log/samba-audit.log",
-              "ssh.version": "SSH-2.0-OpenSSH_5.1p1 Debian-4",
-              "telnet.banner": "",
-              "telnet.honeycreds": "admin:TopsyKretts",
-              "image_mode": "local",
-              "base_image": "thinkst/opencanary:latest"
-            }
-          },
-          {
-            "enabled": true,
-            "id": "heralding",
-            "services": [
-              {
-                "host_port": 2122,
-                "id": "ftp"
-              },
-              {
-                "host_port": 8082,
-                "id": "http"
-              },
-              {
-                "host_port": 1110,
-                "id": "pop3"
-              },
-              {
-                "host_port": 2525,
-                "id": "smtp"
-              }
-            ],
-            "settings": {
-              "auth_logfile": "log_auth.csv",
-              "banner_profile": "enterprise-mail-and-ftp",
-              "credential_policy": "capture-all",
-              "enabled_protocols": "ftp,http,pop3,smtp",
-              "listen_addr": "0.0.0.0",
-              "raw_heralding_yml": "",
-              "session_csv_logfile": "log_session.csv",
-              "session_json_logfile": "log_session.json",
-              "image_mode": "local",
-              "base_image": "dtagdevsec/heralding:24.04.1"
-            }
-          },
-          {
-            "enabled": true,
-            "id": "conpot",
-            "services": [
-              {
-                "host_port": 1502,
-                "id": "modbus"
-              },
-              {
-                "host_port": 8800,
-                "id": "http"
-              }
-            ],
-            "settings": {
-              "fetch_public_ip.enabled": false,
-              "fetch_public_ip.url": "http://api-sth01.exip.org/?call=ip",
-              "hpfriends.channels": "conpot.events",
-              "hpfriends.enabled": false,
-              "hpfriends.host": "hpfriends.honeycloud.net",
-              "hpfriends.ident_env": "CONPOT_HPFRIENDS_IDENT",
-              "hpfriends.port": 20000,
-              "hpfriends.secret_env": "CONPOT_HPFRIENDS_SECRET",
-              "http.host": "0.0.0.0",
-              "http.port": 80,
-              "industrial_persona": "building automation controller",
-              "modbus.host": "0.0.0.0",
-              "modbus.port": 502,
-              "protocol_profile": "modbus-http",
-              "raw_conpot_cfg": "",
-              "snmp.host": "0.0.0.0",
-              "snmp.port": 161,
-              "sqlite.enabled": false,
-              "template": "default",
-              "image_mode": "local",
-              "base_image": "honeynet/conpot:latest"
-            }
-          },
-          {
-            "enabled": true,
-            "id": "dionaea",
-            "services": [
-              {
-                "host_port": 1445,
-                "id": "smb"
-              },
-              {
-                "host_port": 8083,
-                "id": "http"
-              },
-              {
-                "host_port": 2123,
-                "id": "ftp"
-              }
-            ],
-            "settings": {
-              "artifact_storage": "center",
-              "downloads_dir": "/var/lib/dionaea/binaries",
-              "emu.enabled": true,
-              "hpfeeds.enabled": false,
-              "hpfeeds.host": "",
-              "hpfeeds.port": 10000,
-              "listen.mode": "getifaddrs",
-              "log_json.enabled": true,
-              "log_json.path": "/var/log/dionaea/dionaea.json",
-              "p0f.enabled": false,
-              "raw_dionaea_conf": "",
-              "service_config_dir": "/etc/dionaea/services-enabled",
-              "services_enabled": "smb,http,ftp",
-              "sqlite.enabled": true,
-              "sqlite.path": "/var/lib/dionaea/dionaea.sqlite",
-              "submit_http.enabled": false,
-              "submit_http.url": "",
-              "image_mode": "local",
-              "base_image": "dinotools/dionaea:latest"
-            }
-          }
-        ],
-        "persona": {
-          "asset_tag": "OFF-FS-01",
-          "department": "Office",
-          "hostname": "office-filesrv-01",
-          "os": "Debian GNU/Linux"
-        },
-        "profile": "banana-pi-pro-fixed-io",
-        "runtime_mode": "docker"
-      },
       "enrollment": {
         "method": "ansible",
-        "ssh_port": 22,
-        "ssh_user": "banana"
+        "ssh_user": "banana",
+        "ssh_port": 22
       },
-      "host": "192.168.0.239",
-      "id": "banana-pi-pro-1"
+      "desired_state": {
+        "runtime_mode": "docker",
+        "profile": "full_stack",
+        "persona": {
+          "hostname": "edge-gateway-01",
+          "department": "Infrastructure",
+          "os": "Debian GNU/Linux",
+          "asset_tag": "EDGE-GW-01"
+        },
+        "modules": [
+          {
+            "id": "cowrie",
+            "enabled": true,
+            "services": [
+              { "id": "ssh", "enabled": true, "host_port": 2222 },
+              { "id": "telnet", "enabled": true, "host_port": 2223 }
+            ],
+            "settings": {
+              "hostname": "edge-gateway-01",
+              "ssh_version": "SSH-2.0-OpenSSH_8.4",
+              "userdb_entries": "root:x:!root\nadmin:x:admin",
+              "raw_cowrie_cfg": "",
+              "image_mode": "local",
+              "base_image": "arm32v7/debian:bookworm-slim",
+              "cowrie_ref": "v2.6.1"
+            }
+          },
+          {
+            "id": "conpot",
+            "enabled": true,
+            "services": [
+              { "id": "modbus", "enabled": true, "host_port": 15020 },
+              { "id": "s7comm", "enabled": true, "host_port": 10102 },
+              { "id": "bacnet", "enabled": true, "host_port": 47808 },
+              { "id": "http", "enabled": true, "host_port": 8800 }
+            ],
+            "settings": {
+              "template": "default",
+              "raw_conpot_cfg": "",
+              "hpfriends.enabled": false,
+              "hpfriends.host": "hpfriends.honeycloud.net",
+              "hpfriends.port": 20000,
+              "hpfriends.channels": "conpot.events"
+            }
+          },
+          {
+            "id": "mailoney",
+            "enabled": true,
+            "services": [
+              { "id": "smtp", "enabled": true, "host_port": 2525 }
+            ],
+            "settings": {
+              "hostname": "mail-gw-01",
+              "smtp_banner": "220 mail.example.local ESMTP",
+              "log_path": "/logs/mailoney.log",
+              "raw_mailoney_cfg": "",
+              "image_mode": "local",
+              "base_image": "python:3.11-slim"
+            }
+          },
+          {
+            "id": "honeypy",
+            "enabled": true,
+            "services": [
+              { "id": "http", "enabled": true, "host_port": 8082 },
+              { "id": "mysql", "enabled": true, "host_port": 3307 },
+              { "id": "redis", "enabled": true, "host_port": 6380 },
+              { "id": "ftp", "enabled": true, "host_port": 2124 },
+              { "id": "telnet", "enabled": true, "host_port": 2324 }
+            ],
+            "settings": {
+              "sensor_name": "web-stack-01",
+              "log_path": "/logs/honeypy.log",
+              "raw_honeypy_yml": "",
+              "image_mode": "local",
+              "base_image": "python:3.11-slim"
+            }
+          },
+          {
+            "id": "glutton",
+            "enabled": true,
+            "services": [
+              { "id": "docker_api", "enabled": true, "host_port": 2375 },
+              { "id": "mqtt", "enabled": true, "host_port": 1883 },
+              { "id": "k8s_api", "enabled": true, "host_port": 6443 },
+              { "id": "rdp", "enabled": true, "host_port": 3389 },
+              { "id": "vnc", "enabled": true, "host_port": 5900 },
+              { "id": "sip", "enabled": true, "host_port": 5060 }
+            ],
+            "settings": {
+              "log_path": "/logs/glutton.json",
+              "raw_glutton_yml": "",
+              "image_mode": "local",
+              "base_image": "golang:1.22-bookworm"
+            }
+          }
+        ]
+      }
     }
-  ],
-  "site": {
-    "central_url": "http://192.168.0.196:8080",
-    "management_network": "192.168.0.0/24",
-    "name": "early-detection-lab",
-    "observability": {
-      "grafana_url": "http://192.168.0.196:3000",
-      "prometheus_url": "http://192.168.0.196:9090",
-      "scrape_interval": "15s"
-    },
-    "purpose": "distributed early detection of suspicious network activity"
-  },
-  "sensor_classes": {
-    "banana_pi_pro": {
-      "architecture": "armv7l",
-      "deployment": "ansible",
-      "runtime_mode": "docker",
-      "runtime_profile": "fixed-io-local-build",
-      "recommended_modules": [
-        "cowrie",
-        "opencanary",
-        "heralding",
-        "conpot",
-        "dionaea"
-      ]
-    }
-  },
-  "version": 1
+  ]
 }

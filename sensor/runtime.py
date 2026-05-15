@@ -284,19 +284,14 @@ class DockerRuntime:
                 f"{base / 'downloads'}:/home/cowrie/cowrie/var/lib/cowrie/downloads",
                 f"{base / 'data'}:/home/cowrie/cowrie/var/lib/cowrie/data",
             ]
-        if module_id == "opencanary":
-            return [f"{base / 'config' / 'opencanary.conf'}:/root/.opencanary.conf:ro", f"{base / 'logs'}:/var/tmp"]
-        if module_id == "dionaea":
-            return [
-                f"{base / 'data'}:/opt/dionaea/var/lib",
-                f"{base / 'logs'}:/opt/dionaea/var/log",
-            ]
         if module_id == "conpot":
             return [f"{base / 'config' / 'conpot.cfg'}:/etc/conpot/conpot.cfg:ro", f"{base / 'data'}:/data", f"{base / 'logs'}:/logs"]
-        if module_id == "heralding":
-            return [f"{base / 'config' / 'heralding.yml'}:/etc/heralding/heralding.yml:ro", f"{base / 'data'}:/data", f"{base / 'logs'}:/logs"]
-        if module_id in {"conpot", "heralding"}:
-            return [f"{base / 'data'}:/data", f"{base / 'logs'}:/logs"]
+        if module_id == "mailoney":
+            return [f"{base / 'config' / 'mailoney.cfg'}:/etc/mailoney/mailoney.cfg:ro", f"{base / 'logs'}:/logs"]
+        if module_id == "honeypy":
+            return [f"{base / 'config' / 'honeypy.yml'}:/etc/honeypy/config.yml:ro", f"{base / 'logs'}:/logs"]
+        if module_id == "glutton":
+            return [f"{base / 'config' / 'glutton.yml'}:/etc/glutton/glutton.yml:ro", f"{base / 'logs'}:/logs"]
         return []
 
     def compose_environment(self, module: dict[str, Any]) -> dict[str, Any]:
@@ -308,46 +303,41 @@ class DockerRuntime:
                 "COWRIE_HONEYPOT_HOSTNAME": settings.get("hostname", self.sensor_id),
                 "COWRIE_SSH_VERSION": settings.get("ssh_version", "SSH-2.0-OpenSSH_8.4"),
             }
-        if module_id == "dionaea":
-            return {"DIONAEA_FORCE_INIT": "1"}
         return {}
 
     def compose_command(self, module: dict[str, Any]) -> str:
         module_id = str(module.get("id"))
-        if module_id == "heralding":
-            return yaml_scalar("heralding -c /etc/heralding/heralding.yml -l /logs/heralding.log")
         if module_id == "conpot":
             template = module.get("settings", {}).get("template", "default")
             return yaml_scalar(f"conpot --template {template} --config /etc/conpot/conpot.cfg --logfile /logs/conpot.log --temp_dir /tmp")
+        if module_id == "glutton":
+            return yaml_scalar("glutton --config /etc/glutton/glutton.yml")
         return ""
 
     def compose_working_dir(self, module: dict[str, Any]) -> str:
         module_id = str(module.get("id"))
-        if module_id == "heralding":
-            return "/tmp"
         return ""
 
     def container_port(self, module_id: str, service_id: str) -> int:
         defaults = {
             ("cowrie", "ssh"): 2222,
             ("cowrie", "telnet"): 2223,
-            ("opencanary", "http"): 80,
-            ("opencanary", "ftp"): 21,
-            ("opencanary", "redis"): 6379,
-            ("opencanary", "mysql"): 3306,
-            ("opencanary", "mssql"): 1433,
-            ("opencanary", "ssh"): 22,
-            ("opencanary", "telnet"): 23,
-            ("opencanary", "smb"): 445,
-            ("dionaea", "smb"): 445,
-            ("dionaea", "http"): 80,
-            ("dionaea", "ftp"): 21,
             ("conpot", "modbus"): 5020,
             ("conpot", "http"): 8800,
-            ("heralding", "ftp"): 21,
-            ("heralding", "http"): 80,
-            ("heralding", "pop3"): 110,
-            ("heralding", "smtp"): 25,
+            ("conpot", "s7comm"): 10200,
+            ("conpot", "bacnet"): 47808,
+            ("mailoney", "smtp"): 2525,
+            ("honeypy", "http"): 8082,
+            ("honeypy", "mysql"): 3307,
+            ("honeypy", "redis"): 6380,
+            ("honeypy", "ftp"): 2124,
+            ("honeypy", "telnet"): 2324,
+            ("glutton", "docker_api"): 2375,
+            ("glutton", "mqtt"): 1883,
+            ("glutton", "k8s_api"): 6443,
+            ("glutton", "rdp"): 3389,
+            ("glutton", "vnc"): 5900,
+            ("glutton", "sip"): 5060,
         }
         return defaults.get((module_id, service_id), selected_host_port(self.module_by_id(module_id) or {}, service_id, 0))
 
@@ -357,16 +347,28 @@ class DockerRuntime:
                 return module
         return None
 
-    def run_compose(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    def run_compose(self, *args: str, check: bool = True, timeout: int = 60) -> subprocess.CompletedProcess[str]:
         compose = self.compose_base()
         if compose is None:
             raise DockerRuntimeError("docker compose plugin or docker-compose executable is not available on sensor")
-        result = subprocess.run(
-            [*compose, "-p", self.project_name, "-f", str(self.compose_path), *args],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
+        command = [*compose, "-p", self.project_name, "-f", str(self.compose_path), *args]
+        try:
+            result = subprocess.run(
+                command,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            stdout = exc.stdout if isinstance(exc.stdout, str) else ""
+            stderr = exc.stderr if isinstance(exc.stderr, str) else ""
+            result = subprocess.CompletedProcess(
+                command,
+                124,
+                stdout,
+                stderr or f"docker compose timed out after {timeout}s",
+            )
         if check and result.returncode != 0:
             raise DockerRuntimeError(result.stderr.strip() or result.stdout.strip())
         return result
@@ -406,21 +408,14 @@ class DockerRuntime:
         base = self.runtime_dir / module_id / "logs"
         if module_id == "cowrie":
             return [(base / "cowrie.json", True)]
-        if module_id == "opencanary":
-            return [(base / "opencanary.log", True)]
-        if module_id == "heralding":
-            return [
-                (base / "log_session.json", True),
-                (base / "heralding.log", False),
-                (base / "log_auth.csv", False),
-            ]
         if module_id == "conpot":
             return [(base / "conpot.json", True), (base / "conpot.log", False)]
-        if module_id == "dionaea":
-            return [
-                (base / "dionaea.json", True),
-                (base / "dionaea.log", False),
-            ]
+        if module_id == "mailoney":
+            return [(base / "mailoney.log", False)]
+        if module_id == "honeypy":
+            return [(base / "honeypy.log", False)]
+        if module_id == "glutton":
+            return [(base / "glutton.json", True), (base / "glutton.log", False)]
         return []
 
     def collect_file_logs(self, path: Path, module_id: str, parse_as_json: bool) -> None:

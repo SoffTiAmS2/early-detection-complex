@@ -141,14 +141,13 @@
       </div>
 
       <div class="panel">
-        <h2>OpenCanary</h2>
-        <div class="row"><label>HTTP banner<input id="o_http_banner" placeholder="Apache/2.4.52 (Ubuntu)"></label></div>
-        <div class="row"><label>FTP banner<input id="o_ftp_banner" placeholder="vsFTPd 3.0.3"></label></div>
-        <div class="row"><label>MySQL banner<input id="o_mysql_banner" placeholder="5.7.42-0ubuntu0.18.04.1"></label></div>
-        <div class="row"><label>SSH version<input id="o_ssh_version" placeholder="SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.5"></label></div>
-        <div class="row"><label>Telnet banner<input id="o_telnet_banner" placeholder="Debian GNU/Linux 11"></label></div>
-        <div class="row"><label>HTTP skin<input id="o_http_skin" placeholder="basicLogin"></label></div>
-        <div class="row"><label>Raw opencanary.conf (json)<textarea id="o_raw_conf" placeholder="{ }"></textarea></label></div>
+        <h2>HoneyPy / Mailoney / Glutton</h2>
+        <div class="row"><label>HoneyPy sensor_name<input id="h_sensor_name" placeholder="web-stack-01"></label></div>
+        <div class="row"><label>HoneyPy raw config<textarea id="h_raw_conf" placeholder="yaml override"></textarea></label></div>
+        <div class="row"><label>Mailoney hostname<input id="m_hostname" placeholder="mail-gw-01"></label></div>
+        <div class="row"><label>Mailoney SMTP banner<input id="m_smtp_banner" placeholder="220 mail.example.local ESMTP"></label></div>
+        <div class="row"><label>Mailoney raw config<textarea id="m_raw_conf" placeholder="ini override"></textarea></label></div>
+        <div class="row"><label>Glutton raw config<textarea id="g_raw_conf" placeholder="yaml/json override"></textarea></label></div>
       </div>
     </section>
   </main>
@@ -178,7 +177,9 @@
     function fillForm() {
       const sensor = byId(state.selected);
       const cowrie = modSettings(sensor, "cowrie");
-      const opencanary = modSettings(sensor, "opencanary");
+      const honeypy = modSettings(sensor, "honeypy");
+      const mailoney = modSettings(sensor, "mailoney");
+      const glutton = modSettings(sensor, "glutton");
 
       $("c_hostname").value = cowrie.hostname || "";
       $("c_ssh_version").value = cowrie.ssh_version || "";
@@ -186,13 +187,12 @@
       $("c_fake_http_html").value = cowrie.fake_http_html || "";
       $("c_fake_ftp_files").value = cowrie.fake_ftp_files || "";
 
-      $("o_http_banner").value = opencanary["http.banner"] || "";
-      $("o_ftp_banner").value = opencanary["ftp.banner"] || "";
-      $("o_mysql_banner").value = opencanary["mysql.banner"] || "";
-      $("o_ssh_version").value = opencanary["ssh.version"] || "";
-      $("o_telnet_banner").value = opencanary["telnet.banner"] || "";
-      $("o_http_skin").value = opencanary["http.skin"] || "";
-      $("o_raw_conf").value = opencanary.raw_opencanary_conf || "";
+      $("h_sensor_name").value = honeypy.sensor_name || "";
+      $("h_raw_conf").value = honeypy.raw_honeypy_yml || "";
+      $("m_hostname").value = mailoney.hostname || "";
+      $("m_smtp_banner").value = mailoney.smtp_banner || "";
+      $("m_raw_conf").value = mailoney.raw_mailoney_cfg || "";
+      $("g_raw_conf").value = glutton.raw_glutton_yml || "";
     }
 
     function fillSensors() {
@@ -227,14 +227,17 @@
           fake_http_html: $("c_fake_http_html").value,
           fake_ftp_files: $("c_fake_ftp_files").value
         },
-        opencanary: {
-          "http.banner": $("o_http_banner").value,
-          "ftp.banner": $("o_ftp_banner").value,
-          "mysql.banner": $("o_mysql_banner").value,
-          "ssh.version": $("o_ssh_version").value,
-          "telnet.banner": $("o_telnet_banner").value,
-          "http.skin": $("o_http_skin").value,
-          raw_opencanary_conf: $("o_raw_conf").value
+        honeypy: {
+          sensor_name: $("h_sensor_name").value,
+          raw_honeypy_yml: $("h_raw_conf").value
+        },
+        mailoney: {
+          hostname: $("m_hostname").value,
+          smtp_banner: $("m_smtp_banner").value,
+          raw_mailoney_cfg: $("m_raw_conf").value
+        },
+        glutton: {
+          raw_glutton_yml: $("g_raw_conf").value
         }
       };
       const response = await fetch("/api/mask", {

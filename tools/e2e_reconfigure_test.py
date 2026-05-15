@@ -38,11 +38,6 @@ def get_json(url: str, timeout: float = 2) -> dict[str, Any]:
     return payload
 
 
-def get_text(url: str, timeout: float = 2) -> str:
-    with urllib.request.urlopen(url, timeout=timeout) as response:
-        return response.read().decode("utf-8")
-
-
 def post_json(url: str, payload: dict[str, Any], timeout: float = 2) -> dict[str, Any]:
     data = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
@@ -202,9 +197,6 @@ def main() -> int:
             sensors = get_json(f"http://127.0.0.1:{center_port}/api/sensors")["sensors"]
             if not any(item.get("sensor_id") == "sensor1" and item.get("status") == "online" for item in sensors):
                 raise RuntimeError(f"sensor sync did not update status: {sensors}")
-            metrics = get_text(f"http://127.0.0.1:{center_port}/metrics")
-            if "edc_sensor_online" not in metrics or "edc_events_window_total" not in metrics:
-                raise RuntimeError(f"metrics endpoint missing expected series:\n{metrics}")
             bad_status = patch_expect_error(
                 f"http://127.0.0.1:{center_port}/api/sensors/sensor1/modules/opencanary",
                 {"settings": {"portscan.synrate": "wrong"}},

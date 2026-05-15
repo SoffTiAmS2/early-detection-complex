@@ -123,7 +123,7 @@
     .sample { margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 90px; overflow: auto; color: var(--muted); }
     .add-sensor { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 12px; }
     .message { min-height: 22px; margin: 8px 0 0; color: var(--muted); }
-    .sitebar { display:grid; grid-template-columns: 1.2fr 1fr 1fr 1fr auto; gap:8px; margin-bottom:12px; align-items:end; }
+    .sitebar { display:grid; grid-template-columns: 1.2fr 1fr auto; gap:8px; margin-bottom:12px; align-items:end; }
     @media (max-width: 1050px) {
       .layout, .cards { grid-template-columns: 1fr; }
       .grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
@@ -143,8 +143,6 @@
       <div class="muted">{{SITE_NAME}}</div>
     </div>
     <nav class="toplinks">
-      <a class="button secondary" id="grafanaLink" href="#" target="_blank" rel="noreferrer">Grafana</a>
-      <a class="button secondary" id="prometheusLink" href="#" target="_blank" rel="noreferrer">Prometheus</a>
       <a class="button secondary" href="/mask">Маскировка</a>
       <a class="button secondary" href="/db">База</a>
       <button class="secondary" id="refreshBtn">Обновить</button>
@@ -156,8 +154,6 @@
       <div class="sitebar">
         <label><span class="muted">Center URL</span><input id="siteCentralUrl" placeholder="http://192.168.0.196:8080"></label>
         <label><span class="muted">Mgmt network</span><input id="siteMgmtNet" placeholder="192.168.0.0/24"></label>
-        <label><span class="muted">Grafana URL</span><input id="siteGrafanaUrl" placeholder="http://192.168.0.196:3000"></label>
-        <label><span class="muted">Prometheus URL</span><input id="sitePromUrl" placeholder="http://192.168.0.196:9090"></label>
         <button id="saveSiteBtn">Сохранить site</button>
       </div>
     </section>
@@ -196,10 +192,10 @@
         </thead>
         <tbody>
           <tr><td>cowrie</td><td><code>/var/lib/edc-sensor/docker-runtime/cowrie/logs/cowrie.json</code></td><td><code>/var/lib/edc-sensor/docker-runtime/cowrie/config/cowrie.cfg</code></td></tr>
-          <tr><td>opencanary</td><td><code>/var/lib/edc-sensor/docker-runtime/opencanary/logs/opencanary.log</code></td><td><code>/var/lib/edc-sensor/docker-runtime/opencanary/config/opencanary.conf</code></td></tr>
-          <tr><td>heralding</td><td><code>/var/lib/edc-sensor/docker-runtime/heralding/logs/log_session.json</code><br><code>/var/lib/edc-sensor/docker-runtime/heralding/logs/heralding.log</code></td><td><code>/var/lib/edc-sensor/docker-runtime/heralding/config/heralding.yml</code></td></tr>
           <tr><td>conpot</td><td><code>/var/lib/edc-sensor/docker-runtime/conpot/logs/conpot.json</code></td><td><code>/var/lib/edc-sensor/docker-runtime/conpot/config/conpot.cfg</code></td></tr>
-          <tr><td>dionaea</td><td><code>/var/lib/edc-sensor/docker-runtime/dionaea/logs/dionaea.json</code></td><td><code>/var/lib/edc-sensor/docker-runtime/dionaea/config/*.yml</code></td></tr>
+          <tr><td>mailoney</td><td><code>/var/lib/edc-sensor/docker-runtime/mailoney/logs/mailoney.log</code></td><td><code>/var/lib/edc-sensor/docker-runtime/mailoney/config/mailoney.cfg</code></td></tr>
+          <tr><td>honeypy</td><td><code>/var/lib/edc-sensor/docker-runtime/honeypy/logs/honeypy.log</code></td><td><code>/var/lib/edc-sensor/docker-runtime/honeypy/config/honeypy.yml</code></td></tr>
+          <tr><td>glutton</td><td><code>/var/lib/edc-sensor/docker-runtime/glutton/logs/glutton.json</code></td><td><code>/var/lib/edc-sensor/docker-runtime/glutton/config/glutton.yml</code></td></tr>
         </tbody>
       </table>
       <div class="muted" style="margin-top:8px">Центр читает события, которые sensor-agent отправляет из этих файлов.</div>
@@ -423,11 +419,7 @@
         method: 'PATCH',
         body: JSON.stringify({
           central_url: $('siteCentralUrl').value.trim(),
-          management_network: $('siteMgmtNet').value.trim(),
-          observability: {
-            grafana_url: $('siteGrafanaUrl').value.trim(),
-            prometheus_url: $('sitePromUrl').value.trim()
-          }
+          management_network: $('siteMgmtNet').value.trim()
         })
       });
       setMessage('site настройки сохранены.', 'ok');
@@ -446,13 +438,8 @@
       state.policy = policyPayload.policy;
       state.catalog = catalog;
       state.profiles = profilesPayload.profiles || [];
-      const obs = state.policy?.site?.observability || {};
       $('siteCentralUrl').value = state.policy?.site?.central_url || '';
       $('siteMgmtNet').value = state.policy?.site?.management_network || '';
-      $('siteGrafanaUrl').value = obs.grafana_url || '';
-      $('sitePromUrl').value = obs.prometheus_url || '';
-      $('grafanaLink').href = obs.grafana_url || 'http://127.0.0.1:3000';
-      $('prometheusLink').href = obs.prometheus_url || 'http://127.0.0.1:9090';
       renderMetrics();
       renderSensors();
       renderSelector();
