@@ -90,7 +90,7 @@
 
     - name: Start center control-plane stack
       ansible.builtin.command:
-        cmd: docker compose -f "{{ edc_center_compose_file }}" -f "{{ edc_center_compose_override }}" up -d --build
+        cmd: docker compose -f "{{ edc_center_compose_file }}" -f "{{ edc_center_compose_override }}" up -d --build --remove-orphans
         chdir: "{{ edc_install_dir }}"
       changed_when: true
 
