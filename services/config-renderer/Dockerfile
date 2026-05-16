@@ -5,6 +5,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 COPY catalog ./catalog
 COPY center ./center
 COPY services/config-renderer ./services/config-renderer

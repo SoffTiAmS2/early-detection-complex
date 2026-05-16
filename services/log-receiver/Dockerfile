@@ -7,6 +7,7 @@ RUN apt-get update \
 RUN pip install --no-cache-dir "psycopg[binary]==3.2.12"
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 COPY center ./center
 COPY services/log-receiver ./services/log-receiver
 

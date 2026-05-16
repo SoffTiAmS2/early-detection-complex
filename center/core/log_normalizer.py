@@ -30,7 +30,16 @@ def normalize_honeypot_event(event: dict[str, Any]) -> dict[str, Any] | None:
     parsed = raw_payload if isinstance(raw_payload, dict) else _json_or_none(raw_payload)
     raw_line = _raw_line(event, raw_payload)
     kv = _parse_key_values(raw_line)
-    module = str(event.get("module") or _dict_get(parsed, "module") or _dict_get(parsed, "sensor") or "unknown")
+    module = str(
+        _first_text(
+            event.get("honeypot"),
+            event.get("module"),
+            _dict_get(parsed, "honeypot"),
+            _dict_get(parsed, "module"),
+            _dict_get(parsed, "sensor"),
+            "unknown",
+        )
+    )
     service = _first_text(
         event.get("service"),
         _dict_get(parsed, "service"),
@@ -79,7 +88,16 @@ def raw_log_record(event: dict[str, Any]) -> dict[str, Any] | None:
     raw_payload = event.get("honeypot_raw_event", event.get("raw_event", event))
     parsed = raw_payload if isinstance(raw_payload, dict) else _json_or_none(raw_payload)
     raw_line = _raw_line(event, raw_payload)
-    module = str(event.get("module") or _dict_get(parsed, "module") or _dict_get(parsed, "sensor") or "unknown")
+    module = str(
+        _first_text(
+            event.get("honeypot"),
+            event.get("module"),
+            _dict_get(parsed, "honeypot"),
+            _dict_get(parsed, "module"),
+            _dict_get(parsed, "sensor"),
+            "unknown",
+        )
+    )
     return {
         "received_at": float(event.get("received_at") or now_ts()),
         "sensor_id": _first_text(event.get("sensor_id"), event.get("sensor"), _dict_get(parsed, "sensor_id")),

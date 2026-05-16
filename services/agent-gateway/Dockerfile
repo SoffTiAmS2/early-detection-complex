@@ -5,6 +5,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 COPY services/agent-gateway ./services/agent-gateway
 
 EXPOSE 8081
