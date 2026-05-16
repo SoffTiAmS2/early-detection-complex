@@ -3,7 +3,11 @@
   "site": {
     "name": "early-detection-complex",
     "central_url": "http://192.168.0.196:8080",
-    "management_network": "192.168.0.0/24"
+    "management_network": "192.168.0.0/24",
+    "observability": {
+      "grafana_url": "http://192.168.0.196:3000",
+      "honeypot_logs_dashboard": "edc-honeypot-logs"
+    }
   },
   "sensors": [
     {

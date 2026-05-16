@@ -77,11 +77,12 @@
         mode: "0644"
         content: |
           services:
-            center:
+            manager-api:
               environment:
                 CENTER_AUTH_USER: {{ edc_center_auth_user | default('') | to_json }}
                 CENTER_AUTH_PASSWORD: {{ edc_center_auth_password | default('') | to_json }}
                 CENTER_AUTH_TOKEN: {{ edc_center_auth_token | default('') | to_json }}
+                GRAFANA_URL: {{ edc_grafana_url | default('') | to_json }}
             grafana:
               environment:
                 GF_SECURITY_ADMIN_USER: {{ edc_grafana_admin_user | to_json }}

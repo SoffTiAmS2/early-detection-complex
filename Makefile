@@ -17,7 +17,7 @@ down:
 	docker compose down
 
 logs:
-	docker logs -f edc-center
+	docker compose logs -f manager-api reverse-proxy
 
 check:
 	sh scripts/check.sh

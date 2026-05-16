@@ -346,12 +346,13 @@ make down
 
 ```bash
 docker compose ps
-docker compose logs -f center
+docker compose logs -f manager-api
 ```
 
-По умолчанию `compose.yml` поднимает центр, PostgreSQL, Grafana и сервисы control plane:
+По умолчанию `compose.yml` поднимает PostgreSQL, Grafana и микросервисы control plane:
 
-- `center` / `manager-api` на порту `8080`;
+- `reverse-proxy` как публичный вход на порту `8080`;
+- `manager-api` как внутренний UI/API на порту `8080`;
 - `agent-gateway` на порту `8081`;
 - `log-receiver` на порту `8091`;
 - `config-renderer` на порту `8092`;
@@ -374,6 +375,8 @@ GF_SECURITY_ADMIN_PASSWORD
 - dashboard `EDC Overview`;
 - dashboard `EDC Honeypot Logs`;
 - панели по событиям, сенсорам, профилям, honeypot-модулям, raw logs и нормализованным событиям.
+
+Во встроенном UI центра в верхней панели есть кнопка `Grafana`. Она ведет сразу на dashboard `EDC Honeypot Logs`. URL берется из `GRAFANA_URL`, `site.grafana_url` или `site.observability.grafana_url`; если они не заданы, центр выводит `http://127.0.0.1:3000`.
 
 ## 11. Проверки проекта
 
@@ -454,7 +457,8 @@ curl http://192.168.0.196:8080/api/logs/raw?limit=20
 
 ```bash
 docker compose ps
-docker compose logs --tail=200 center
+docker compose logs --tail=200 manager-api
+docker compose logs --tail=200 reverse-proxy
 curl http://192.168.0.196:8080/health
 curl http://192.168.0.196:8080/api/sensors
 systemctl status edc-sensor
@@ -518,6 +522,7 @@ ss -lntup
 │       ├── dashboards/
 │       └── provisioning/
 ├── services/
+│   ├── reverse-proxy/
 │   ├── agent-gateway/
 │   ├── config-renderer/
 │   ├── log-normalizer/
@@ -680,7 +685,7 @@ ansible/playbooks/remove_sensor.yml
 
 - синхронизировать локальную рабочую копию проекта на центр и сенсор через `rsync`;
 - создать compose override для авторизации центра;
-- поднять `center`, `postgres`, `grafana`;
+- поднять `reverse-proxy`, `manager-api`, `agent-gateway`, `log-receiver`, `log-normalizer`, `config-renderer`, `postgres`, `grafana`;
 - установить systemd-сервис `edc-sensor`;
 - включить Docker;
 - проверить активность сервиса сенсора;
@@ -703,6 +708,7 @@ edc_center_auth_user: centre
 edc_center_auth_password: "<пароль>"
 edc_grafana_admin_user: centre
 edc_grafana_admin_password: "<пароль не короче политики Grafana>"
+edc_grafana_url: "http://192.168.0.196:3000"
 edc_image_policy: prebuilt_only
 edc_log_receiver_url: "http://192.168.0.196:8091/logs/batch"
 ```
@@ -724,13 +730,14 @@ edc_log_receiver_url: "http://192.168.0.196:8091/logs/batch"
 
 | Сервис | Путь | Порт | Назначение |
 |---|---|---:|---|
-| manager-api | `services/manager-api` | 8080 | UI, управление профилями, политика, совместимый API |
+| reverse-proxy | `services/reverse-proxy` | 8080 | Публичный вход для UI/API и маршрутизация к сервисам |
+| manager-api | `services/manager-api` | internal 8080 | UI, управление профилями, политика, совместимый API |
 | agent-gateway | `services/agent-gateway` | 8081 | Узкий endpoint для агентов сенсоров |
 | config-renderer | `services/config-renderer` | 8092 | Превращение `DeviceMaskProfile` в desired state |
 | log-receiver | `services/log-receiver` | 8091 | Прием raw logs и batch events от сенсоров |
 | log-normalizer | `services/log-normalizer` | - | Фоновая нормализация raw logs в `honeypot_events` |
 
-В текущем compose `center` использует Dockerfile `services/manager-api/Dockerfile`, чтобы старые команды и Ansible не ломались. Остальные сервисы уже вынесены и могут развиваться независимо.
+В текущем compose наружу на `:8080` смотрит `reverse-proxy`, а рабочий Python-код центра работает как `manager-api`. Это оставляет старый URL центра стабильным для браузера и сенсоров, но внутри проект уже разложен на сервисы.
 
 Проверка сервисов:
 
@@ -780,7 +787,7 @@ banana-pi-sensor
 └── mailoney
 ```
 
-Сейчас эти роли уже вынесены в отдельные Dockerfile и сервисные директории. Следующий шаг - добавить reverse-proxy, отдельный manager-ui, Redis для команд агента и Loki для длительного хранения сырых логов.
+Сейчас эти роли уже вынесены в отдельные Dockerfile и сервисные директории. Следующий шаг - отдельный manager-ui, Redis для команд агента и Loki для длительного хранения сырых логов.
 
 ## 18. Команды, которые центр должен поддерживать дальше
 

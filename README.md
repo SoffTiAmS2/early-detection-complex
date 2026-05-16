@@ -26,6 +26,8 @@ curl http://127.0.0.1:8080/health
 Compose также поднимает микросервисы:
 
 ```text
+reverse-proxy   8080
+manager-api     internal:8080
 agent-gateway   8081
 log-receiver    8091
 config-renderer 8092

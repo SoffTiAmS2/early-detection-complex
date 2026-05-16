@@ -1,12 +1,26 @@
 services:
-  center:
+  reverse-proxy:
+    build:
+      context: .
+      dockerfile: services/reverse-proxy/Dockerfile
+    container_name: edc-reverse-proxy
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - manager-api
+      - agent-gateway
+      - log-receiver
+      - config-renderer
+
+  manager-api:
     build:
       context: .
       dockerfile: services/manager-api/Dockerfile
-    container_name: edc-center
+    container_name: edc-manager-api
     restart: unless-stopped
-    ports:
-      - "8080:8080"
+    expose:
+      - "8080"
     volumes:
       - ./catalog:/app/catalog:ro
       - ./config:/app/config
@@ -26,9 +40,9 @@ services:
     ports:
       - "8081:8081"
     environment:
-      MANAGER_API_URL: http://center:8080
+      MANAGER_API_URL: http://manager-api:8080
     depends_on:
-      - center
+      - manager-api
 
   config-renderer:
     build:
@@ -39,7 +53,7 @@ services:
     ports:
       - "8092:8092"
     depends_on:
-      - center
+      - manager-api
 
   log-receiver:
     build:

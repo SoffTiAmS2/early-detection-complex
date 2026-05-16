@@ -9,7 +9,7 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 
-MANAGER_URL = os.environ.get("MANAGER_API_URL", "http://center:8080").rstrip("/")
+MANAGER_URL = os.environ.get("MANAGER_API_URL", "http://manager-api:8080").rstrip("/")
 
 
 class AgentGatewayHandler(BaseHTTPRequestHandler):

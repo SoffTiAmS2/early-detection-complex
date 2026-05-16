@@ -2,11 +2,12 @@
 
 This directory contains the service-level layout of the control plane.
 
-The current deployment still keeps `center` as the main manager API for
-compatibility with the existing agent. New services split the heavy operational
-paths:
+The public `:8080` entry point is now `reverse-proxy`; the existing Python
+control plane runs as `manager-api` for compatibility with the existing agent.
+New services split the heavy operational paths:
 
 - `manager-api` serves the existing UI and management API on port 8080.
+- `reverse-proxy` is the public entry point and keeps the external center port stable.
 - `agent-gateway` is the future narrow API for sensor agents on port 8081.
 - `config-renderer` renders `DeviceMaskProfile` into desired state on port 8092.
 - `log-receiver` accepts raw honeypot logs and normalized event batches on port 8091.

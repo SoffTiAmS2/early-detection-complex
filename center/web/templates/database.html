@@ -13,9 +13,9 @@
     .k { color: #627084; font-size: 12px; text-transform: uppercase; }
     .v { font-size: 22px; font-weight: 700; }
     .toolbar { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto auto; gap: 8px; margin-bottom: 10px; }
-    input, select, button { border: 1px solid #c8d2de; border-radius: 6px; padding: 8px; font: inherit; }
-    button { background: #0f766e; color: #fff; border-color: #0f766e; cursor: pointer; }
-    button.secondary { background: #fff; color: #17202a; border-color: #d8dee9; }
+    input, select, button, .button { border: 1px solid #c8d2de; border-radius: 6px; padding: 8px; font: inherit; }
+    button, .button { background: #0f766e; color: #fff; border-color: #0f766e; cursor: pointer; text-decoration: none; }
+    button.secondary, .button.secondary { background: #fff; color: #17202a; border-color: #d8dee9; }
     button.danger { background: #b42318; border-color: #b42318; }
     table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #d8dee9; border-radius: 8px; overflow: hidden; }
     th, td { padding: 8px 6px; border-top: 1px solid #ecf0f4; font-size: 13px; text-align: left; vertical-align: top; }
@@ -31,7 +31,8 @@
   <header>
     <div><strong>EDC · база и логи</strong> · {{SITE_NAME}}</div>
     <nav class="toplinks">
-      <a href="/settings">Настройки</a>
+      <a class="button secondary" href="/settings">Настройки</a>
+      <a class="button" href="{{GRAFANA_LOGS_URL}}" target="_blank" rel="noopener">Grafana</a>
     </nav>
   </header>
   <main>

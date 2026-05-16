@@ -6,6 +6,7 @@ edc_local_project_dir: "{{ playbook_dir }}/../.."
 edc_center_compose_override: "{{ edc_install_dir }}/compose.center.local.yml"
 edc_grafana_admin_user: "centre"
 edc_grafana_admin_password: "centre123"
+edc_grafana_url: ""
 edc_log_receiver_url: ""
 
 edc_packages:
