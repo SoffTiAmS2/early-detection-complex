@@ -200,6 +200,11 @@ def write_glutton_config(runtime_dir: Path, desired: dict[str, Any], sensor_id: 
     raw = str(settings.get("raw_glutton_yml") or "").strip()
     config_dir = runtime_dir / "glutton" / "config"
     if raw:
-        (config_dir / "glutton.yml").write_text(raw + "\n", encoding="utf-8")
+        (config_dir / "config.yaml").write_text(raw + "\n", encoding="utf-8")
         return
-    (config_dir / "glutton.yml").write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    source_dir = Path(__file__).resolve().parent / "dockerfiles" / "glutton"
+    for name in ("config.yaml", "rules.yaml"):
+        source = source_dir / name
+        if source.exists():
+            shutil.copy2(source, config_dir / name)
+    (config_dir / "edc-profile.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

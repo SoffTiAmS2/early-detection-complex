@@ -1,0 +1,83 @@
+rules:
+  # Printer / scanner / NAS-like
+  - name: printer-jetdirect
+    match: tcp dst port 9100
+    type: conn_handler
+    target: tcp
+
+  - name: printer-ipp
+    match: tcp dst port 631
+    type: conn_handler
+    target: tcp
+
+  - name: lpd
+    match: tcp dst port 515
+    type: conn_handler
+    target: tcp
+
+  # Camera-like
+  - name: rtsp
+    match: tcp dst port 554
+    type: conn_handler
+    target: tcp
+
+  - name: camera-service
+    match: tcp dst port 8000 or tcp dst port 8899
+    type: conn_handler
+    target: tcp
+
+  # Router-like
+  - name: winbox
+    match: tcp dst port 8291
+    type: conn_handler
+    target: tcp
+
+  # Workstation-like
+  - name: smb
+    match: tcp dst port 445 or tcp dst port 139
+    type: conn_handler
+    target: smb
+
+  - name: rdp
+    match: tcp dst port 3389
+    type: conn_handler
+    target: rdp
+
+  - name: winrm
+    match: tcp dst port 5985
+    type: conn_handler
+    target: tcp
+
+  # Linux/server-like
+  - name: mqtt
+    match: tcp dst port 1883
+    type: conn_handler
+    target: mqtt
+
+  - name: postgres
+    match: tcp dst port 5432
+    type: conn_handler
+    target: tcp
+
+  - name: docker-api
+    match: tcp dst port 2375
+    type: conn_handler
+    target: tcp
+
+  # Mail-ish generic fallback if Mailoney is not used
+  - name: smtp
+    match: tcp dst port 25 or tcp dst port 465 or tcp dst port 587
+    type: conn_handler
+    target: smtp
+
+  # UDP generic
+  - name: udp-generic
+    match: udp
+    type: conn_handler
+    target: udp
+
+  # TCP fallback
+  - name: tcp-generic
+    match: tcp
+    type: conn_handler
+    target: tcp

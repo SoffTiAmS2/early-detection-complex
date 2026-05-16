@@ -14,7 +14,7 @@ except Exception:  # pragma: no cover - optional in sqlite-only local setup
     dict_row = None
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def db_dsn() -> str:
@@ -89,6 +89,30 @@ def migrate_postgres(connection: Any) -> None:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_severity ON events(severity)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type)")
             cursor.execute("INSERT INTO schema_migrations (version) VALUES (1)")
+        if 2 not in applied:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sensor_states (
+                    sensor_id TEXT PRIMARY KEY,
+                    updated_at DOUBLE PRECISION NOT NULL,
+                    status TEXT NULL,
+                    active_profile TEXT NULL,
+                    profile TEXT NULL,
+                    device_type TEXT NULL,
+                    config_version INTEGER NULL,
+                    applied_version INTEGER NULL,
+                    agent_mode TEXT NULL,
+                    host TEXT NULL,
+                    architecture TEXT NULL,
+                    modules JSONB NOT NULL,
+                    active_services JSONB NOT NULL,
+                    listener_errors JSONB NOT NULL,
+                    raw_status JSONB NOT NULL
+                )
+                """
+            )
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_sensor_states_updated_at ON sensor_states(updated_at)")
+            cursor.execute("INSERT INTO schema_migrations (version) VALUES (2)")
 
 
 def migrate_sqlite(connection: sqlite3.Connection) -> None:
@@ -128,4 +152,27 @@ def migrate_sqlite(connection: sqlite3.Connection) -> None:
             """
         )
         connection.execute("INSERT INTO schema_migrations (version) VALUES (?)", (1,))
-
+    if 2 not in applied:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS sensor_states (
+                sensor_id TEXT PRIMARY KEY,
+                updated_at REAL NOT NULL,
+                status TEXT,
+                active_profile TEXT,
+                profile TEXT,
+                device_type TEXT,
+                config_version INTEGER,
+                applied_version INTEGER,
+                agent_mode TEXT,
+                host TEXT,
+                architecture TEXT,
+                modules TEXT NOT NULL,
+                active_services TEXT NOT NULL,
+                listener_errors TEXT NOT NULL,
+                raw_status TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_sensor_states_updated_at ON sensor_states(updated_at);
+            """
+        )
+        connection.execute("INSERT INTO schema_migrations (version) VALUES (?)", (2,))

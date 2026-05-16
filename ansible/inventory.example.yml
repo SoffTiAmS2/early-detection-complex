@@ -3,8 +3,12 @@ all:
     edc_repo_url: "https://github.com/SoffTiAmS2/early-detection-complex.git"
     edc_version: "main"
     edc_center_url: "http://192.168.0.196:8080"
-    edc_install_dir: "/opt/edc"
-    edc_sensor_dir: "/opt/edc-sensor"
+    edc_install_dir: "/home/centre/early-detection-complex"
+    edc_sensor_dir: "/home/banana/edc-sensor"
+    edc_deploy_method: "local_rsync"
+    edc_center_auth_user: "centre"
+    edc_center_auth_password: "change-me"
+    edc_image_policy: "prebuilt_only"
 
   children:
     centers:

@@ -6,10 +6,25 @@ from .paths import STALE_AFTER_SECONDS
 from .utils import now_ts
 from center.persistence.events import count_by, is_sensor_event
 
-def sensor_summary(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    sensors: dict[str, dict[str, Any]] = {}
+
+def newer_timestamp(left: Any, right: Any) -> float | None:
+    values = []
+    for value in (left, right):
+        try:
+            if value is not None:
+                values.append(float(value))
+        except (TypeError, ValueError):
+            continue
+    return max(values) if values else None
+
+def sensor_summary(
+    events: list[dict[str, Any]],
+    sensor_states: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, dict[str, Any]]:
+    sensors: dict[str, dict[str, Any]] = {sensor_id: dict(state) for sensor_id, state in (sensor_states or {}).items()}
     for event in events:
         sensor_id = str(event.get("sensor_id") or event.get("sensor") or "unknown")
+        event_ts = newer_timestamp(None, event.get("received_at") or event.get("timestamp"))
         item = sensors.setdefault(
             sensor_id,
             {
@@ -24,11 +39,21 @@ def sensor_summary(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             },
         )
         item["events"] += 1
-        item["last_seen"] = event.get("received_at") or event.get("timestamp")
-        item["last_event_type"] = event.get("event_type") or event.get("type")
+        previous_last_seen = item.get("last_seen")
+        item["last_seen"] = newer_timestamp(previous_last_seen, event_ts)
+        event_is_latest = item["last_seen"] == newer_timestamp(previous_last_seen, event_ts) and (
+            previous_last_seen is None or item["last_seen"] != previous_last_seen
+        )
+        if event_is_latest:
+            item["last_event_type"] = event.get("event_type") or event.get("type")
         if item["last_event_type"] == "sensor.status":
+            previous_status_seen = item.get("last_status_seen")
+            latest_status_seen = newer_timestamp(previous_status_seen, event_ts)
+            status_is_latest = latest_status_seen == event_ts and event_ts is not None
+            item["last_status_seen"] = latest_status_seen
+            if not status_is_latest:
+                continue
             item["status"] = event.get("status", item["status"])
-            item["last_status_seen"] = event.get("received_at") or event.get("timestamp")
             item["applied_version"] = event.get("applied_version", item["applied_version"])
             item["config_version"] = event.get("config_version", item.get("config_version"))
             item["modules"] = event.get("modules", item["modules"])
@@ -45,8 +70,12 @@ def sensor_summary(events: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return sensors
 
 
-def sensors_payload(policy: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
-    summaries = sensor_summary(events)
+def sensors_payload(
+    policy: dict[str, Any],
+    events: list[dict[str, Any]],
+    sensor_states: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    summaries = sensor_summary(events, sensor_states)
     current = now_ts()
     for sensor in policy.get("sensors", []):
         sensor_id = sensor.get("id")
@@ -79,8 +108,13 @@ def sensors_payload(policy: dict[str, Any], events: list[dict[str, Any]]) -> dic
     return {"sensors": list(summaries.values())}
 
 
-def overview_payload(policy: dict[str, Any], catalog: dict[str, Any], events: list[dict[str, Any]]) -> dict[str, Any]:
-    sensors = sensors_payload(policy, events)["sensors"]
+def overview_payload(
+    policy: dict[str, Any],
+    catalog: dict[str, Any],
+    events: list[dict[str, Any]],
+    sensor_states: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    sensors = sensors_payload(policy, events, sensor_states)["sensors"]
     online = sum(1 for sensor in sensors if sensor.get("status") == "online")
     healthy = sum(1 for sensor in sensors if sensor.get("health") == "online")
     stale = sum(1 for sensor in sensors if sensor.get("health") == "stale")

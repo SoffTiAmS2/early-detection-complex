@@ -29,6 +29,8 @@ def load_auth_config() -> AuthConfig:
 
 def is_admin_route(method: str, path: str) -> bool:
     """Routes that can reveal management data or change center state."""
+    if method == "POST" and path.startswith("/api/sensors/") and path.endswith("/sync"):
+        return False
     if path in {
         "",
         "/",

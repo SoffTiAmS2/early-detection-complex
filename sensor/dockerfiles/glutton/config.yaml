@@ -1,0 +1,29 @@
+ports:
+  tcp: 5000
+  udp: 5001
+  ssh: 22
+
+rules_path: /etc/glutton/rules.yaml
+
+# Внутри docker-контейнера основной интерфейс обычно eth0
+interface: eth0
+
+# Дополнительные адреса можно не задавать.
+# Glutton сам найдёт non-loopback IP на eth0.
+addresses: []
+
+producers:
+  enabled: false
+  http:
+    enabled: false
+    remote: http://127.0.0.1:9000/publish
+  hpfeeds:
+    enabled: false
+    host: 127.0.0.1
+    port: 20000
+    ident: ident
+    auth: auth
+    channel: glutton.events
+
+conn_timeout: 45
+max_tcp_payload: 4096

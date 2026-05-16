@@ -4,9 +4,22 @@
   tasks:
     - name: Install base packages
       ansible.builtin.apt:
-        name: "{{ edc_packages + edc_docker_packages }}"
+        name: "{{ edc_packages }}"
         update_cache: true
         state: present
+
+    - name: Check Docker availability
+      ansible.builtin.command: docker --version
+      register: center_docker_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Docker packages when Docker is missing
+      ansible.builtin.apt:
+        name: "{{ edc_docker_packages }}"
+        update_cache: true
+        state: present
+      when: center_docker_check.rc != 0
 
     - name: Enable Docker
       ansible.builtin.service:
@@ -14,12 +27,40 @@
         enabled: true
         state: started
 
+    - name: Ensure center project directory exists
+      ansible.builtin.file:
+        path: "{{ edc_install_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+
+    - name: Synchronize local EDC project to center
+      ansible.builtin.command:
+        cmd: >-
+          rsync -az --delete
+          --exclude .git/
+          --exclude __pycache__/
+          --exclude '*.pyc'
+          --exclude .pytest_cache/
+          --exclude var/
+          --exclude artifacts/
+          --exclude .env
+          --exclude config/site.local.json
+          {{ edc_local_project_dir }}/
+          {{ ansible_user }}@{{ ansible_host }}:{{ edc_install_dir }}/
+      delegate_to: localhost
+      become: false
+      changed_when: true
+      when: edc_deploy_method | default('git') == 'local_rsync'
+
     - name: Clone EDC repository
       ansible.builtin.git:
         repo: "{{ edc_repo_url }}"
         dest: "{{ edc_install_dir }}"
         version: "{{ edc_version }}"
         update: true
+      when: edc_deploy_method | default('git') == 'git'
 
     - name: Ensure local policy exists
       ansible.builtin.copy:
@@ -28,9 +69,27 @@
         remote_src: true
         force: false
 
-    - name: Start center and PostgreSQL
+    - name: Write center compose override
+      ansible.builtin.copy:
+        dest: "{{ edc_center_compose_override }}"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0644"
+        content: |
+          services:
+            center:
+              environment:
+                CENTER_AUTH_USER: {{ edc_center_auth_user | default('') | to_json }}
+                CENTER_AUTH_PASSWORD: {{ edc_center_auth_password | default('') | to_json }}
+                CENTER_AUTH_TOKEN: {{ edc_center_auth_token | default('') | to_json }}
+            grafana:
+              environment:
+                GF_SECURITY_ADMIN_USER: {{ edc_grafana_admin_user | to_json }}
+                GF_SECURITY_ADMIN_PASSWORD: {{ edc_grafana_admin_password | to_json }}
+
+    - name: Start center, PostgreSQL and Grafana
       ansible.builtin.command:
-        cmd: docker compose -f "{{ edc_center_compose_file }}" up -d --build
+        cmd: docker compose -f "{{ edc_center_compose_file }}" -f "{{ edc_center_compose_override }}" up -d --build
         chdir: "{{ edc_install_dir }}"
       changed_when: true
 
@@ -42,3 +101,37 @@
       retries: 20
       delay: 3
       until: center_health.status == 200
+
+    - name: Wait for Grafana health
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:3000/api/health"
+        return_content: true
+      register: grafana_health
+      retries: 20
+      delay: 3
+      until: grafana_health.status == 200
+
+    - name: Reset Grafana admin password for persistent volumes
+      ansible.builtin.command:
+        cmd: docker exec edc-grafana grafana cli admin reset-admin-password "{{ edc_grafana_admin_password }}"
+      changed_when: true
+
+    - name: Normalize Grafana admin login
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:3000/api/users/1"
+        method: PUT
+        user: "{{ item }}"
+        password: "{{ edc_grafana_admin_password }}"
+        force_basic_auth: true
+        body_format: json
+        body:
+          login: "{{ edc_grafana_admin_user }}"
+          name: "{{ edc_grafana_admin_user }}"
+          email: "{{ edc_grafana_admin_user }}@local"
+        status_code: 200
+      loop:
+        - "{{ edc_grafana_admin_user }}"
+        - admin
+      register: grafana_login_update
+      changed_when: false
+      failed_when: false

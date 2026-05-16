@@ -1,21 +1,30 @@
-ARG HONEYPOT_BASE_IMAGE=python:3.11-slim
-FROM ${HONEYPOT_BASE_IMAGE}
+ARG MAILONEY_BASE_IMAGE=python:3.11-slim
+FROM ${MAILONEY_BASE_IMAGE}
 
-ENV DEBIAN_FRONTEND=noninteractive \
+ENV PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONUNBUFFERED=1
+    MAILONEY_HOST=0.0.0.0 \
+    MAILONEY_PORT=2525 \
+    MAILONEY_SERVER_NAME=mail.company.local \
+    EDC_SENSOR_ID=banana-pi-mailoney \
+    MAILONEY_LOG_DIR=/logs \
+    MAILONEY_LOGIN_RESULT=success \
+    MAILONEY_TIMEOUT=60 \
+    MAILONEY_MAX_LINE_BYTES=8192 \
+    MAILONEY_MAX_MESSAGE_BYTES=262144 \
+    MAILONEY_PREVIEW_CHARS=2000
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends git ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /opt/mailoney /logs && chmod -R 777 /logs
 
-WORKDIR /app
-RUN git clone --depth 1 https://github.com/awhitehatter/mailoney.git /app \
-    && if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
+WORKDIR /opt/mailoney
 
-COPY entrypoint.sh /usr/local/bin/mailoney-entrypoint
-RUN chmod +x /usr/local/bin/mailoney-entrypoint \
-    && mkdir -p /logs
+COPY mailoney_lite.py /opt/mailoney/mailoney_lite.py
 
-EXPOSE 2525
-CMD ["mailoney-entrypoint"]
+RUN chmod +x /opt/mailoney/mailoney_lite.py && \
+    python3 -m py_compile /opt/mailoney/mailoney_lite.py
+
+USER 65534:65534
+
+EXPOSE 2525/tcp
+
+CMD ["python3", "/opt/mailoney/mailoney_lite.py"]

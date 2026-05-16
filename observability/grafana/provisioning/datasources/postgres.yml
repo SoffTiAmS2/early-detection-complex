@@ -1,0 +1,17 @@
+apiVersion: 1
+
+datasources:
+  - name: EDC PostgreSQL
+    uid: edc-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: edc
+    database: edc
+    isDefault: true
+    editable: true
+    jsonData:
+      sslmode: disable
+      postgresVersion: 1600
+    secureJsonData:
+      password: edc

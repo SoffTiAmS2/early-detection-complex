@@ -27,7 +27,7 @@
       "resource_class": "medium",
       "services": [
         { "id": "modbus", "protocol": "tcp", "container_port": 5020, "default_host_port": 15020 },
-        { "id": "s7comm", "protocol": "tcp", "container_port": 10200, "default_host_port": 10102 },
+        { "id": "s7comm", "protocol": "tcp", "container_port": 10201, "default_host_port": 10102 },
         { "id": "bacnet", "protocol": "udp", "container_port": 47808, "default_host_port": 47808 },
         { "id": "http", "protocol": "tcp", "container_port": 8800, "default_host_port": 8800 },
         { "id": "ethernet_ip", "protocol": "tcp", "container_port": 44818, "default_host_port": 44818 }
@@ -64,13 +64,14 @@
       "runtime": "container-module",
       "resource_class": "medium",
       "services": [
-        { "id": "http", "protocol": "tcp", "container_port": 8082, "default_host_port": 8082 },
-        { "id": "https", "protocol": "tcp", "container_port": 8443, "default_host_port": 8443 },
-        { "id": "http_alt", "protocol": "tcp", "container_port": 8080, "default_host_port": 8080 },
-        { "id": "mysql", "protocol": "tcp", "container_port": 3307, "default_host_port": 3307 },
-        { "id": "redis", "protocol": "tcp", "container_port": 6380, "default_host_port": 6380 },
-        { "id": "ftp", "protocol": "tcp", "container_port": 2124, "default_host_port": 2124 },
-        { "id": "telnet", "protocol": "tcp", "container_port": 2324, "default_host_port": 2324 }
+        { "id": "http", "protocol": "tcp", "container_port": 10080, "default_host_port": 8082 },
+        { "id": "https", "protocol": "tcp", "container_port": 10080, "default_host_port": 8443 },
+        { "id": "http_alt", "protocol": "tcp", "container_port": 10080, "default_host_port": 8080 },
+        { "id": "elasticsearch", "protocol": "tcp", "container_port": 19200, "default_host_port": 9200 },
+        { "id": "echo", "protocol": "tcp", "container_port": 10007, "default_host_port": 10007 },
+        { "id": "motd", "protocol": "tcp", "container_port": 10008, "default_host_port": 10008 },
+        { "id": "random", "protocol": "tcp", "container_port": 12048, "default_host_port": 12048 },
+        { "id": "telnet", "protocol": "tcp", "container_port": 10023, "default_host_port": 2324 }
       ],
       "config_schema": [
         { "key": "sensor_name", "type": "string", "default": "web-stack-01" },
@@ -81,7 +82,7 @@
         { "key": "log_path", "type": "string", "default": "/logs/honeypy.log" },
         { "key": "raw_honeypy_yml", "type": "textarea", "default": "" },
         { "key": "image_mode", "type": "select", "default": "local", "options": ["local", "upstream"] },
-        { "key": "base_image", "type": "string", "default": "python:3.11-slim" }
+        { "key": "base_image", "type": "string", "default": "python:2.7-slim-buster" }
       ]
     },
     {
@@ -100,6 +101,7 @@
         { "id": "lpd", "protocol": "tcp", "container_port": 515, "default_host_port": 515 },
         { "id": "ipp", "protocol": "tcp", "container_port": 631, "default_host_port": 631 },
         { "id": "jetdirect", "protocol": "tcp", "container_port": 9100, "default_host_port": 9100 },
+        { "id": "ftp", "protocol": "tcp", "container_port": 21, "default_host_port": 21 },
         { "id": "rtsp", "protocol": "tcp", "container_port": 554, "default_host_port": 554 },
         { "id": "camera_service", "protocol": "tcp", "container_port": 8000, "default_host_port": 8000 },
         { "id": "discovery", "protocol": "tcp", "container_port": 8899, "default_host_port": 8899 },
@@ -111,6 +113,8 @@
         { "id": "msrpc", "protocol": "tcp", "container_port": 135, "default_host_port": 135 },
         { "id": "wsdiscovery", "protocol": "tcp", "container_port": 5357, "default_host_port": 5357 },
         { "id": "winrm", "protocol": "tcp", "container_port": 5985, "default_host_port": 5985 },
+        { "id": "mysql", "protocol": "tcp", "container_port": 3306, "default_host_port": 3306 },
+        { "id": "redis", "protocol": "tcp", "container_port": 6379, "default_host_port": 6379 },
         { "id": "postgres", "protocol": "tcp", "container_port": 5432, "default_host_port": 5432 },
         { "id": "pop3", "protocol": "tcp", "container_port": 110, "default_host_port": 110 },
         { "id": "imap", "protocol": "tcp", "container_port": 143, "default_host_port": 143 },

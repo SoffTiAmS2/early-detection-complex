@@ -2,6 +2,10 @@ edc_python_bin: /usr/bin/python3
 edc_agent_interval: 20
 edc_sensor_state_dir: /var/lib/edc-sensor
 edc_center_compose_file: "{{ edc_install_dir }}/compose.yml"
+edc_local_project_dir: "{{ playbook_dir }}/../.."
+edc_center_compose_override: "{{ edc_install_dir }}/compose.center.local.yml"
+edc_grafana_admin_user: "centre"
+edc_grafana_admin_password: "centre123"
 
 edc_packages:
   - ca-certificates

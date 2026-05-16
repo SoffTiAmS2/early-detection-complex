@@ -156,8 +156,11 @@ def sync_payload(
     status: dict[str, Any] = {
         "state": "online",
         "mode": agent_mode,
-        "applied_version": desired.get("version"),
+        "applied_version": desired.get("config_version", desired.get("version")),
+        "config_version": desired.get("config_version", desired.get("version")),
+        "active_profile": desired.get("active_profile"),
         "profile": desired.get("profile"),
+        "device_type": desired.get("device_type"),
         "host": desired.get("host"),
         "enabled_modules": [module["id"] for module in enabled_modules],
         "planned_ports": planned_ports,

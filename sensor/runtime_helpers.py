@@ -22,15 +22,15 @@ UPSTREAM_IMAGES = {
     "cowrie": "arm32v7/debian:bookworm-slim",
     "conpot": "honeynet/conpot:latest",
     "mailoney": "python:3.11-slim",
-    "honeypy": "python:3.11-slim",
-    "glutton": "golang:1.22-bookworm",
+    "honeypy": "python:2.7-slim-buster",
+    "glutton": "golang:1.23-bookworm",
 }
 MODULE_LOG_HINTS = {
     "cowrie": "/home/cowrie/cowrie/var/log/cowrie/cowrie.json",
     "conpot": "/logs/conpot.json",
-    "mailoney": "/logs/mailoney.log",
-    "honeypy": "/logs/honeypy.log",
-    "glutton": "/logs/glutton.json",
+    "mailoney": "/logs/mailoney.jsonl",
+    "honeypy": "/logs/honeypy-events.json",
+    "glutton": "/logs/glutton.log",
 }
 ARM32_ARCHES = {"armv7l", "armv6l", "armhf", "armv7"}
 ARM32_UNSUPPORTED_MODULES: set[str] = set()

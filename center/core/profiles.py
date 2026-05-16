@@ -174,6 +174,7 @@ def render_profile_desired_state(profile: dict[str, Any], catalog: dict[str, Any
     version = int(config_version or profile.get("version") or 1)
     return {
         "runtime_mode": "docker",
+        "image_policy": profile.get("image_policy", "prebuilt_only"),
         "active_profile": profile_id,
         "profile": profile_id,
         "profile_name": profile.get("name") or profile.get("title") or profile_id,

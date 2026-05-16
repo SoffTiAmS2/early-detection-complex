@@ -15,7 +15,9 @@
 - превращает профиль устройства в `desired_state`;
 - принимает события и статус сенсоров;
 - показывает UI администратора;
-- хранит события в PostgreSQL, если задан `CENTER_DB_DSN`, иначе использует SQLite.
+- хранит события в PostgreSQL, если задан `CENTER_DB_DSN`, иначе использует SQLite;
+- хранит последний технический статус сенсора отдельно от журнала событий;
+- поднимает Grafana для быстрого просмотра событий, профилей и состояния сенсоров.
 
 Сенсор:
 
@@ -272,11 +274,14 @@ Dockerfiles сенсора отделены от runtime-кода и лежат 
 sensor/dockerfiles/
 ├── cowrie/Dockerfile
 ├── glutton/Dockerfile
+├── glutton/config.yaml
+├── glutton/rules.yaml
 ├── honeypy/Dockerfile
-├── honeypy/entrypoint.sh
+├── honeypy/etc/
 ├── conpot/Dockerfile
+├── conpot/conpot.cfg
 ├── mailoney/Dockerfile
-└── mailoney/entrypoint.sh
+└── mailoney/mailoney_lite.py
 ```
 
 Runtime копирует build context из `sensor/dockerfiles/<module>/` в рабочий каталог сенсора и использует его при `docker compose up --build`.
@@ -344,7 +349,22 @@ docker compose ps
 docker compose logs -f center
 ```
 
-По умолчанию `compose.yml` поднимает центр и PostgreSQL. Если переменная `CENTER_DB_DSN` задана и начинается с `postgres`, центр пишет события в PostgreSQL. Если DSN не задан, используется SQLite в `var/center/events.sqlite3`.
+По умолчанию `compose.yml` поднимает центр, PostgreSQL и Grafana. Если переменная `CENTER_DB_DSN` задана и начинается с `postgres`, центр пишет события в PostgreSQL. Если DSN не задан, используется SQLite в `var/center/events.sqlite3`.
+
+Grafana доступна на порту `3000`. Учетные данные задаются переменными:
+
+```text
+GF_SECURITY_ADMIN_USER
+GF_SECURITY_ADMIN_PASSWORD
+```
+
+В compose по умолчанию используется тестовая пара `centre` / `centre123`. Пароль `1` для Grafana не подходит, потому что Grafana проверяет минимальную сложность пароля. Для реального стенда пароль нужно заменить через compose override или переменные окружения.
+
+В Grafana автоматически добавляются:
+
+- datasource `EDC PostgreSQL`;
+- dashboard `EDC Overview`;
+- панели по событиям, сенсорам, профилям, honeypot-модулям и последним записям.
 
 ## 11. Проверки проекта
 
@@ -451,6 +471,7 @@ ss -lntup
 │   │   └── sensor_sync.py
 │   ├── persistence/
 │   │   ├── events.py
+│   │   ├── sensor_states.py
 │   │   └── store.py
 │   ├── web/
 │   │   ├── templates/admin.html
@@ -465,6 +486,7 @@ ss -lntup
 ├── sensor/
 │   ├── dockerfiles/
 │   ├── agent.py
+│   ├── agent_state.py
 │   ├── runtime.py
 │   ├── runtime_configs.py
 │   ├── runtime_helpers.py
@@ -478,6 +500,13 @@ ss -lntup
 │   ├── e2e_reconfigure_test.py
 │   ├── validate_policy.py
 │   └── validate_profiles.py
+├── observability/
+│   └── grafana/
+│       ├── dashboards/
+│       └── provisioning/
+├── ansible/
+│   ├── inventory.example.yml
+│   └── playbooks/
 ├── compose.yml
 ├── Makefile
 ├── pyproject.toml
@@ -486,7 +515,7 @@ ss -lntup
 
 ## 14. PostgreSQL и SQLite
 
-В центре есть два режима хранения событий:
+В центре есть два режима хранения:
 
 | Режим | Когда используется |
 |---|---|
@@ -495,11 +524,39 @@ ss -lntup
 
 `compose.yml` сейчас поднимает PostgreSQL и передает `CENTER_DB_DSN` в центр. Для простого локального запуска без Postgres можно убрать эту переменную и зависимость из compose, тогда центр перейдет на SQLite.
 
+Таблица `events` хранит расследуемые события: подключения к honeypot, raw logs, ошибки runtime и проблемные статусы. Хороший регулярный `sensor.status` не пишется в `events`, чтобы не раздувать журнал.
+
+Таблица `sensor_states` хранит последний технический статус каждого сенсора:
+
+```text
+sensor_id
+updated_at
+status
+active_profile
+config_version
+applied_version
+agent_mode
+host
+architecture
+modules
+active_services
+listener_errors
+raw_status
+```
+
+Логика такая:
+
+- каждый heartbeat обновляет `sensor_states`;
+- если статус здоровый, строка в `events` не создается;
+- если статус содержит ошибки контейнеров, listener errors, `failed`, `degraded` или `skipped`, он сохраняется в `events` как диагностическое событие;
+- события honeypot всегда пишутся в `events`.
+
 Код хранения:
 
 ```text
 center/persistence/store.py
 center/persistence/events.py
+center/persistence/sensor_states.py
 ```
 
 ## 15. Ansible
@@ -516,6 +573,38 @@ ansible/playbooks/sensors.yml
 ansible/playbooks/classify_sensors.yml
 ansible/playbooks/remove_sensor.yml
 ```
+
+В текущей лабораторной схеме Ansible умеет:
+
+- синхронизировать локальную рабочую копию проекта на центр и сенсор через `rsync`;
+- создать compose override для авторизации центра;
+- поднять `center`, `postgres`, `grafana`;
+- установить systemd-сервис `edc-sensor`;
+- включить Docker;
+- проверить активность сервиса сенсора;
+- показать EDC-контейнеры, запущенные для выбранного `sensor_id`;
+- на Banana Pi переименовать уже собранные `edc/*:banana` в runtime-имена `edc/*:local`.
+
+Для запуска через временный inventory:
+
+```bash
+uvx --from ansible-core ansible-playbook \
+  -i /tmp/edc-inventory.yml \
+  ansible/playbooks/site.yml
+```
+
+В inventory для реального стенда нужно задать:
+
+```yaml
+edc_deploy_method: local_rsync
+edc_center_auth_user: centre
+edc_center_auth_password: "<пароль>"
+edc_grafana_admin_user: centre
+edc_grafana_admin_password: "<пароль не короче политики Grafana>"
+edc_image_policy: prebuilt_only
+```
+
+Для Banana Pi рекомендуется `edc_image_policy: prebuilt_only`: агент не будет собирать контейнеры на слабом устройстве, а сообщит ошибку `missing prebuilt image`, если образ не загружен заранее.
 
 Для разработки можно не запускать Ansible. Для ручного теста достаточно:
 

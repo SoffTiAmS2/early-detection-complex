@@ -23,6 +23,7 @@ from center.core.profiles import apply_profile, available_profiles
 from center.core.sensor_sync import sensor_sync
 from center.core.utils import load_json, now_ts, write_json
 from center.persistence.events import database_stats, filter_events, purge_all_events, purge_sensor_events, read_events, write_event
+from center.persistence.sensor_states import read_sensor_states, should_persist_status_event, write_sensor_state
 from center.web.views import render_admin_page, render_database_page, render_mask_page, render_profiles_page
 
 
@@ -178,11 +179,11 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def handle_overview(self, policy: dict[str, Any], catalog: dict[str, Any]) -> None:
         events = read_events(self.store_path, limit=MAX_EVENT_LIMIT)
-        self.send_json(overview_payload(policy, catalog, events))
+        self.send_json(overview_payload(policy, catalog, events, read_sensor_states(self.store_path)))
 
     def handle_sensors(self, policy: dict[str, Any]) -> None:
         events = read_events(self.store_path, limit=MAX_EVENT_LIMIT)
-        self.send_json(sensors_payload(policy, events))
+        self.send_json(sensors_payload(policy, events, read_sensor_states(self.store_path)))
 
     def handle_events_query(self, query: str) -> None:
         params = parse_qs(query)
@@ -436,7 +437,10 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self.send_json({"status": "invalid_policy", "errors": errors}, HTTPStatus.CONFLICT)
             return
         event, response = sensor_sync(policy, catalog, sensor_id, payload)
-        write_event(self.store_path, event)
+        event["received_at"] = now_ts()
+        write_sensor_state(self.store_path, event)
+        if should_persist_status_event(event):
+            write_event(self.store_path, event)
         self.send_json(response, HTTPStatus.ACCEPTED)
 
     def handle_sensor_event(

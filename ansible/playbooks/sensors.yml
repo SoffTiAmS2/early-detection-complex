@@ -4,9 +4,22 @@
   tasks:
     - name: Install sensor packages
       ansible.builtin.apt:
-        name: "{{ edc_packages + edc_docker_packages }}"
+        name: "{{ edc_packages }}"
         update_cache: true
         state: present
+
+    - name: Check Docker availability
+      ansible.builtin.command: docker --version
+      register: sensor_docker_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install Docker packages when Docker is missing
+      ansible.builtin.apt:
+        name: "{{ edc_docker_packages }}"
+        update_cache: true
+        state: present
+      when: sensor_docker_check.rc != 0
 
     - name: Enable Docker
       ansible.builtin.service:
@@ -14,12 +27,52 @@
         enabled: true
         state: started
 
+    - name: Ensure sensor project directory exists
+      ansible.builtin.file:
+        path: "{{ edc_sensor_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+
+    - name: Synchronize local EDC project to sensor
+      ansible.builtin.command:
+        cmd: >-
+          rsync -az --delete
+          --exclude .git/
+          --exclude __pycache__/
+          --exclude '*.pyc'
+          --exclude .pytest_cache/
+          --exclude var/
+          --exclude artifacts/
+          --exclude .env
+          --exclude config/site.local.json
+          {{ edc_local_project_dir }}/
+          {{ ansible_user }}@{{ ansible_host }}:{{ edc_sensor_dir }}/
+      delegate_to: localhost
+      become: false
+      changed_when: true
+      when: edc_deploy_method | default('git') == 'local_rsync'
+      notify: Restart sensor
+
     - name: Clone EDC repository for sensor runtime
       ansible.builtin.git:
         repo: "{{ edc_repo_url }}"
         dest: "{{ edc_sensor_dir }}"
         version: "{{ edc_version }}"
         update: true
+      when: edc_deploy_method | default('git') == 'git'
+      notify: Restart sensor
+
+    - name: Retag Banana Pi test images to runtime local names when present
+      ansible.builtin.shell: |
+        set -eu
+        for image in cowrie conpot glutton honeypy mailoney; do
+          if docker image inspect "edc/${image}:banana" >/dev/null 2>&1; then
+            docker tag "edc/${image}:banana" "edc/${image}:local"
+          fi
+        done
+      changed_when: false
 
     - name: Ensure sensor state directory exists
       ansible.builtin.file:
@@ -44,7 +97,7 @@
           WorkingDirectory={{ edc_sensor_dir }}
           EnvironmentFile=-/etc/edc-sensor.env
           Environment=PYTHONUNBUFFERED=1
-          ExecStart={{ edc_python_bin }} {{ edc_sensor_dir }}/sensor/agent.py --center ${EDC_CENTER_URL:-{{ edc_center_url }}} --sensor-id {{ edc_sensor_id | default(inventory_hostname) }} --state-dir {{ edc_sensor_state_dir }} --serve --interval {{ edc_agent_interval }}
+          ExecStart={{ edc_python_bin }} {{ edc_sensor_dir }}/sensor/agent.py --center {{ edc_center_url }} --sensor-id {{ edc_sensor_id | default(inventory_hostname) }} --state-dir {{ edc_sensor_state_dir }} --serve --interval {{ edc_agent_interval }}
           Restart=always
           RestartSec=5
 
@@ -58,6 +111,7 @@
         mode: "0644"
         content: |
           EDC_CENTER_URL={{ edc_center_url }}
+          EDC_IMAGE_POLICY={{ edc_image_policy | default('prebuilt_only') }}
       notify: Restart sensor
 
     - name: Enable sensor agent
@@ -66,6 +120,32 @@
         daemon_reload: true
         enabled: true
         state: started
+
+    - name: Apply pending sensor restart before verification
+      ansible.builtin.meta: flush_handlers
+
+    - name: Check sensor service is active
+      ansible.builtin.command: systemctl is-active edc-sensor.service
+      register: sensor_service_state
+      changed_when: false
+      failed_when: sensor_service_state.stdout.strip() != "active"
+
+    - name: Show EDC containers for this sensor
+      ansible.builtin.command:
+        argv:
+          - docker
+          - ps
+          - -a
+          - --filter
+          - "label=edc.sensor_id={{ edc_sensor_id | default(inventory_hostname) }}"
+          - --format
+          - "{% raw %}{{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}{% endraw %}"
+      register: edc_sensor_containers
+      changed_when: false
+
+    - name: Print sensor runtime summary
+      ansible.builtin.debug:
+        var: edc_sensor_containers.stdout_lines
 
   handlers:
     - name: Restart sensor

@@ -18,6 +18,7 @@
       },
       "desired_state": {
         "runtime_mode": "docker",
+        "image_policy": "prebuilt_only",
         "active_profile": "ip-camera",
         "profile": "ip-camera",
         "profile_name": "IP Camera",

@@ -78,7 +78,7 @@
         { "port": 515, "protocol": "tcp", "service": "lpd", "honeypot": "glutton", "module_service": "lpd", "description": "LPD" },
         { "port": 631, "protocol": "tcp", "service": "ipp", "honeypot": "glutton", "module_service": "ipp", "description": "IPP" },
         { "port": 9100, "protocol": "tcp", "service": "jetdirect", "honeypot": "glutton", "module_service": "jetdirect", "description": "JetDirect" },
-        { "port": 21, "protocol": "tcp", "service": "ftp", "honeypot": "honeypy", "module_service": "ftp", "description": "scan-to-FTP bait" },
+        { "port": 21, "protocol": "tcp", "service": "ftp", "honeypot": "glutton", "module_service": "ftp", "description": "scan-to-FTP bait" },
         { "port": 161, "protocol": "udp", "service": "snmp", "honeypot": "glutton", "module_service": "snmp", "description": "SNMP enumeration" }
       ],
       "honeypots": ["glutton", "honeypy"],
@@ -250,7 +250,7 @@
       },
       "exposed_ports": [
         { "port": 22, "protocol": "tcp", "service": "ssh", "honeypot": "cowrie", "module_service": "ssh", "description": "SSH" },
-        { "port": 21, "protocol": "tcp", "service": "ftp", "honeypot": "honeypy", "module_service": "ftp", "description": "FTP" },
+        { "port": 21, "protocol": "tcp", "service": "ftp", "honeypot": "glutton", "module_service": "ftp", "description": "FTP" },
         { "port": 80, "protocol": "tcp", "service": "web-panel", "honeypot": "honeypy", "module_service": "http", "description": "Web panel" },
         { "port": 443, "protocol": "tcp", "service": "web-panel-https", "honeypot": "honeypy", "module_service": "https", "description": "Web panel HTTPS" },
         { "port": 873, "protocol": "tcp", "service": "rsync", "honeypot": "glutton", "module_service": "rsync", "description": "rsync" },
@@ -366,10 +366,10 @@
         { "port": 22, "protocol": "tcp", "service": "ssh", "honeypot": "cowrie", "module_service": "ssh", "description": "SSH" },
         { "port": 80, "protocol": "tcp", "service": "http", "honeypot": "honeypy", "module_service": "http", "description": "HTTP" },
         { "port": 443, "protocol": "tcp", "service": "https", "honeypot": "honeypy", "module_service": "https", "description": "HTTPS" },
-        { "port": 21, "protocol": "tcp", "service": "ftp", "honeypot": "honeypy", "module_service": "ftp", "description": "FTP" },
-        { "port": 3306, "protocol": "tcp", "service": "mysql", "honeypot": "honeypy", "module_service": "mysql", "description": "MySQL" },
+        { "port": 21, "protocol": "tcp", "service": "ftp", "honeypot": "glutton", "module_service": "ftp", "description": "FTP" },
+        { "port": 3306, "protocol": "tcp", "service": "mysql", "honeypot": "glutton", "module_service": "mysql", "description": "MySQL" },
         { "port": 5432, "protocol": "tcp", "service": "postgres", "honeypot": "glutton", "module_service": "postgres", "description": "PostgreSQL" },
-        { "port": 6379, "protocol": "tcp", "service": "redis", "honeypot": "honeypy", "module_service": "redis", "description": "Redis" }
+        { "port": 6379, "protocol": "tcp", "service": "redis", "honeypot": "glutton", "module_service": "redis", "description": "Redis" }
       ],
       "honeypots": ["cowrie", "glutton", "honeypy"],
       "banners": {

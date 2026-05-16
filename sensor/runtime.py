@@ -8,6 +8,7 @@ honeypot images и отправляет сырые container logs в центр.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import threading
@@ -61,6 +62,7 @@ class DockerRuntime:
         self._stop_logs = threading.Event()
         self._compose_modules: list[dict[str, Any]] | None = None
         self._log_mode = "files"
+        self.image_policy = str(os.environ.get("EDC_IMAGE_POLICY") or desired.get("image_policy") or "build_if_missing")
 
     def start(self) -> None:
         self.ensure_docker()
@@ -72,6 +74,16 @@ class DockerRuntime:
         for service_name, module_id in self.compose_service_modules().items():
             args = ["up", "-d", "--no-deps"]
             if module_id != "idle" and not self.image_exists(SUPPORTED_IMAGES.get(module_id, "")):
+                if self.image_policy == "prebuilt_only":
+                    self.errors.append(
+                        {
+                            "module": module_id,
+                            "service": service_name,
+                            "stage": "image",
+                            "error": f"missing prebuilt image: {SUPPORTED_IMAGES.get(module_id, '')}",
+                        }
+                    )
+                    continue
                 args.append("--build")
             args.append(service_name)
             result = self.run_compose(*args, check=False)
@@ -205,6 +217,8 @@ class DockerRuntime:
             f"      edc.module: {yaml_scalar(module_id)}",
             f"      edc.runtime: {yaml_scalar(RUNTIME_VERSION)}",
         ]
+        if module_id == "glutton":
+            block.extend(["    cap_add:", "      - NET_ADMIN", "      - NET_RAW"])
         build = self.compose_build(module)
         if build:
             block.append("    build:")
@@ -257,7 +271,21 @@ class DockerRuntime:
                         "COWRIE_REF": settings.get("cowrie_ref", "v2.6.1"),
                     },
                 }
-            arg_name = "HONEYPOT_BASE_IMAGE"
+            if module_id == "glutton":
+                return {
+                    "context": str(image_dir.resolve()),
+                    "dockerfile": "Dockerfile",
+                    "args": {
+                        "GLUTTON_BUILDER_IMAGE": settings.get("builder_image", settings.get("base_image", UPSTREAM_IMAGES[module_id])),
+                        "GLUTTON_RUNTIME_IMAGE": settings.get("runtime_image", "debian:bookworm-slim"),
+                    },
+                }
+            arg_names = {
+                "conpot": "HONEYPOT_BASE_IMAGE",
+                "honeypy": "HONEYPY_BASE_IMAGE",
+                "mailoney": "MAILONEY_BASE_IMAGE",
+            }
+            arg_name = arg_names.get(module_id, "HONEYPOT_BASE_IMAGE")
             return {
                 "context": str(image_dir.resolve()),
                 "dockerfile": "Dockerfile",
@@ -296,7 +324,7 @@ class DockerRuntime:
         if module_id == "honeypy":
             return [f"{base / 'config' / 'honeypy.yml'}:/etc/honeypy/config.yml:ro", f"{base / 'logs'}:/logs"]
         if module_id == "glutton":
-            return [f"{base / 'config' / 'glutton.yml'}:/etc/glutton/glutton.yml:ro", f"{base / 'logs'}:/logs"]
+            return [f"{base / 'config'}:/etc/glutton:ro", f"{base / 'logs'}:/logs"]
         return []
 
     def compose_environment(self, module: dict[str, Any]) -> dict[str, Any]:
@@ -325,7 +353,7 @@ class DockerRuntime:
             template = module.get("settings", {}).get("template", "default")
             return yaml_scalar(f"conpot --template {template} --config /etc/conpot/conpot.cfg --logfile /logs/conpot.log --temp_dir /tmp")
         if module_id == "glutton":
-            return yaml_scalar("glutton --config /etc/glutton/glutton.yml")
+            return yaml_scalar("glutton --confpath /etc/glutton --ssh 22 --var-dir /var/lib/glutton --logpath /logs/glutton.log")
         return ""
 
     def compose_working_dir(self, module: dict[str, Any]) -> str:
@@ -338,17 +366,18 @@ class DockerRuntime:
             ("cowrie", "telnet"): 2223,
             ("conpot", "modbus"): 5020,
             ("conpot", "http"): 8800,
-            ("conpot", "s7comm"): 10200,
+            ("conpot", "s7comm"): 10201,
             ("conpot", "bacnet"): 47808,
             ("conpot", "ethernet_ip"): 44818,
             ("mailoney", "smtp"): 2525,
-            ("honeypy", "http"): 8082,
-            ("honeypy", "https"): 8443,
-            ("honeypy", "http_alt"): 8080,
-            ("honeypy", "mysql"): 3307,
-            ("honeypy", "redis"): 6380,
-            ("honeypy", "ftp"): 2124,
-            ("honeypy", "telnet"): 2324,
+            ("honeypy", "http"): 10080,
+            ("honeypy", "https"): 10080,
+            ("honeypy", "http_alt"): 10080,
+            ("honeypy", "elasticsearch"): 19200,
+            ("honeypy", "echo"): 10007,
+            ("honeypy", "motd"): 10008,
+            ("honeypy", "random"): 12048,
+            ("honeypy", "telnet"): 10023,
             ("glutton", "docker_api"): 2375,
             ("glutton", "mqtt"): 1883,
             ("glutton", "k8s_api"): 6443,
@@ -359,6 +388,7 @@ class DockerRuntime:
             ("glutton", "lpd"): 515,
             ("glutton", "ipp"): 631,
             ("glutton", "jetdirect"): 9100,
+            ("glutton", "ftp"): 21,
             ("glutton", "rtsp"): 554,
             ("glutton", "camera_service"): 8000,
             ("glutton", "discovery"): 8899,
@@ -370,6 +400,8 @@ class DockerRuntime:
             ("glutton", "msrpc"): 135,
             ("glutton", "wsdiscovery"): 5357,
             ("glutton", "winrm"): 5985,
+            ("glutton", "mysql"): 3306,
+            ("glutton", "redis"): 6379,
             ("glutton", "postgres"): 5432,
             ("glutton", "pop3"): 110,
             ("glutton", "imap"): 143,
@@ -452,11 +484,11 @@ class DockerRuntime:
         if module_id == "conpot":
             return [(base / "conpot.json", True), (base / "conpot.log", False)]
         if module_id == "mailoney":
-            return [(base / "mailoney.log", False)]
+            return [(base / "mailoney.jsonl", True)]
         if module_id == "honeypy":
-            return [(base / "honeypy.log", False)]
+            return [(base / "honeypy-events.json", True), (base / "internal" / "honeypy.log", False)]
         if module_id == "glutton":
-            return [(base / "glutton.json", True), (base / "glutton.log", False)]
+            return [(base / "glutton.log", False)]
         return []
 
     def collect_file_logs(self, path: Path, module_id: str, parse_as_json: bool) -> None:
