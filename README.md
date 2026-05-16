@@ -20,7 +20,17 @@ make up
 curl http://127.0.0.1:8080/health
 ```
 
-Центр будет доступен на `http://127.0.0.1:8080`.
+Центр будет доступен на `http://127.0.0.1:8080`, Grafana - на
+`http://127.0.0.1:3000`.
+
+Compose также поднимает микросервисы:
+
+```text
+agent-gateway   8081
+log-receiver    8091
+config-renderer 8092
+log-normalizer  background worker
+```
 
 ## Быстрые проверки
 
@@ -47,6 +57,11 @@ glutton
 Новая главная сущность проекта - профиль устройства, а не отдельный контейнер.
 Каталог лежит в `catalog/device_mask_profiles.json`, UI доступен на
 `/profiles`, Dockerfiles сенсора вынесены в `sensor/dockerfiles/`.
+
+## Логи honeypot
+
+Сырые строки логов сохраняются в `raw_honeypot_logs`, нормализованные события -
+в `honeypot_events`. Для Grafana добавлен dashboard `EDC Honeypot Logs`.
 
 ## Что не коммитить
 

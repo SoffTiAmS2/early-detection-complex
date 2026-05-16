@@ -87,7 +87,7 @@
                 GF_SECURITY_ADMIN_USER: {{ edc_grafana_admin_user | to_json }}
                 GF_SECURITY_ADMIN_PASSWORD: {{ edc_grafana_admin_password | to_json }}
 
-    - name: Start center, PostgreSQL and Grafana
+    - name: Start center control-plane stack
       ansible.builtin.command:
         cmd: docker compose -f "{{ edc_center_compose_file }}" -f "{{ edc_center_compose_override }}" up -d --build
         chdir: "{{ edc_install_dir }}"

@@ -2,7 +2,7 @@ services:
   center:
     build:
       context: .
-      dockerfile: center/Dockerfile
+      dockerfile: services/manager-api/Dockerfile
     container_name: edc-center
     restart: unless-stopped
     ports:
@@ -13,6 +13,62 @@ services:
       - ./var/center:/app/var/center
     environment:
       CENTER_DB_DSN: postgresql://edc:edc@postgres:5432/edc
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  agent-gateway:
+    build:
+      context: .
+      dockerfile: services/agent-gateway/Dockerfile
+    container_name: edc-agent-gateway
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      MANAGER_API_URL: http://center:8080
+    depends_on:
+      - center
+
+  config-renderer:
+    build:
+      context: .
+      dockerfile: services/config-renderer/Dockerfile
+    container_name: edc-config-renderer
+    restart: unless-stopped
+    ports:
+      - "8092:8092"
+    depends_on:
+      - center
+
+  log-receiver:
+    build:
+      context: .
+      dockerfile: services/log-receiver/Dockerfile
+    container_name: edc-log-receiver
+    restart: unless-stopped
+    ports:
+      - "8091:8091"
+    volumes:
+      - ./var/center:/app/var/center
+    environment:
+      CENTER_DB_DSN: postgresql://edc:edc@postgres:5432/edc
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  log-normalizer:
+    build:
+      context: .
+      dockerfile: services/log-normalizer/Dockerfile
+    container_name: edc-log-normalizer
+    restart: unless-stopped
+    volumes:
+      - ./var/center:/app/var/center
+    environment:
+      CENTER_DB_DSN: postgresql://edc:edc@postgres:5432/edc
+      NORMALIZER_INTERVAL_SECONDS: "5"
+      NORMALIZER_BATCH_SIZE: "500"
     depends_on:
       postgres:
         condition: service_healthy

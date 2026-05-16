@@ -46,6 +46,8 @@ def is_admin_route(method: str, path: str) -> bool:
         "/api/device-mask-profiles",
         "/api/db/stats",
         "/api/mask",
+        "/api/honeypot-events",
+        "/api/logs/raw",
     }:
         return True
     if method == "GET" and path == "/api/events":

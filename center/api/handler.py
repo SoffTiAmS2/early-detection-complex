@@ -23,6 +23,13 @@ from center.core.profiles import apply_profile, available_profiles
 from center.core.sensor_sync import sensor_sync
 from center.core.utils import load_json, now_ts, write_json
 from center.persistence.events import database_stats, filter_events, purge_all_events, purge_sensor_events, read_events, write_event
+from center.persistence.honeypot_logs import (
+    honeypot_database_stats,
+    read_honeypot_events,
+    read_raw_honeypot_logs,
+    write_honeypot_batch,
+    write_honeypot_observation,
+)
 from center.persistence.sensor_states import read_sensor_states, should_persist_status_event, write_sensor_state
 from center.web.views import render_admin_page, render_database_page, render_mask_page, render_profiles_page
 
@@ -40,7 +47,7 @@ POLICY_SAFE_GET_PATHS = {
     "/api/device-mask-profiles",
     "/api/db/stats",
 }
-JSON_POST_PATHS = {"/api/events", "/api/sensors", "/api/mask"}
+JSON_POST_PATHS = {"/api/events", "/api/sensors", "/api/mask", "/api/logs/batch", "/api/logs/events", "/api/logs/raw"}
 
 
 class ControlPlaneHandler(BaseHTTPRequestHandler):
@@ -158,8 +165,14 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/events":
             self.handle_events_query(parsed.query)
             return
+        if parsed.path == "/api/honeypot-events":
+            self.handle_honeypot_events_query(parsed.query)
+            return
+        if parsed.path == "/api/logs/raw":
+            self.handle_raw_logs_query(parsed.query)
+            return
         if parsed.path == "/api/db/stats":
-            self.send_json(database_stats(self.store_path))
+            self.send_json({**database_stats(self.store_path), **honeypot_database_stats(self.store_path)})
             return
         if parsed.path == "/api/mask":
             self.send_json({"policy": policy, "errors": errors})
@@ -196,6 +209,24 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         events = filter_events(events, params)
         limit = max(1, min(limit, MAX_EVENT_LIMIT))
         self.send_json({"events": events[-limit:]})
+
+    def handle_honeypot_events_query(self, query: str) -> None:
+        params = parse_qs(query)
+        try:
+            limit = int(params.get("limit", ["100"])[0])
+        except ValueError:
+            self.send_json({"error": "limit must be an integer"}, HTTPStatus.BAD_REQUEST)
+            return
+        self.send_json({"events": read_honeypot_events(self.store_path, limit)})
+
+    def handle_raw_logs_query(self, query: str) -> None:
+        params = parse_qs(query)
+        try:
+            limit = int(params.get("limit", ["100"])[0])
+        except ValueError:
+            self.send_json({"error": "limit must be an integer"}, HTTPStatus.BAD_REQUEST)
+            return
+        self.send_json({"logs": read_raw_honeypot_logs(self.store_path, limit)})
 
     def do_PUT(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
@@ -341,6 +372,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/mask":
             self.handle_mask_update(payload, policy, catalog)
             return
+        if parsed.path in {"/api/logs/batch", "/api/logs/events", "/api/logs/raw"}:
+            self.handle_logs_ingest(payload)
+            return
         if self.is_apply_profile_path(parsed.path):
             self.handle_apply_profile(parsed.path, payload, policy, catalog)
             return
@@ -351,6 +385,18 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self.handle_sensor_sync(parsed.path, payload, policy, catalog)
             return
         self.handle_sensor_event(payload, policy, catalog)
+
+    def handle_logs_ingest(self, payload: dict[str, Any]) -> None:
+        events_payload = payload.get("events") or payload.get("logs") or payload.get("items")
+        if events_payload is None:
+            events_payload = [payload]
+        if not isinstance(events_payload, list) or not all(isinstance(item, dict) for item in events_payload):
+            self.send_json({"error": "events/logs/items must be a list of objects"}, HTTPStatus.BAD_REQUEST)
+            return
+        result = write_honeypot_batch(self.store_path, events_payload)
+        for event in events_payload:
+            write_event(self.store_path, {**event, "event_type": event.get("event_type", "honeypot.raw_log")})
+        self.send_json({"status": "accepted", **result}, HTTPStatus.ACCEPTED)
 
     def is_sensor_sync_path(self, path: str) -> bool:
         parts = [part for part in path.split("/") if part]
@@ -455,7 +501,8 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         event = {**payload, "event_type": payload.get("event_type", "sensor.event")}
         write_event(self.store_path, event)
-        self.send_json({"status": "accepted"}, HTTPStatus.ACCEPTED)
+        normalized = write_honeypot_observation(self.store_path, event)
+        self.send_json({"status": "accepted", "normalized": bool(normalized)}, HTTPStatus.ACCEPTED)
 
     def handle_mask_update(self, payload: dict[str, Any], policy: dict[str, Any], catalog: dict[str, Any]) -> None:
         sensor_id = str(payload.get("sensor_id") or "").strip()

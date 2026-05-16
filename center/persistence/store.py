@@ -14,7 +14,7 @@ except Exception:  # pragma: no cover - optional in sqlite-only local setup
     dict_row = None
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 def db_dsn() -> str:
@@ -113,6 +113,71 @@ def migrate_postgres(connection: Any) -> None:
             )
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_sensor_states_updated_at ON sensor_states(updated_at)")
             cursor.execute("INSERT INTO schema_migrations (version) VALUES (2)")
+        if 3 not in applied:
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS raw_honeypot_logs (
+                    id BIGSERIAL PRIMARY KEY,
+                    received_at DOUBLE PRECISION NOT NULL,
+                    sensor_id TEXT NULL,
+                    profile TEXT NULL,
+                    device_type TEXT NULL,
+                    honeypot TEXT NULL,
+                    service TEXT NULL,
+                    source_name TEXT NULL,
+                    source_path TEXT NULL,
+                    container_name TEXT NULL,
+                    raw_line TEXT NOT NULL,
+                    parsed_json JSONB NULL,
+                    raw_event JSONB NOT NULL,
+                    normalized_event_id BIGINT NULL
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS honeypot_events (
+                    id BIGSERIAL PRIMARY KEY,
+                    raw_log_id BIGINT NULL REFERENCES raw_honeypot_logs(id) ON DELETE SET NULL,
+                    received_at DOUBLE PRECISION NOT NULL,
+                    timestamp DOUBLE PRECISION NULL,
+                    sensor_id TEXT NULL,
+                    profile TEXT NULL,
+                    device_type TEXT NULL,
+                    honeypot TEXT NULL,
+                    service TEXT NULL,
+                    event_type TEXT NOT NULL,
+                    severity TEXT NULL,
+                    src_ip TEXT NULL,
+                    src_port INTEGER NULL,
+                    dst_ip TEXT NULL,
+                    dst_port INTEGER NULL,
+                    username TEXT NULL,
+                    password TEXT NULL,
+                    command TEXT NULL,
+                    url TEXT NULL,
+                    http_method TEXT NULL,
+                    user_agent TEXT NULL,
+                    payload_sample TEXT NULL,
+                    parser_name TEXT NOT NULL,
+                    parser_version TEXT NOT NULL,
+                    raw_event JSONB NOT NULL
+                )
+                """
+            )
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_raw_honeypot_logs_received_at ON raw_honeypot_logs(received_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_raw_honeypot_logs_sensor_id ON raw_honeypot_logs(sensor_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_raw_honeypot_logs_honeypot ON raw_honeypot_logs(honeypot)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_raw_honeypot_logs_normalized_event_id ON raw_honeypot_logs(normalized_event_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_honeypot_events_received_at ON honeypot_events(received_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_honeypot_events_sensor_id ON honeypot_events(sensor_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_honeypot_events_profile ON honeypot_events(profile)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_honeypot_events_honeypot ON honeypot_events(honeypot)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_honeypot_events_service ON honeypot_events(service)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_honeypot_events_event_type ON honeypot_events(event_type)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_honeypot_events_src_ip ON honeypot_events(src_ip)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_honeypot_events_dst_port ON honeypot_events(dst_port)")
+            cursor.execute("INSERT INTO schema_migrations (version) VALUES (3)")
 
 
 def migrate_sqlite(connection: sqlite3.Connection) -> None:
@@ -176,3 +241,65 @@ def migrate_sqlite(connection: sqlite3.Connection) -> None:
             """
         )
         connection.execute("INSERT INTO schema_migrations (version) VALUES (?)", (2,))
+    if 3 not in applied:
+        connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS raw_honeypot_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                received_at REAL NOT NULL,
+                sensor_id TEXT,
+                profile TEXT,
+                device_type TEXT,
+                honeypot TEXT,
+                service TEXT,
+                source_name TEXT,
+                source_path TEXT,
+                container_name TEXT,
+                raw_line TEXT NOT NULL,
+                parsed_json TEXT,
+                raw_event TEXT NOT NULL,
+                normalized_event_id INTEGER
+            );
+            CREATE TABLE IF NOT EXISTS honeypot_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                raw_log_id INTEGER,
+                received_at REAL NOT NULL,
+                timestamp REAL,
+                sensor_id TEXT,
+                profile TEXT,
+                device_type TEXT,
+                honeypot TEXT,
+                service TEXT,
+                event_type TEXT NOT NULL,
+                severity TEXT,
+                src_ip TEXT,
+                src_port INTEGER,
+                dst_ip TEXT,
+                dst_port INTEGER,
+                username TEXT,
+                password TEXT,
+                command TEXT,
+                url TEXT,
+                http_method TEXT,
+                user_agent TEXT,
+                payload_sample TEXT,
+                parser_name TEXT NOT NULL,
+                parser_version TEXT NOT NULL,
+                raw_event TEXT NOT NULL,
+                FOREIGN KEY(raw_log_id) REFERENCES raw_honeypot_logs(id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_raw_honeypot_logs_received_at ON raw_honeypot_logs(received_at);
+            CREATE INDEX IF NOT EXISTS idx_raw_honeypot_logs_sensor_id ON raw_honeypot_logs(sensor_id);
+            CREATE INDEX IF NOT EXISTS idx_raw_honeypot_logs_honeypot ON raw_honeypot_logs(honeypot);
+            CREATE INDEX IF NOT EXISTS idx_raw_honeypot_logs_normalized_event_id ON raw_honeypot_logs(normalized_event_id);
+            CREATE INDEX IF NOT EXISTS idx_honeypot_events_received_at ON honeypot_events(received_at);
+            CREATE INDEX IF NOT EXISTS idx_honeypot_events_sensor_id ON honeypot_events(sensor_id);
+            CREATE INDEX IF NOT EXISTS idx_honeypot_events_profile ON honeypot_events(profile);
+            CREATE INDEX IF NOT EXISTS idx_honeypot_events_honeypot ON honeypot_events(honeypot);
+            CREATE INDEX IF NOT EXISTS idx_honeypot_events_service ON honeypot_events(service);
+            CREATE INDEX IF NOT EXISTS idx_honeypot_events_event_type ON honeypot_events(event_type);
+            CREATE INDEX IF NOT EXISTS idx_honeypot_events_src_ip ON honeypot_events(src_ip);
+            CREATE INDEX IF NOT EXISTS idx_honeypot_events_dst_port ON honeypot_events(dst_port);
+            """
+        )
+        connection.execute("INSERT INTO schema_migrations (version) VALUES (?)", (3,))

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 import urllib.error
 import urllib.request
@@ -110,7 +111,7 @@ def start_runtime(
 
 def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: float, duration: float = 0) -> None:
     base_url = center_url.rstrip("/")
-    event_url = f"{base_url}/api/events"
+    event_url = os.environ.get("EDC_LOG_RECEIVER_URL", "").strip() or f"{base_url}/api/events"
     def send_event(event: dict[str, Any]) -> bool:
         delivered, _ = post_json(event_url, event)
         return delivered

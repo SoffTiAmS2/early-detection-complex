@@ -112,6 +112,9 @@
         content: |
           EDC_CENTER_URL={{ edc_center_url }}
           EDC_IMAGE_POLICY={{ edc_image_policy | default('prebuilt_only') }}
+          {% if edc_log_receiver_url | default('') %}
+          EDC_LOG_RECEIVER_URL={{ edc_log_receiver_url }}
+          {% endif %}
       notify: Restart sensor
 
     - name: Enable sensor agent
