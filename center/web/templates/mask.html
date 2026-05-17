@@ -77,13 +77,14 @@
     .muted { color: var(--muted); }
     .hint { color: var(--muted); font-size: 12px; }
     .toplinks, .actions, .chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .layout { display: grid; grid-template-columns: 420px minmax(0, 1fr); gap: 14px; align-items: start; }
+    .layout { display: grid; grid-template-columns: 400px minmax(0, 1fr); gap: 14px; align-items: start; }
     .stack { display: grid; gap: 12px; }
     .panel {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 14px;
+      min-width: 0;
     }
     .section-head {
       display: flex;
@@ -98,7 +99,7 @@
       gap: 8px;
       align-items: end;
     }
-    .profile-list { display: grid; gap: 8px; max-height: calc(100vh - 280px); overflow: auto; padding-right: 2px; }
+    .profile-list { display: grid; gap: 8px; max-height: calc(100vh - 270px); overflow: auto; padding-right: 2px; }
     .profile-card {
       width: 100%;
       text-align: left;
@@ -136,21 +137,28 @@
     .stat { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: #fff; min-height: 68px; }
     .stat .k { color: var(--muted); font-size: 12px; }
     .stat .v { font-size: 18px; font-weight: 750; margin-top: 3px; overflow-wrap: anywhere; }
-    .preview-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 12px; }
+    .preview-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(320px, .88fr); gap: 12px; }
     .kv { display: grid; grid-template-columns: 150px 1fr; gap: 6px 10px; margin-top: 10px; }
     .kv dt { color: var(--muted); font-size: 13px; }
     .kv dd { margin: 0; overflow-wrap: anywhere; }
-    table { width: 100%; border-collapse: collapse; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
-    th, td { padding: 8px 7px; border-top: 1px solid #edf1f5; text-align: left; vertical-align: top; font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; table-layout: fixed; }
+    th, td { padding: 8px 7px; border-top: 1px solid #edf1f5; text-align: left; vertical-align: top; font-size: 13px; overflow-wrap: anywhere; }
     th { background: #f8fafc; color: var(--muted); border-top: 0; }
     details { border: 1px solid var(--line); border-radius: 8px; background: #fff; }
     details summary { cursor: pointer; padding: 12px 14px; font-weight: 700; }
     details[open] summary { border-bottom: 1px solid var(--line); }
-    .advanced-body { padding: 14px; }
-    .forms { display: grid; grid-template-columns: repeat(2, minmax(260px, 1fr)); gap: 12px; }
-    .form-panel { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: #fff; }
+    .settings-panel { padding: 0; overflow: hidden; }
+    .settings-panel > .section-head { padding: 14px; margin: 0; border-bottom: 1px solid var(--line); background: #fbfcfe; }
+    .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 12px; padding: 14px; }
+    .settings-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: #fff; min-width: 0; }
+    .settings-card h3 { font-size: 15px; margin-bottom: 12px; }
+    .form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
     .field { display: grid; gap: 5px; margin-bottom: 10px; }
     label { color: var(--muted); font-size: 13px; }
+    .textarea-compact { min-height: 72px; }
+    .expert { margin: 0 14px 14px; }
+    .expert-body { display: grid; grid-template-columns: repeat(2, minmax(260px, 1fr)); gap: 12px; padding: 14px; }
+    .help-line { margin-top: -4px; margin-bottom: 10px; color: var(--muted); font-size: 12px; }
     .msg { min-height: 22px; color: var(--muted); }
     .msg.ok { color: var(--ok); }
     .msg.bad { color: var(--bad); }
@@ -162,7 +170,7 @@
     @media (max-width: 740px) {
       header { flex-direction: column; align-items: flex-start; padding: 12px 14px; }
       main { padding: 14px; }
-      .sensor-grid, .stats, .forms { grid-template-columns: 1fr; }
+      .sensor-grid, .stats, .settings-grid, .expert-body, .form-row { grid-template-columns: 1fr; }
       .kv { grid-template-columns: 1fr; }
     }
   </style>
@@ -215,7 +223,7 @@
             <div class="muted" id="previewDescription"></div>
           </div>
           <div class="actions">
-            <button class="secondary" id="saveOverrides">Сохранить overrides</button>
+            <button class="secondary" id="saveSettingsTop">Сохранить настройки</button>
             <button id="applyProfileTop">Применить профиль</button>
           </div>
         </div>
@@ -244,31 +252,74 @@
         </div>
       </section>
 
-      <details>
-        <summary>Расширенные настройки контейнеров</summary>
-        <div class="advanced-body">
-          <div class="forms">
-            <div class="form-panel">
-              <h3>Cowrie</h3>
-              <div class="field"><label for="c_hostname">Hostname</label><input id="c_hostname" placeholder="filesrv01"></div>
-              <div class="field"><label for="c_ssh_version">SSH banner / version</label><input id="c_ssh_version" placeholder="SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.5"></div>
-              <div class="field"><label for="c_userdb_entries">userdb entries</label><textarea id="c_userdb_entries" placeholder="root:x:123456"></textarea></div>
-              <div class="field"><label for="c_fake_http_html">Fake HTTP HTML</label><textarea id="c_fake_http_html" placeholder="<html>...</html>"></textarea></div>
-              <div class="field"><label for="c_fake_ftp_files">Fake FTP files</label><textarea id="c_fake_ftp_files" placeholder="backup.zip,204800&#10;camera.jpg,51200"></textarea></div>
-            </div>
+      <section class="panel settings-panel">
+        <div class="section-head">
+          <div>
+            <h2>Настройки легенды сенсора</h2>
+            <div class="muted" id="settingsHint"></div>
+          </div>
+          <div class="actions">
+            <button class="secondary" id="profileDefaults">Взять из профиля</button>
+            <button id="saveSettings">Сохранить настройки</button>
+          </div>
+        </div>
 
-            <div class="form-panel">
-              <h3>HoneyPy / Mailoney / Glutton</h3>
-              <div class="field"><label for="h_sensor_name">HoneyPy sensor_name</label><input id="h_sensor_name" placeholder="web-stack-01"></div>
-              <div class="field"><label for="h_raw_conf">HoneyPy raw config</label><textarea id="h_raw_conf" placeholder="yaml override"></textarea></div>
-              <div class="field"><label for="m_hostname">Mailoney hostname</label><input id="m_hostname" placeholder="mail-gw-01"></div>
-              <div class="field"><label for="m_smtp_banner">Mailoney SMTP banner</label><input id="m_smtp_banner" placeholder="220 mail.example.local ESMTP"></div>
-              <div class="field"><label for="m_raw_conf">Mailoney raw config</label><textarea id="m_raw_conf" placeholder="ini override"></textarea></div>
-              <div class="field"><label for="g_raw_conf">Glutton raw config</label><textarea id="g_raw_conf" placeholder="yaml/json override"></textarea></div>
+        <div class="settings-grid">
+          <div class="settings-card">
+            <h3>Легенда устройства</h3>
+            <div class="form-row">
+              <div class="field"><label for="l_hostname">Hostname</label><input id="l_hostname" placeholder="CAM-ENTRANCE-01"></div>
+              <div class="field"><label for="l_vendor">Vendor / модель</label><input id="l_vendor" placeholder="Hikvision-like"></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label for="l_location">Локация</label><input id="l_location" placeholder="office edge"></div>
+              <div class="field"><label for="l_os_family">OS family</label><input id="l_os_family" placeholder="embedded-linux"></div>
+            </div>
+            <div class="field"><label for="l_summary">Короткое описание</label><input id="l_summary" placeholder="Сетевая камера видеонаблюдения"></div>
+          </div>
+
+          <div class="settings-card">
+            <h3>Баннеры и ответы</h3>
+            <div class="form-row">
+              <div class="field"><label for="b_http_title">HTTP title</label><input id="b_http_title" placeholder="Network Camera"></div>
+              <div class="field"><label for="b_ssh_banner">SSH banner</label><input id="b_ssh_banner" placeholder="SSH-2.0-OpenSSH_8.4"></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label for="b_telnet_banner">Telnet banner</label><input id="b_telnet_banner" placeholder="Welcome to IP Camera"></div>
+              <div class="field"><label for="b_smtp_banner">SMTP banner</label><input id="b_smtp_banner" placeholder="220 mail.company.local ESMTP"></div>
+            </div>
+            <div class="form-row">
+              <div class="field"><label for="b_snmp_sysdescr">SNMP sysDescr</label><input id="b_snmp_sysdescr" placeholder="Router / Gateway / Edge Device"></div>
+              <div class="field"><label for="b_rtsp_server">RTSP server</label><input id="b_rtsp_server" placeholder="Hikvision-like RTSP"></div>
+            </div>
+          </div>
+
+          <div class="settings-card">
+            <h3>Поведение и fingerprints</h3>
+            <div class="field"><label for="f_paths">Пути, ловушки и признаки сервисов</label><textarea class="textarea-compact" id="f_paths" placeholder="/login.cgi&#10;/snapshot.jpg&#10;snmp: HP ETHERNET MULTI-ENVIRONMENT"></textarea></div>
+            <div class="field"><label for="f_login_prompts">Типовые логины для фиксации</label><textarea class="textarea-compact" id="f_login_prompts" placeholder="admin/admin&#10;admin/123456"></textarea></div>
+          </div>
+
+          <div class="settings-card">
+            <h3>Лимиты контейнеров</h3>
+            <div class="help-line">Эти значения попадут в desired state и настройки honeypot-контейнеров выбранного профиля.</div>
+            <div class="form-row">
+              <div class="field"><label for="r_memory_limit">Memory limit</label><input id="r_memory_limit" placeholder="512m"></div>
+              <div class="field"><label for="r_cpu_limit">CPU limit</label><input id="r_cpu_limit" placeholder="0.80"></div>
             </div>
           </div>
         </div>
-      </details>
+
+        <details class="expert">
+          <summary>Экспертные raw overrides</summary>
+          <div class="expert-body">
+            <div class="field"><label for="raw_cowrie">Cowrie override</label><textarea id="raw_cowrie" placeholder="userdb, banners или фрагмент cfg"></textarea></div>
+            <div class="field"><label for="raw_honeypy">HoneyPy override</label><textarea id="raw_honeypy" placeholder="yaml override"></textarea></div>
+            <div class="field"><label for="raw_mailoney">Mailoney override</label><textarea id="raw_mailoney" placeholder="ini override"></textarea></div>
+            <div class="field"><label for="raw_glutton">Glutton override</label><textarea id="raw_glutton" placeholder="yaml/json override"></textarea></div>
+          </div>
+        </details>
+      </section>
     </section>
   </main>
 
@@ -281,6 +332,9 @@
       if (list.length <= limit) return list.join(", ");
       return `${list.slice(0, limit).join(", ")} +${list.length - limit}`;
     };
+    const splitLines = (value) => String(value || "").split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+    const joinLines = (value) => Array.isArray(value) ? value.join("\n") : String(value || "");
+    const deepCopy = (value) => JSON.parse(JSON.stringify(value || {}));
     function setMsg(text, status = "") {
       const el = $("msg");
       el.textContent = text || "";
@@ -311,6 +365,46 @@
     }
     function profileGoals(profile) {
       return profile?.detection_goals || [];
+    }
+    function profileBanners(profile) {
+      return profile?.banners || profile?.desired_state?.banners || {};
+    }
+    function profileFingerprints(profile) {
+      return profile?.service_fingerprints || profile?.desired_state?.service_fingerprints || {};
+    }
+    function profileResources(profile) {
+      return profile?.resource_limits || profile?.desired_state?.resource_limits || {};
+    }
+    function activeProfileId() {
+      const desired = selectedSensor()?.desired_state || {};
+      return desired.active_profile || desired.profile || "";
+    }
+    function settingsSource(useProfileDefaults = false) {
+      const sensor = selectedSensor();
+      const desired = sensor?.desired_state || {};
+      const profile = selectedProfile();
+      const useDesired = !useProfileDefaults && profile && activeProfileId() === profile.id;
+      const legend = useDesired
+        ? { ...deepCopy(profileLegend(profile)), ...deepCopy(desired.persona), ...deepCopy(desired.legend) }
+        : deepCopy(profileLegend(profile));
+      const banners = useDesired
+        ? { ...deepCopy(profileBanners(profile)), ...deepCopy(desired.banners) }
+        : deepCopy(profileBanners(profile));
+      const fingerprints = useDesired
+        ? { ...deepCopy(profileFingerprints(profile)), ...deepCopy(desired.service_fingerprints) }
+        : deepCopy(profileFingerprints(profile));
+      const resources = useDesired
+        ? { ...deepCopy(profileResources(profile)), ...deepCopy(desired.resource_limits) }
+        : deepCopy(profileResources(profile));
+      return { profile, desired, legend, banners, fingerprints, resources, useDesired };
+    }
+    function fingerprintLines(fingerprints) {
+      if (Array.isArray(fingerprints.paths)) return fingerprints.paths;
+      return Object.entries(fingerprints || {}).map(([key, value]) => {
+        if (Array.isArray(value)) return `${key}: ${value.join(", ")}`;
+        if (value && typeof value === "object") return `${key}: ${JSON.stringify(value)}`;
+        return `${key}: ${value}`;
+      });
     }
     async function request(path, options = {}) {
       const response = await fetch(path, { cache: "no-store", headers: { "Content-Type": "application/json" }, ...options });
@@ -348,7 +442,7 @@
       renderSensorSummary();
       renderProfileList();
       renderPreview();
-      fillAdvancedForm();
+      fillSettingsForm(false);
     }
     function renderSensorSelect() {
       const sensors = state.policy?.sensors || [];
@@ -403,6 +497,7 @@
           state.selectedProfile = button.dataset.profile || "";
           renderProfileList();
           renderPreview();
+          fillSettingsForm(false);
         });
       });
     }
@@ -431,23 +526,40 @@
       $("legend").innerHTML = Object.entries(legend).map(([key, value]) => `<dt>${esc(key)}</dt><dd>${esc(value)}</dd>`).join("") || '<dt>legend</dt><dd>-</dd>';
       $("goals").innerHTML = profileGoals(profile).map((goal) => `<span class="chip">${esc(goal)}</span>`).join("") || '<span class="muted">-</span>';
     }
-    function fillAdvancedForm() {
+    function fillSettingsForm(useProfileDefaults = false) {
       const sensor = selectedSensor();
+      const source = settingsSource(useProfileDefaults);
+      const legend = source.legend || {};
+      const banners = source.banners || {};
+      const fingerprints = source.fingerprints || {};
+      const resources = source.resources || {};
       const cowrie = moduleSettings(sensor, "cowrie");
       const honeypy = moduleSettings(sensor, "honeypy");
       const mailoney = moduleSettings(sensor, "mailoney");
       const glutton = moduleSettings(sensor, "glutton");
-      $("c_hostname").value = cowrie.hostname || "";
-      $("c_ssh_version").value = cowrie.ssh_version || "";
-      $("c_userdb_entries").value = cowrie.userdb_entries || "";
-      $("c_fake_http_html").value = cowrie.fake_http_html || "";
-      $("c_fake_ftp_files").value = cowrie.fake_ftp_files || "";
-      $("h_sensor_name").value = honeypy.sensor_name || "";
-      $("h_raw_conf").value = honeypy.raw_honeypy_yml || "";
-      $("m_hostname").value = mailoney.hostname || "";
-      $("m_smtp_banner").value = mailoney.smtp_banner || "";
-      $("m_raw_conf").value = mailoney.raw_mailoney_cfg || "";
-      $("g_raw_conf").value = glutton.raw_glutton_yml || "";
+      const title = source.profile?.title || source.profile?.name || source.profile?.id || "профиль не выбран";
+      $("settingsHint").textContent = source.useDesired
+        ? `Редактируется активная легенда сенсора ${state.selectedSensor}: ${title}`
+        : `Показаны значения выбранного профиля: ${title}. Чтобы сделать его активным, нажмите "Применить профиль".`;
+      $("l_hostname").value = legend.hostname || banners.hostname || "";
+      $("l_vendor").value = legend.vendor || "";
+      $("l_location").value = legend.location || "";
+      $("l_os_family").value = legend.os_family || "";
+      $("l_summary").value = legend.summary || source.profile?.description || "";
+      $("b_http_title").value = banners.http_title || banners.http_banner || "";
+      $("b_ssh_banner").value = banners.ssh_banner || cowrie.ssh_version || "";
+      $("b_telnet_banner").value = banners.telnet_banner || "";
+      $("b_smtp_banner").value = banners.smtp_banner || mailoney.smtp_banner || "";
+      $("b_snmp_sysdescr").value = banners.snmp_sysdescr || "";
+      $("b_rtsp_server").value = banners.rtsp_server || "";
+      $("f_paths").value = joinLines(fingerprintLines(fingerprints));
+      $("f_login_prompts").value = joinLines(banners.login_prompts || fingerprints.login_prompts || []);
+      $("r_memory_limit").value = resources.memory_limit || "";
+      $("r_cpu_limit").value = resources.cpu_limit || "";
+      $("raw_cowrie").value = cowrie.raw_override || cowrie.raw_cowrie_cfg || cowrie.userdb_entries || "";
+      $("raw_honeypy").value = honeypy.raw_override || honeypy.raw_honeypy_yml || "";
+      $("raw_mailoney").value = mailoney.raw_override || mailoney.raw_mailoney_cfg || "";
+      $("raw_glutton").value = glutton.raw_override || glutton.raw_glutton_yml || "";
     }
     async function applyProfile() {
       if (!state.selectedSensor || !state.selectedProfile) return;
@@ -465,32 +577,54 @@
         $("applyProfileTop").disabled = false;
       }
     }
-    async function saveOverrides() {
+    async function saveSettings() {
       if (!state.selectedSensor) return;
+      if (state.selectedProfile && activeProfileId() && state.selectedProfile !== activeProfileId()) {
+        setMsg('Сначала примените выбранный профиль, потом сохраняйте его настройки для сенсора', "bad");
+        return;
+      }
+      const source = settingsSource(false);
+      const baseFingerprints = source.fingerprints || {};
+      const paths = splitLines($("f_paths").value);
+      const loginPrompts = splitLines($("f_login_prompts").value);
       const payload = {
         sensor_id: state.selectedSensor,
-        cowrie: {
-          hostname: $("c_hostname").value,
-          ssh_version: $("c_ssh_version").value,
-          userdb_entries: $("c_userdb_entries").value,
-          fake_http_html: $("c_fake_http_html").value,
-          fake_ftp_files: $("c_fake_ftp_files").value,
+        profile_id: state.selectedProfile,
+        legend: {
+          hostname: $("l_hostname").value,
+          vendor: $("l_vendor").value,
+          location: $("l_location").value,
+          os_family: $("l_os_family").value,
+          summary: $("l_summary").value,
         },
-        honeypy: {
-          sensor_name: $("h_sensor_name").value,
-          raw_honeypy_yml: $("h_raw_conf").value,
+        banners: {
+          hostname: $("l_hostname").value,
+          http_title: $("b_http_title").value,
+          ssh_banner: $("b_ssh_banner").value,
+          telnet_banner: $("b_telnet_banner").value,
+          smtp_banner: $("b_smtp_banner").value,
+          snmp_sysdescr: $("b_snmp_sysdescr").value,
+          rtsp_server: $("b_rtsp_server").value,
+          login_prompts: loginPrompts,
         },
-        mailoney: {
-          hostname: $("m_hostname").value,
-          smtp_banner: $("m_smtp_banner").value,
-          raw_mailoney_cfg: $("m_raw_conf").value,
+        service_fingerprints: {
+          ...baseFingerprints,
+          paths,
+          login_prompts: loginPrompts,
         },
-        glutton: {
-          raw_glutton_yml: $("g_raw_conf").value,
+        resource_limits: {
+          memory_limit: $("r_memory_limit").value,
+          cpu_limit: $("r_cpu_limit").value,
+        },
+        raw_overrides: {
+          cowrie: $("raw_cowrie").value,
+          honeypy: $("raw_honeypy").value,
+          mailoney: $("raw_mailoney").value,
+          glutton: $("raw_glutton").value,
         },
       };
       await request("/api/mask", { method: "POST", body: JSON.stringify(payload) });
-      setMsg("Overrides сохранены", "ok");
+      setMsg("Настройки маскировки сохранены", "ok");
       await loadAll(true);
     }
     $("sensor").addEventListener("change", (event) => {
@@ -503,7 +637,9 @@
     $("reload").addEventListener("click", () => loadAll(true).catch((error) => setMsg(error.message || String(error), "bad")));
     $("applyProfile").addEventListener("click", () => applyProfile().catch((error) => setMsg(error.message || String(error), "bad")));
     $("applyProfileTop").addEventListener("click", () => applyProfile().catch((error) => setMsg(error.message || String(error), "bad")));
-    $("saveOverrides").addEventListener("click", () => saveOverrides().catch((error) => setMsg(error.message || String(error), "bad")));
+    $("saveSettings").addEventListener("click", () => saveSettings().catch((error) => setMsg(error.message || String(error), "bad")));
+    $("saveSettingsTop").addEventListener("click", () => saveSettings().catch((error) => setMsg(error.message || String(error), "bad")));
+    $("profileDefaults").addEventListener("click", () => fillSettingsForm(true));
     loadAll(false).catch((error) => setMsg(error.message || String(error), "bad"));
   </script>
 </body>

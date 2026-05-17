@@ -533,42 +533,154 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         modules = desired.setdefault("modules", [])
         module_index = {str(m.get("id")): m for m in modules if isinstance(m, dict)}
 
-        def module_settings(mid: str) -> dict[str, Any]:
+        def copy_json(value: Any) -> Any:
+            return json.loads(json.dumps(value, ensure_ascii=False))
+
+        def module_settings(mid: str, *, create: bool = False) -> dict[str, Any] | None:
             module = module_index.get(mid)
             if not module:
+                if not create:
+                    return None
                 module = {"id": mid, "enabled": True, "services": [], "settings": {}}
                 modules.append(module)
                 module_index[mid] = module
             settings = module.setdefault("settings", {})
-            return settings if isinstance(settings, dict) else {}
+            if not isinstance(settings, dict):
+                settings = {}
+                module["settings"] = settings
+            return settings
+
+        def string_map(source: Any, keys: tuple[str, ...]) -> dict[str, str]:
+            if not isinstance(source, dict):
+                return {}
+            result: dict[str, str] = {}
+            for key in keys:
+                if key in source:
+                    result[key] = str(source.get(key) or "").strip()
+            return result
+
+        def merge_string_dict(target_key: str, source: Any, keys: tuple[str, ...]) -> dict[str, Any]:
+            current = desired.get(target_key)
+            if not isinstance(current, dict):
+                current = {}
+                desired[target_key] = current
+            current.update(string_map(source, keys))
+            return current
+
+        def merge_flexible_dict(target_key: str, source: Any) -> dict[str, Any]:
+            current = desired.get(target_key)
+            if not isinstance(current, dict):
+                current = {}
+                desired[target_key] = current
+            if not isinstance(source, dict):
+                return current
+            for key, value in source.items():
+                if isinstance(value, list):
+                    current[str(key)] = [str(item).strip() for item in value if str(item).strip()]
+                elif isinstance(value, dict):
+                    current[str(key)] = copy_json(value)
+                else:
+                    current[str(key)] = str(value or "").strip()
+            return current
 
         cowrie = payload.get("cowrie") if isinstance(payload.get("cowrie"), dict) else {}
         honeypy = payload.get("honeypy") if isinstance(payload.get("honeypy"), dict) else {}
         mailoney = payload.get("mailoney") if isinstance(payload.get("mailoney"), dict) else {}
         glutton = payload.get("glutton") if isinstance(payload.get("glutton"), dict) else {}
+        raw_overrides = payload.get("raw_overrides") if isinstance(payload.get("raw_overrides"), dict) else {}
 
-        cowrie_settings = module_settings("cowrie")
+        legend = merge_string_dict(
+            "legend",
+            payload.get("legend"),
+            ("summary", "hostname", "vendor", "location", "os_family"),
+        )
+        desired["persona"] = {**(desired.get("persona") if isinstance(desired.get("persona"), dict) else {}), **copy_json(legend)}
+        banners = merge_flexible_dict("banners", payload.get("banners"))
+        fingerprints = merge_flexible_dict("service_fingerprints", payload.get("service_fingerprints"))
+        resources = merge_string_dict("resource_limits", payload.get("resource_limits"), ("memory_limit", "cpu_limit"))
+
+        hostname = str(banners.get("hostname") or legend.get("hostname") or "").strip()
+        if hostname:
+            legend["hostname"] = hostname
+            desired["persona"]["hostname"] = hostname
+            banners["hostname"] = hostname
+
+        desired_modules = {str(mid) for mid in desired.get("honeypots", []) if isinstance(mid, str)}
+        if not desired_modules:
+            desired_modules = set(module_index)
+
+        for mid in desired_modules:
+            settings = module_settings(mid, create=mid in module_index)
+            if settings is None:
+                continue
+            if resources:
+                settings["resource_limits"] = copy_json(resources)
+            if banners:
+                settings["banners"] = copy_json(banners)
+            if fingerprints:
+                settings["service_fingerprints"] = copy_json(fingerprints)
+
+            if mid == "cowrie":
+                if hostname:
+                    settings["hostname"] = hostname
+                if banners.get("ssh_banner"):
+                    settings["ssh_version"] = str(banners.get("ssh_banner"))
+                if banners.get("telnet_banner"):
+                    settings["telnet_banner"] = str(banners.get("telnet_banner"))
+            elif mid == "honeypy":
+                if hostname:
+                    settings["sensor_name"] = hostname
+                if banners.get("http_title"):
+                    settings["http_title"] = str(banners.get("http_title"))
+                if fingerprints.get("paths"):
+                    settings["fake_paths"] = copy_json(fingerprints.get("paths"))
+                if banners.get("login_prompts"):
+                    settings["login_prompts"] = copy_json(banners.get("login_prompts"))
+            elif mid == "mailoney":
+                if hostname:
+                    settings["hostname"] = hostname
+                if banners.get("smtp_banner"):
+                    settings["smtp_banner"] = str(banners.get("smtp_banner"))
+            elif mid == "glutton":
+                settings["exposed_ports"] = copy_json(desired.get("exposed_ports", []))
+
+        cowrie_settings = module_settings("cowrie", create=bool(cowrie))
         for key in ("hostname", "ssh_version", "userdb_entries"):
-            if key in cowrie:
+            if cowrie_settings is not None and key in cowrie:
                 cowrie_settings[key] = str(cowrie.get(key) or "")
-        if "fake_http_html" in cowrie:
+        if cowrie_settings is not None and "fake_http_html" in cowrie:
             cowrie_settings["fake_http_html"] = str(cowrie.get("fake_http_html") or "")
-        if "fake_ftp_files" in cowrie:
+        if cowrie_settings is not None and "fake_ftp_files" in cowrie:
             cowrie_settings["fake_ftp_files"] = str(cowrie.get("fake_ftp_files") or "")
 
-        honeypy_settings = module_settings("honeypy")
+        honeypy_settings = module_settings("honeypy", create=bool(honeypy))
         for key in ("sensor_name", "raw_honeypy_yml"):
-            if key in honeypy:
+            if honeypy_settings is not None and key in honeypy:
                 honeypy_settings[key] = str(honeypy.get(key) or "")
 
-        mailoney_settings = module_settings("mailoney")
+        mailoney_settings = module_settings("mailoney", create=bool(mailoney))
         for key in ("hostname", "smtp_banner", "raw_mailoney_cfg"):
-            if key in mailoney:
+            if mailoney_settings is not None and key in mailoney:
                 mailoney_settings[key] = str(mailoney.get(key) or "")
 
-        glutton_settings = module_settings("glutton")
-        if "raw_glutton_yml" in glutton:
+        glutton_settings = module_settings("glutton", create=bool(glutton))
+        if glutton_settings is not None and "raw_glutton_yml" in glutton:
             glutton_settings["raw_glutton_yml"] = str(glutton.get("raw_glutton_yml") or "")
+
+        raw_key_by_module = {
+            "cowrie": "raw_cowrie_cfg",
+            "honeypy": "raw_honeypy_yml",
+            "mailoney": "raw_mailoney_cfg",
+            "glutton": "raw_glutton_yml",
+        }
+        for mid, value in raw_overrides.items():
+            module_id = str(mid)
+            settings = module_settings(module_id, create=module_id in module_index)
+            if settings is None:
+                continue
+            raw_value = str(value or "")
+            settings["raw_override"] = raw_value
+            settings[raw_key_by_module.get(module_id, "raw_override")] = raw_value
 
         errors = policy_errors(policy, catalog)
         if errors:
