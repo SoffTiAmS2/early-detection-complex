@@ -217,7 +217,7 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         except ValueError:
             self.send_json({"error": "limit must be an integer"}, HTTPStatus.BAD_REQUEST)
             return
-        self.send_json({"events": read_honeypot_events(self.store_path, limit)})
+        self.send_json({"events": read_honeypot_events(self.store_path, limit, self.honeypot_filters(params))})
 
     def handle_raw_logs_query(self, query: str) -> None:
         params = parse_qs(query)
@@ -226,7 +226,25 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         except ValueError:
             self.send_json({"error": "limit must be an integer"}, HTTPStatus.BAD_REQUEST)
             return
-        self.send_json({"logs": read_raw_honeypot_logs(self.store_path, limit)})
+        self.send_json({"logs": read_raw_honeypot_logs(self.store_path, limit, self.honeypot_filters(params))})
+
+    def honeypot_filters(self, params: dict[str, list[str]]) -> dict[str, str]:
+        keys = {
+            "sensor_id",
+            "profile",
+            "device_type",
+            "honeypot",
+            "module",
+            "service",
+            "event_type",
+            "severity",
+            "src_ip",
+            "dst_port",
+            "source_name",
+            "container_name",
+            "q",
+        }
+        return {key: params.get(key, [""])[0].strip() for key in keys if params.get(key, [""])[0].strip()}
 
     def do_PUT(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
@@ -394,8 +412,6 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "events/logs/items must be a list of objects"}, HTTPStatus.BAD_REQUEST)
             return
         result = write_honeypot_batch(self.store_path, events_payload)
-        for event in events_payload:
-            write_event(self.store_path, {**event, "event_type": event.get("event_type", "honeypot.raw_log")})
         self.send_json({"status": "accepted", **result}, HTTPStatus.ACCEPTED)
 
     def is_sensor_sync_path(self, path: str) -> bool:

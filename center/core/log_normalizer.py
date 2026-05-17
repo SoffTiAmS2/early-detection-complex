@@ -40,6 +40,8 @@ def normalize_honeypot_event(event: dict[str, Any]) -> dict[str, Any] | None:
             "unknown",
         )
     )
+    if str(event.get("event_type") or "").endswith(".raw_log") and not _has_observable_activity(event, parsed, kv, raw_line):
+        return None
     service = _first_text(
         event.get("service"),
         _dict_get(parsed, "service"),
@@ -116,6 +118,45 @@ def raw_log_record(event: dict[str, Any]) -> dict[str, Any] | None:
 
 def _is_control_event(event: dict[str, Any]) -> bool:
     return str(event.get("event_type") or "").startswith("sensor.")
+
+
+def _has_observable_activity(event: dict[str, Any], parsed: dict[str, Any] | None, kv: dict[str, str], raw_line: str) -> bool:
+    if _first_text(
+        event.get("src_ip"),
+        _dict_get(parsed, "src_ip"),
+        _dict_get(parsed, "src_host"),
+        _dict_get(parsed, "remote_host"),
+        kv.get("src_ip"),
+        kv.get("src"),
+        _first_ip(raw_line),
+    ):
+        return True
+    if _int_or_none(
+        event.get("dst_port")
+        or _dict_get(parsed, "dst_port")
+        or _dict_get(parsed, "local_port")
+        or kv.get("dest_port")
+        or kv.get("dst_port")
+        or kv.get("port")
+    ):
+        return True
+    if _first_text(
+        _dict_get(parsed, "username"),
+        _dict_get(parsed, "login"),
+        _dict_get(parsed, "user"),
+        _dict_get(parsed, "password"),
+        _dict_get(parsed, "command"),
+        _dict_get(parsed, "input"),
+        kv.get("username"),
+        kv.get("user"),
+        kv.get("password"),
+        kv.get("command"),
+        kv.get("payload"),
+        _http_match(raw_line, "method"),
+    ):
+        return True
+    lower = raw_line.lower()
+    return any(token in lower for token in ("login attempt", "new connection", "remote", "src_ip", "dest_port", "payload=", "command="))
 
 
 def _raw_line(event: dict[str, Any], raw_payload: Any) -> str:

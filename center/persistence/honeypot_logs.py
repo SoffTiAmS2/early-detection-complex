@@ -8,14 +8,18 @@ from center.core.log_normalizer import normalize_honeypot_event, raw_log_record
 from center.core.paths import MAX_EVENT_LIMIT
 from center.persistence.store import connect_store, is_postgres_enabled
 
+HoneypotFilters = dict[str, str]
+
 
 def write_honeypot_observation(store: Path, event: dict[str, Any]) -> dict[str, Any] | None:
     raw_record = raw_log_record(event)
     normalized = normalize_honeypot_event(event)
-    if raw_record is None or normalized is None:
+    if raw_record is None:
         return None
     with connect_store(store) as connection:
         raw_id = _insert_raw_log(connection, raw_record)
+        if normalized is None:
+            return None
         normalized["raw_log_id"] = raw_id
         normalized_id = _insert_honeypot_event(connection, normalized)
         _mark_raw_normalized(connection, raw_id, normalized_id)
@@ -33,72 +37,78 @@ def write_honeypot_batch(store: Path, events: list[dict[str, Any]]) -> dict[str,
     return {"accepted": accepted, "normalized": normalized}
 
 
-def read_honeypot_events(store: Path, limit: int = 100) -> list[dict[str, Any]]:
+def read_honeypot_events(store: Path, limit: int = 100, filters: HoneypotFilters | None = None) -> list[dict[str, Any]]:
     safe_limit = max(1, min(limit, MAX_EVENT_LIMIT))
     with connect_store(store) as connection:
+        where_sql, values = _honeypot_event_where(filters or {})
         if is_postgres_enabled():
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """
+                    f"""
                     SELECT id, raw_log_id, received_at, timestamp, sensor_id, profile, device_type,
                            honeypot, service, event_type, severity, src_ip, src_port, dst_ip, dst_port,
                            username, password, command, url, http_method, user_agent, payload_sample,
                            parser_name, parser_version, raw_event
                     FROM honeypot_events
+                    {where_sql}
                     ORDER BY id DESC
                     LIMIT %s
                     """,
-                    (safe_limit,),
+                    (*values, safe_limit),
                 )
                 rows = cursor.fetchall()
         else:
             if not store.exists():
                 return []
             rows = connection.execute(
-                """
+                f"""
                 SELECT id, raw_log_id, received_at, timestamp, sensor_id, profile, device_type,
                        honeypot, service, event_type, severity, src_ip, src_port, dst_ip, dst_port,
                        username, password, command, url, http_method, user_agent, payload_sample,
                        parser_name, parser_version, raw_event
                 FROM honeypot_events
+                {where_sql}
                 ORDER BY id DESC
                 LIMIT ?
                 """,
-                (safe_limit,),
+                (*values, safe_limit),
             ).fetchall()
     return [_row_to_event(row) for row in reversed(rows)]
 
 
-def read_raw_honeypot_logs(store: Path, limit: int = 100) -> list[dict[str, Any]]:
+def read_raw_honeypot_logs(store: Path, limit: int = 100, filters: HoneypotFilters | None = None) -> list[dict[str, Any]]:
     safe_limit = max(1, min(limit, MAX_EVENT_LIMIT))
     with connect_store(store) as connection:
+        where_sql, values = _raw_log_where(filters or {})
         if is_postgres_enabled():
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """
+                    f"""
                     SELECT id, received_at, sensor_id, profile, device_type, honeypot, service,
                            source_name, source_path, container_name, raw_line, parsed_json, raw_event,
                            normalized_event_id
                     FROM raw_honeypot_logs
+                    {where_sql}
                     ORDER BY id DESC
                     LIMIT %s
                     """,
-                    (safe_limit,),
+                    (*values, safe_limit),
                 )
                 rows = cursor.fetchall()
         else:
             if not store.exists():
                 return []
             rows = connection.execute(
-                """
+                f"""
                 SELECT id, received_at, sensor_id, profile, device_type, honeypot, service,
                        source_name, source_path, container_name, raw_line, parsed_json, raw_event,
                        normalized_event_id
                 FROM raw_honeypot_logs
+                {where_sql}
                 ORDER BY id DESC
                 LIMIT ?
                 """,
-                (safe_limit,),
+                (*values, safe_limit),
             ).fetchall()
     return [_row_to_raw(row) for row in reversed(rows)]
 
@@ -113,13 +123,35 @@ def honeypot_database_stats(store: Path) -> dict[str, Any]:
                 event_count = int(cursor.fetchone()["c"])
                 cursor.execute("SELECT COUNT(DISTINCT src_ip) AS c FROM honeypot_events WHERE src_ip IS NOT NULL")
                 source_count = int(cursor.fetchone()["c"])
+                cursor.execute("SELECT COUNT(*) AS c FROM honeypot_events WHERE severity = 'high'")
+                high_count = int(cursor.fetchone()["c"])
+                cursor.execute("SELECT COUNT(*) AS c FROM honeypot_events WHERE username IS NOT NULL OR password IS NOT NULL")
+                credential_count = int(cursor.fetchone()["c"])
+                cursor.execute("SELECT COALESCE(MAX(received_at), 0) AS ts FROM honeypot_events")
+                latest = float(cursor.fetchone()["ts"] or 0)
         else:
             if not store.exists():
-                return {"raw_log_count": 0, "honeypot_event_count": 0, "unique_sources": 0}
+                return _empty_stats()
             raw_count = int(connection.execute("SELECT COUNT(*) FROM raw_honeypot_logs").fetchone()[0])
             event_count = int(connection.execute("SELECT COUNT(*) FROM honeypot_events").fetchone()[0])
             source_count = int(connection.execute("SELECT COUNT(DISTINCT src_ip) FROM honeypot_events WHERE src_ip IS NOT NULL").fetchone()[0])
-    return {"raw_log_count": raw_count, "honeypot_event_count": event_count, "unique_sources": source_count}
+            high_count = int(connection.execute("SELECT COUNT(*) FROM honeypot_events WHERE severity = 'high'").fetchone()[0])
+            credential_count = int(connection.execute("SELECT COUNT(*) FROM honeypot_events WHERE username IS NOT NULL OR password IS NOT NULL").fetchone()[0])
+            latest = float(connection.execute("SELECT COALESCE(MAX(received_at), 0) FROM honeypot_events").fetchone()[0] or 0)
+    return {
+        "raw_log_count": raw_count,
+        "honeypot_event_count": event_count,
+        "unique_sources": source_count,
+        "high_honeypot_events": high_count,
+        "credential_events": credential_count,
+        "latest_honeypot_received_at": latest,
+        "by_severity": _group_counts(store, "severity", "honeypot_events"),
+        "top_sources": _group_counts(store, "src_ip", "honeypot_events", where="src_ip IS NOT NULL"),
+        "top_profiles": _group_counts(store, "profile", "honeypot_events"),
+        "top_honeypots": _group_counts(store, "honeypot", "honeypot_events"),
+        "top_services": _group_counts(store, "service", "honeypot_events"),
+        "top_ports": _group_counts(store, "dst_port", "honeypot_events", where="dst_port IS NOT NULL"),
+    }
 
 
 def normalize_pending_raw_logs(store: Path, limit: int = 500) -> int:
@@ -138,6 +170,131 @@ def normalize_pending_raw_logs(store: Path, limit: int = 500) -> int:
             _mark_raw_normalized(connection, int(row["id"]), normalized_id)
         count += 1
     return count
+
+
+def _empty_stats() -> dict[str, Any]:
+    return {
+        "raw_log_count": 0,
+        "honeypot_event_count": 0,
+        "unique_sources": 0,
+        "high_honeypot_events": 0,
+        "credential_events": 0,
+        "latest_honeypot_received_at": 0,
+        "by_severity": [],
+        "top_sources": [],
+        "top_profiles": [],
+        "top_honeypots": [],
+        "top_services": [],
+        "top_ports": [],
+    }
+
+
+def _group_counts(store: Path, column: str, table: str, where: str = "", limit: int = 8) -> list[dict[str, Any]]:
+    allowed_columns = {"severity", "src_ip", "profile", "honeypot", "service", "dst_port"}
+    allowed_tables = {"honeypot_events"}
+    if column not in allowed_columns or table not in allowed_tables:
+        return []
+    safe_where = f"WHERE {where}" if where else f"WHERE {column} IS NOT NULL"
+    safe_limit = max(1, min(limit, 20))
+    label_expr = f"COALESCE(CAST({column} AS TEXT), 'unknown')"
+    with connect_store(store) as connection:
+        if is_postgres_enabled():
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT {label_expr} AS label, COUNT(*) AS count
+                    FROM {table}
+                    {safe_where}
+                    GROUP BY 1
+                    ORDER BY count DESC, label ASC
+                    LIMIT %s
+                    """,
+                    (safe_limit,),
+                )
+                rows = cursor.fetchall()
+        else:
+            rows = connection.execute(
+                f"""
+                SELECT {label_expr} AS label, COUNT(*) AS count
+                FROM {table}
+                {safe_where}
+                GROUP BY 1
+                ORDER BY count DESC, label ASC
+                LIMIT ?
+                """,
+                (safe_limit,),
+            ).fetchall()
+    return [{"label": str(row["label"]), "count": int(row["count"])} for row in rows]
+
+
+def _honeypot_event_where(filters: HoneypotFilters) -> tuple[str, list[Any]]:
+    exact_columns = {
+        "sensor_id": "sensor_id",
+        "profile": "profile",
+        "device_type": "device_type",
+        "honeypot": "honeypot",
+        "module": "honeypot",
+        "service": "service",
+        "event_type": "event_type",
+        "severity": "severity",
+        "src_ip": "src_ip",
+        "dst_port": "dst_port",
+    }
+    return _where_clause(
+        filters,
+        exact_columns,
+        ["payload_sample", "url", "command", "user_agent", "username", "src_ip", "raw_event"],
+    )
+
+
+def _raw_log_where(filters: HoneypotFilters) -> tuple[str, list[Any]]:
+    exact_columns = {
+        "sensor_id": "sensor_id",
+        "profile": "profile",
+        "device_type": "device_type",
+        "honeypot": "honeypot",
+        "module": "honeypot",
+        "service": "service",
+        "source_name": "source_name",
+        "container_name": "container_name",
+    }
+    return _where_clause(filters, exact_columns, ["raw_line", "source_name", "source_path", "container_name", "raw_event"])
+
+
+def _where_clause(filters: HoneypotFilters, exact_columns: dict[str, str], search_columns: list[str]) -> tuple[str, list[Any]]:
+    clauses: list[str] = []
+    values: list[Any] = []
+    pg = is_postgres_enabled()
+    placeholder = "%s" if pg else "?"
+    for key, column in exact_columns.items():
+        value = str(filters.get(key) or "").strip()
+        if not value:
+            continue
+        if key == "dst_port":
+            try:
+                values.append(int(value))
+            except ValueError:
+                continue
+        else:
+            values.append(value)
+        clauses.append(f"{column} = {placeholder}")
+
+    query = str(filters.get("q") or "").strip()
+    if query:
+        like_value = f"%{query}%"
+        search_parts: list[str] = []
+        for column in search_columns:
+            if pg:
+                expr = f"{column}::text ILIKE {placeholder}" if column == "raw_event" else f"{column} ILIKE {placeholder}"
+            else:
+                expr = f"LOWER(COALESCE(CAST({column} AS TEXT), '')) LIKE LOWER({placeholder})"
+            search_parts.append(expr)
+            values.append(like_value)
+        clauses.append("(" + " OR ".join(search_parts) + ")")
+
+    if not clauses:
+        return "", values
+    return "WHERE " + " AND ".join(clauses), values
 
 
 def _insert_raw_log(connection: Any, record: dict[str, Any]) -> int:

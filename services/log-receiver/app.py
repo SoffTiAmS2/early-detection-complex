@@ -5,9 +5,9 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from center.core.paths import DEFAULT_STORE
-from center.persistence.events import write_event
 from center.persistence.honeypot_logs import (
     honeypot_database_stats,
     read_honeypot_events,
@@ -41,16 +41,23 @@ class LogReceiverHandler(BaseHTTPRequestHandler):
         return payload
 
     def do_GET(self) -> None:  # noqa: N802
-        if self.path == "/health":
+        parsed = urlparse(self.path)
+        if parsed.path == "/health":
             self.send_json({"status": "ok", "service": "log-receiver"})
             return
-        if self.path.startswith("/logs/events"):
-            self.send_json({"events": read_honeypot_events(STORE, 100)})
+        params = parse_qs(parsed.query)
+        filters = {key: params.get(key, [""])[0].strip() for key in {"sensor_id", "profile", "honeypot", "service", "src_ip", "dst_port", "q"} if params.get(key, [""])[0].strip()}
+        try:
+            limit = int(params.get("limit", ["100"])[0])
+        except ValueError:
+            limit = 100
+        if parsed.path == "/logs/events":
+            self.send_json({"events": read_honeypot_events(STORE, limit, filters)})
             return
-        if self.path.startswith("/logs/raw"):
-            self.send_json({"logs": read_raw_honeypot_logs(STORE, 100)})
+        if parsed.path == "/logs/raw":
+            self.send_json({"logs": read_raw_honeypot_logs(STORE, limit, filters)})
             return
-        if self.path == "/stats":
+        if parsed.path == "/stats":
             self.send_json(honeypot_database_stats(STORE))
             return
         self.send_json({"error": "not found"}, HTTPStatus.NOT_FOUND)
@@ -69,8 +76,6 @@ class LogReceiverHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "events/logs/items must be a list of objects"}, HTTPStatus.BAD_REQUEST)
             return
         result = write_honeypot_batch(STORE, items)
-        for item in items:
-            write_event(STORE, {**item, "event_type": item.get("event_type", "honeypot.raw_log")})
         self.send_json({"status": "accepted", **result}, HTTPStatus.ACCEPTED)
 
     def log_message(self, fmt: str, *args: Any) -> None:

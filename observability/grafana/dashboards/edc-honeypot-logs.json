@@ -14,141 +14,140 @@
   },
   "editable": true,
   "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "id": null,
-  "links": [],
+  "links": [
+    { "asDropdown": false, "icon": "external link", "includeVars": false, "keepTime": false, "tags": [], "targetBlank": false, "title": "EDC center", "tooltip": "", "type": "link", "url": "http://192.168.0.196:8080/db" }
+  ],
   "panels": [
     {
       "datasource": { "type": "postgres", "uid": "edc-postgres" },
       "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
+      "gridPos": { "h": 5, "w": 4, "x": 0, "y": 0 },
       "id": 1,
       "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto", "wideLayout": true },
-      "targets": [
-        {
-          "datasource": { "type": "postgres", "uid": "edc-postgres" },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT COUNT(*) AS value FROM raw_honeypot_logs WHERE $__timeFilter(to_timestamp(received_at));",
-          "refId": "A"
-        }
-      ],
-      "title": "Raw Log Lines",
+      "targets": [{ "datasource": { "type": "postgres", "uid": "edc-postgres" }, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(*) AS value FROM honeypot_events WHERE $__timeFilter(to_timestamp(received_at));", "refId": "A" }],
+      "title": "Normalized",
       "type": "stat"
     },
     {
       "datasource": { "type": "postgres", "uid": "edc-postgres" },
       "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
+      "gridPos": { "h": 5, "w": 4, "x": 4, "y": 0 },
       "id": 2,
       "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto", "wideLayout": true },
-      "targets": [
-        {
-          "datasource": { "type": "postgres", "uid": "edc-postgres" },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT COUNT(*) AS value FROM honeypot_events WHERE $__timeFilter(to_timestamp(received_at));",
-          "refId": "A"
-        }
-      ],
-      "title": "Normalized Events",
+      "targets": [{ "datasource": { "type": "postgres", "uid": "edc-postgres" }, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(*) AS value FROM raw_honeypot_logs WHERE $__timeFilter(to_timestamp(received_at));", "refId": "A" }],
+      "title": "Raw Lines",
       "type": "stat"
     },
     {
       "datasource": { "type": "postgres", "uid": "edc-postgres" },
       "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "gridPos": { "h": 5, "w": 4, "x": 8, "y": 0 },
       "id": 3,
       "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto", "wideLayout": true },
-      "targets": [
-        {
-          "datasource": { "type": "postgres", "uid": "edc-postgres" },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT COUNT(DISTINCT src_ip) AS value FROM honeypot_events WHERE src_ip IS NOT NULL AND $__timeFilter(to_timestamp(received_at));",
-          "refId": "A"
-        }
-      ],
-      "title": "Unique Source IPs",
+      "targets": [{ "datasource": { "type": "postgres", "uid": "edc-postgres" }, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(DISTINCT src_ip) AS value FROM honeypot_events WHERE src_ip IS NOT NULL AND $__timeFilter(to_timestamp(received_at));", "refId": "A" }],
+      "title": "Source IPs",
       "type": "stat"
     },
     {
       "datasource": { "type": "postgres", "uid": "edc-postgres" },
-      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 10 }] }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 12, "y": 0 },
       "id": 4,
       "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto", "wideLayout": true },
-      "targets": [
-        {
-          "datasource": { "type": "postgres", "uid": "edc-postgres" },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT COUNT(*) AS value FROM honeypot_events WHERE severity = 'high' AND $__timeFilter(to_timestamp(received_at));",
-          "refId": "A"
-        }
-      ],
+      "targets": [{ "datasource": { "type": "postgres", "uid": "edc-postgres" }, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(*) AS value FROM honeypot_events WHERE severity = 'high' AND $__timeFilter(to_timestamp(received_at));", "refId": "A" }],
       "title": "High Severity",
       "type": "stat"
     },
     {
       "datasource": { "type": "postgres", "uid": "edc-postgres" },
-      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 20, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "insertNulls": false, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false, "stacking": { "group": "A", "mode": "none" }, "thresholdsStyle": { "mode": "off" } }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 5 },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 5 }] }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 16, "y": 0 },
       "id": 5,
-      "options": { "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "single", "sort": "none" } },
-      "targets": [
-        {
-          "datasource": { "type": "postgres", "uid": "edc-postgres" },
-          "editorMode": "code",
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "SELECT date_trunc('minute', to_timestamp(received_at)) AS time, COUNT(*) AS value FROM honeypot_events WHERE $__timeFilter(to_timestamp(received_at)) GROUP BY 1 ORDER BY 1;",
-          "refId": "A"
-        }
-      ],
-      "title": "Normalized Event Timeline",
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto", "wideLayout": true },
+      "targets": [{ "datasource": { "type": "postgres", "uid": "edc-postgres" }, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(*) AS value FROM honeypot_events WHERE (username IS NOT NULL OR password IS NOT NULL) AND $__timeFilter(to_timestamp(received_at));", "refId": "A" }],
+      "title": "Credentials",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "edc-postgres" },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 5, "w": 4, "x": 20, "y": 0 },
+      "id": 6,
+      "options": { "colorMode": "value", "graphMode": "area", "justifyMode": "auto", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto", "wideLayout": true },
+      "targets": [{ "datasource": { "type": "postgres", "uid": "edc-postgres" }, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT COUNT(*) AS value FROM sensor_states WHERE status = 'online' AND updated_at > EXTRACT(EPOCH FROM NOW() - INTERVAL '90 seconds');", "refId": "A" }],
+      "title": "Sensors Online",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "edc-postgres" },
+      "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto", "barAlignment": 0, "drawStyle": "line", "fillOpacity": 20, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "insertNulls": false, "lineInterpolation": "linear", "lineWidth": 1, "pointSize": 5, "scaleDistribution": { "type": "linear" }, "showPoints": "never", "spanNulls": false, "stacking": { "group": "A", "mode": "normal" }, "thresholdsStyle": { "mode": "off" } }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 14, "x": 0, "y": 5 },
+      "id": 7,
+      "options": { "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [{ "datasource": { "type": "postgres", "uid": "edc-postgres" }, "editorMode": "code", "format": "time_series", "rawQuery": true, "rawSql": "SELECT date_trunc('minute', to_timestamp(received_at)) AS time, COALESCE(honeypot, 'unknown') AS metric, COUNT(*) AS value FROM honeypot_events WHERE $__timeFilter(to_timestamp(received_at)) GROUP BY 1, 2 ORDER BY 1, 2;", "refId": "A" }],
+      "title": "Timeline by Honeypot",
       "type": "timeseries"
     },
     {
       "datasource": { "type": "postgres", "uid": "edc-postgres" },
       "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "axisBorderShow": false, "axisCenteredZero": false, "axisColorMode": "text", "axisPlacement": "auto", "fillOpacity": 80, "gradientMode": "none", "hideFrom": { "legend": false, "tooltip": false, "viz": false }, "lineWidth": 1, "scaleDistribution": { "type": "linear" }, "thresholdsStyle": { "mode": "off" } }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 5 },
-      "id": 6,
-      "options": { "barRadius": 0, "barWidth": 0.97, "fullHighlight": false, "groupWidth": 0.7, "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true }, "orientation": "auto", "showValue": "auto", "stacking": "none", "tooltip": { "mode": "single", "sort": "none" }, "xTickLabelRotation": 0, "xTickLabelSpacing": 0 },
-      "targets": [
-        {
-          "datasource": { "type": "postgres", "uid": "edc-postgres" },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT COALESCE(honeypot, 'unknown') AS honeypot, COUNT(*) AS value FROM honeypot_events WHERE $__timeFilter(to_timestamp(received_at)) GROUP BY 1 ORDER BY value DESC LIMIT 10;",
-          "refId": "A"
-        }
-      ],
-      "title": "Top Honeypots",
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 5 },
+      "id": 8,
+      "options": { "barRadius": 0, "barWidth": 0.86, "fullHighlight": false, "groupWidth": 0.7, "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "orientation": "horizontal", "showValue": "auto", "stacking": "none", "tooltip": { "mode": "single", "sort": "none" }, "xTickLabelRotation": 0, "xTickLabelSpacing": 0 },
+      "targets": [{ "datasource": { "type": "postgres", "uid": "edc-postgres" }, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT COALESCE(src_ip, 'unknown') AS source_ip, COUNT(*) AS value FROM honeypot_events WHERE $__timeFilter(to_timestamp(received_at)) GROUP BY 1 ORDER BY value DESC LIMIT 10;", "refId": "A" }],
+      "title": "Top Source IPs",
       "type": "barchart"
     },
     {
       "datasource": { "type": "postgres", "uid": "edc-postgres" },
       "fieldConfig": { "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "inspect": true } }, "overrides": [] },
-      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 13 },
-      "id": 7,
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 13 },
+      "id": 9,
       "options": { "cellHeight": "sm", "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false }, "showHeader": true },
-      "targets": [
-        {
-          "datasource": { "type": "postgres", "uid": "edc-postgres" },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT to_timestamp(received_at) AS received_at, sensor_id, profile, honeypot, service, event_type, severity, src_ip, dst_port, username, command, url, payload_sample FROM honeypot_events ORDER BY id DESC LIMIT 100;",
-          "refId": "A"
-        }
-      ],
-      "title": "Normalized Honeypot Events",
+      "targets": [{ "datasource": { "type": "postgres", "uid": "edc-postgres" }, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT COALESCE(profile, 'unknown') AS profile, COUNT(*) AS events FROM honeypot_events WHERE $__timeFilter(to_timestamp(received_at)) GROUP BY 1 ORDER BY events DESC LIMIT 12;", "refId": "A" }],
+      "title": "Profiles",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "edc-postgres" },
+      "fieldConfig": { "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "inspect": true } }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 13 },
+      "id": 10,
+      "options": { "cellHeight": "sm", "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false }, "showHeader": true },
+      "targets": [{ "datasource": { "type": "postgres", "uid": "edc-postgres" }, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT COALESCE(honeypot, 'unknown') AS honeypot, COALESCE(service, 'unknown') AS service, COUNT(*) AS events FROM honeypot_events WHERE $__timeFilter(to_timestamp(received_at)) GROUP BY 1, 2 ORDER BY events DESC LIMIT 12;", "refId": "A" }],
+      "title": "Honeypot Services",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "edc-postgres" },
+      "fieldConfig": { "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "inspect": true } }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 13 },
+      "id": 11,
+      "options": { "cellHeight": "sm", "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false }, "showHeader": true },
+      "targets": [{ "datasource": { "type": "postgres", "uid": "edc-postgres" }, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT dst_port, COUNT(*) AS events FROM honeypot_events WHERE dst_port IS NOT NULL AND $__timeFilter(to_timestamp(received_at)) GROUP BY 1 ORDER BY events DESC LIMIT 12;", "refId": "A" }],
+      "title": "Destination Ports",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "edc-postgres" },
+      "fieldConfig": { "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "inspect": true } }, "overrides": [] },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 21 },
+      "id": 12,
+      "options": { "cellHeight": "sm", "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false }, "showHeader": true },
+      "targets": [{ "datasource": { "type": "postgres", "uid": "edc-postgres" }, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT received_time, sensor_id, profile, honeypot, service, event_type, severity, source, destination, credential, evidence FROM honeypot_event_readable WHERE $__timeFilter(received_time) ORDER BY id DESC LIMIT 100;", "refId": "A" }],
+      "title": "Latest Investigation Events",
+      "type": "table"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "edc-postgres" },
+      "fieldConfig": { "defaults": { "custom": { "align": "auto", "cellOptions": { "type": "auto" }, "inspect": true } }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 31 },
+      "id": 13,
+      "options": { "cellHeight": "sm", "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false }, "showHeader": true },
+      "targets": [{ "datasource": { "type": "postgres", "uid": "edc-postgres" }, "editorMode": "code", "format": "table", "rawQuery": true, "rawSql": "SELECT to_timestamp(received_at) AS received_at, sensor_id, profile, honeypot, service, source_name, container_name, left(raw_line, 220) AS raw_line FROM raw_honeypot_logs WHERE $__timeFilter(to_timestamp(received_at)) ORDER BY id DESC LIMIT 100;", "refId": "A" }],
+      "title": "Latest Raw Log Lines",
       "type": "table"
     }
   ],
@@ -159,8 +158,8 @@
   "time": { "from": "now-24h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "EDC Honeypot Logs",
+  "title": "EDC Honeypot Investigation",
   "uid": "edc-honeypot-logs",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }

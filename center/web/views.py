@@ -14,7 +14,7 @@ def render_template(name: str, policy: dict[str, Any]) -> str:
     site = policy.get("site", {}) if isinstance(policy.get("site"), dict) else {}
     title = html.escape(str(site.get("name") or "early-detection-complex"))
     grafana_url = html.escape(_grafana_url(site))
-    grafana_logs_url = html.escape(grafana_url.rstrip("/") + "/d/edc-honeypot-logs/edc-honeypot-logs")
+    grafana_logs_url = html.escape(grafana_url.rstrip("/") + "/d/edc-honeypot-logs/edc-honeypot-investigation")
     return (
         (TEMPLATES_DIR / name)
         .read_text(encoding="utf-8")

@@ -14,7 +14,7 @@ except Exception:  # pragma: no cover - optional in sqlite-only local setup
     dict_row = None
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 def db_dsn() -> str:
@@ -178,6 +178,46 @@ def migrate_postgres(connection: Any) -> None:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_honeypot_events_src_ip ON honeypot_events(src_ip)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_honeypot_events_dst_port ON honeypot_events(dst_port)")
             cursor.execute("INSERT INTO schema_migrations (version) VALUES (3)")
+        if 4 not in applied:
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_honeypot_events_severity ON honeypot_events(severity)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_honeypot_events_device_type ON honeypot_events(device_type)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_raw_honeypot_logs_service ON raw_honeypot_logs(service)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_raw_honeypot_logs_profile ON raw_honeypot_logs(profile)")
+            cursor.execute(
+                """
+                CREATE OR REPLACE VIEW honeypot_event_readable AS
+                SELECT
+                    id,
+                    raw_log_id,
+                    received_at,
+                    to_timestamp(received_at) AS received_time,
+                    sensor_id,
+                    profile,
+                    device_type,
+                    honeypot,
+                    service,
+                    event_type,
+                    severity,
+                    src_ip,
+                    src_port,
+                    dst_ip,
+                    dst_port,
+                    COALESCE(src_ip, '') ||
+                        CASE WHEN src_port IS NULL THEN '' ELSE ':' || src_port::text END AS source,
+                    COALESCE(dst_ip, '') ||
+                        CASE WHEN dst_port IS NULL THEN '' ELSE ':' || dst_port::text END AS destination,
+                    NULLIF(
+                        COALESCE(username, '') ||
+                        CASE WHEN password IS NULL THEN '' ELSE ':' || password END,
+                        ''
+                    ) AS credential,
+                    COALESCE(command, url, payload_sample, '') AS evidence,
+                    LEFT(COALESCE(payload_sample, ''), 500) AS sample,
+                    raw_event
+                FROM honeypot_events
+                """
+            )
+            cursor.execute("INSERT INTO schema_migrations (version) VALUES (4)")
 
 
 def migrate_sqlite(connection: sqlite3.Connection) -> None:
@@ -303,3 +343,44 @@ def migrate_sqlite(connection: sqlite3.Connection) -> None:
             """
         )
         connection.execute("INSERT INTO schema_migrations (version) VALUES (?)", (3,))
+    if 4 not in applied:
+        connection.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_honeypot_events_severity ON honeypot_events(severity);
+            CREATE INDEX IF NOT EXISTS idx_honeypot_events_device_type ON honeypot_events(device_type);
+            CREATE INDEX IF NOT EXISTS idx_raw_honeypot_logs_service ON raw_honeypot_logs(service);
+            CREATE INDEX IF NOT EXISTS idx_raw_honeypot_logs_profile ON raw_honeypot_logs(profile);
+            DROP VIEW IF EXISTS honeypot_event_readable;
+            CREATE VIEW honeypot_event_readable AS
+            SELECT
+                id,
+                raw_log_id,
+                received_at,
+                datetime(received_at, 'unixepoch') AS received_time,
+                sensor_id,
+                profile,
+                device_type,
+                honeypot,
+                service,
+                event_type,
+                severity,
+                src_ip,
+                src_port,
+                dst_ip,
+                dst_port,
+                COALESCE(src_ip, '') ||
+                    CASE WHEN src_port IS NULL THEN '' ELSE ':' || CAST(src_port AS TEXT) END AS source,
+                COALESCE(dst_ip, '') ||
+                    CASE WHEN dst_port IS NULL THEN '' ELSE ':' || CAST(dst_port AS TEXT) END AS destination,
+                NULLIF(
+                    COALESCE(username, '') ||
+                    CASE WHEN password IS NULL THEN '' ELSE ':' || password END,
+                    ''
+                ) AS credential,
+                COALESCE(command, url, payload_sample, '') AS evidence,
+                substr(COALESCE(payload_sample, ''), 1, 500) AS sample,
+                raw_event
+            FROM honeypot_events;
+            """
+        )
+        connection.execute("INSERT INTO schema_migrations (version) VALUES (?)", (4,))
