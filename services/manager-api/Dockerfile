@@ -12,6 +12,7 @@ COPY config ./config
 COPY center ./center
 COPY sensor ./sensor
 COPY scripts ./scripts
+COPY tools ./tools
 
 EXPOSE 8080
 CMD ["python3", "-m", "center.main", "--host", "0.0.0.0", "--port", "8080"]

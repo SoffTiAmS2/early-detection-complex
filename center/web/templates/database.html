@@ -170,7 +170,7 @@
           <td><span class="${clsSeverity(e.severity)}">${esc(e.severity || '')}</span><br>${esc(e.event_type || '')}</td>
           <td>${esc(e.src_ip || '')}${e.src_port ? ':' + esc(e.src_port) : ''}</td>
           <td>${esc(e.dst_ip || '')}${e.dst_port ? ':' + esc(e.dst_port) : ''}</td>
-          <td><code>${esc(e.username ? `user=${e.username} ` : '')}${esc(e.command || e.url || e.payload_sample || '')}</code></td>
+          <td><code>${esc(e.username ? `user=${e.username} ` : '')}${esc(e.password ? `pass=${e.password} ` : '')}${esc(e.command || e.url || e.payload_sample || '')}</code></td>
           <td><details><summary>json</summary><code>${esc(JSON.stringify(e.raw_event || {}, null, 2))}</code></details></td>
         </tr>
       `).join('') || '<tr><td colspan="8">нет данных</td></tr>';

@@ -157,12 +157,14 @@ def honeypot_database_stats(store: Path) -> dict[str, Any]:
 def normalize_pending_raw_logs(store: Path, limit: int = 500) -> int:
     """Normalize raw rows inserted by log-receiver without blocking ingestion."""
 
-    pending = _read_pending_raw(store, limit)
+    pending = _claim_pending_raw(store, limit)
     count = 0
     for row in pending:
         raw_event = row.get("raw_event") if isinstance(row.get("raw_event"), dict) else {}
         normalized = normalize_honeypot_event(raw_event)
         if not normalized:
+            with connect_store(store) as connection:
+                _mark_raw_skipped(connection, int(row["id"]))
             continue
         normalized["raw_log_id"] = row["id"]
         with connect_store(store) as connection:
@@ -170,6 +172,30 @@ def normalize_pending_raw_logs(store: Path, limit: int = 500) -> int:
             _mark_raw_normalized(connection, int(row["id"]), normalized_id)
         count += 1
     return count
+
+
+def reparse_honeypot_events(store: Path, batch_size: int = 500) -> dict[str, int]:
+    """Rebuild normalized honeypot_events from preserved raw_honeypot_logs."""
+
+    with connect_store(store) as connection:
+        if is_postgres_enabled():
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT COUNT(*) AS c FROM raw_honeypot_logs")
+                raw_count = int(cursor.fetchone()["c"])
+                cursor.execute("DELETE FROM honeypot_events")
+                cursor.execute("UPDATE raw_honeypot_logs SET normalized_event_id = NULL")
+        else:
+            if not store.exists():
+                return {"raw": 0, "normalized": 0, "skipped": 0}
+            raw_count = int(connection.execute("SELECT COUNT(*) FROM raw_honeypot_logs").fetchone()[0])
+            connection.execute("DELETE FROM honeypot_events")
+            connection.execute("UPDATE raw_honeypot_logs SET normalized_event_id = NULL")
+
+    normalized = 0
+    safe_batch = max(1, min(int(batch_size), MAX_EVENT_LIMIT))
+    while _pending_raw_count(store) > 0:
+        normalized += normalize_pending_raw_logs(store, safe_batch)
+    return {"raw": raw_count, "normalized": normalized, "skipped": raw_count - normalized}
 
 
 def _empty_stats() -> dict[str, Any]:
@@ -243,7 +269,7 @@ def _honeypot_event_where(filters: HoneypotFilters) -> tuple[str, list[Any]]:
     return _where_clause(
         filters,
         exact_columns,
-        ["payload_sample", "url", "command", "user_agent", "username", "src_ip", "raw_event"],
+        ["payload_sample", "url", "command", "user_agent", "username", "password", "src_ip", "raw_event"],
     )
 
 
@@ -418,18 +444,44 @@ def _mark_raw_normalized(connection: Any, raw_id: int, normalized_id: int) -> No
     connection.execute("UPDATE raw_honeypot_logs SET normalized_event_id = ? WHERE id = ?", (normalized_id, raw_id))
 
 
-def _read_pending_raw(store: Path, limit: int) -> list[dict[str, Any]]:
+def _mark_raw_skipped(connection: Any, raw_id: int) -> None:
+    if is_postgres_enabled():
+        with connection.cursor() as cursor:
+            cursor.execute("UPDATE raw_honeypot_logs SET normalized_event_id = 0 WHERE id = %s", (raw_id,))
+        return
+    connection.execute("UPDATE raw_honeypot_logs SET normalized_event_id = 0 WHERE id = ?", (raw_id,))
+
+
+def _pending_raw_count(store: Path) -> int:
+    with connect_store(store) as connection:
+        if is_postgres_enabled():
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT COUNT(*) AS c FROM raw_honeypot_logs WHERE normalized_event_id IS NULL")
+                return int(cursor.fetchone()["c"])
+        if not store.exists():
+            return 0
+        return int(connection.execute("SELECT COUNT(*) FROM raw_honeypot_logs WHERE normalized_event_id IS NULL").fetchone()[0])
+
+
+def _claim_pending_raw(store: Path, limit: int) -> list[dict[str, Any]]:
     safe_limit = max(1, min(limit, MAX_EVENT_LIMIT))
     with connect_store(store) as connection:
         if is_postgres_enabled():
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT id, raw_event
-                    FROM raw_honeypot_logs
-                    WHERE normalized_event_id IS NULL
-                    ORDER BY id
-                    LIMIT %s
+                    WITH picked AS (
+                        SELECT id
+                        FROM raw_honeypot_logs
+                        WHERE normalized_event_id IS NULL
+                        ORDER BY id
+                        LIMIT %s
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    UPDATE raw_honeypot_logs
+                    SET normalized_event_id = -1
+                    WHERE id IN (SELECT id FROM picked)
+                    RETURNING id, raw_event
                     """,
                     (safe_limit,),
                 )
@@ -445,6 +497,13 @@ def _read_pending_raw(store: Path, limit: int) -> list[dict[str, Any]]:
                 """,
                 (safe_limit,),
             ).fetchall()
+            ids = [int(row["id"]) for row in rows]
+            if ids:
+                placeholders = ", ".join("?" for _ in ids)
+                connection.execute(
+                    f"UPDATE raw_honeypot_logs SET normalized_event_id = -1 WHERE id IN ({placeholders})",
+                    ids,
+                )
     return [{"id": row["id"], "raw_event": _json_value(row["raw_event"], {})} for row in rows]
 
 
