@@ -24,6 +24,21 @@ from runtime import DockerRuntime
 
 DEFAULT_STATE_DIR = Path("var") / "sensor"
 AGENT_VERSION = "0.4.0"
+POST_FAILURE_LOG_INTERVAL = 60
+_LAST_POST_FAILURE: dict[str, Any] = {"message": "", "logged_at": 0.0, "suppressed": 0}
+
+
+def log_post_failure(message: str) -> None:
+    now = time.monotonic()
+    same_message = message == _LAST_POST_FAILURE["message"]
+    recent = now - float(_LAST_POST_FAILURE["logged_at"]) < POST_FAILURE_LOG_INTERVAL
+    if same_message and recent:
+        _LAST_POST_FAILURE["suppressed"] = int(_LAST_POST_FAILURE["suppressed"]) + 1
+        return
+    suppressed = int(_LAST_POST_FAILURE["suppressed"])
+    suffix = f" (suppressed {suppressed} repeats)" if same_message and suppressed else ""
+    print(f"sensor-agent: post failed: {message}{suffix}", flush=True)
+    _LAST_POST_FAILURE.update({"message": message, "logged_at": now, "suppressed": 0})
 
 
 def post_json(url: str, payload: dict[str, Any], timeout: int = 10) -> tuple[bool, dict[str, Any] | None]:
@@ -35,7 +50,7 @@ def post_json(url: str, payload: dict[str, Any], timeout: int = 10) -> tuple[boo
             parsed = json.loads(body) if body else None
             return 200 <= response.status < 300, parsed if isinstance(parsed, dict) else None
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-        print(f"sensor-agent: post failed: {exc}", flush=True)
+        log_post_failure(str(exc))
         return False, None
 
 
@@ -68,6 +83,16 @@ def sync_with_retry(
             print(f"sensor-agent: center sync unavailable, retry {attempt}/{retries}: {exc}", flush=True)
             time.sleep(delay)
     raise RuntimeError(f"center sync unavailable after {retries} retries: {last_error}")
+
+
+def load_cached_desired(state_dir: Path) -> dict[str, Any] | None:
+    state_path = state_dir / "applied_state.json"
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    desired = payload.get("desired")
+    return desired if isinstance(desired, dict) and desired.get("modules") else None
 
 
 def run_once(center_url: str, sensor_id: str, state_dir: Path) -> dict[str, Any]:
@@ -116,7 +141,13 @@ def run_service(center_url: str, sensor_id: str, state_dir: Path, interval: floa
         delivered, _ = post_json(event_url, event)
         return delivered
 
-    desired = sync_with_retry(base_url, sensor_id, sync_payload(sensor_id, AGENT_VERSION))
+    try:
+        desired = sync_with_retry(base_url, sensor_id, sync_payload(sensor_id, AGENT_VERSION), retries=3, delay=2)
+    except Exception as exc:
+        desired = load_cached_desired(state_dir)
+        if not desired:
+            raise
+        print(f"sensor-agent: center unavailable at startup, using cached desired_state: {exc}", flush=True)
     signature = desired_signature(desired)
     runtime, active_services, plan, agent_mode = start_runtime(sensor_id, base_url, desired, send_event, state_dir)
     started_at = now_ts()

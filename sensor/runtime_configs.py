@@ -11,7 +11,7 @@ from runtime_helpers import SUPPORTED_IMAGES, as_bool, selected_service_ids, sel
 def prepare_module_dirs(runtime_dir: Path, desired: dict[str, Any], sensor_id: str, errors: list[dict[str, Any]]) -> None:
     for module_id in SUPPORTED_IMAGES:
         base = runtime_dir / module_id
-        for child in ("config", "data", "logs", "downloads", "tty", "image"):
+        for child in ("config", "data", "logs", "downloads", "tty", "tmp", "image"):
             path = base / child
             path.mkdir(parents=True, exist_ok=True)
             path.chmod(0o777)
@@ -115,6 +115,21 @@ def write_conpot_config(runtime_dir: Path, desired: dict[str, Any], sensor_id: s
         f"host = {settings.get('hpfriends.host', 'hpfriends.honeycloud.net')}",
         f"port = {int(settings.get('hpfriends.port', 20000))}",
         f"channels = {json.dumps(channel_items)}",
+        "",
+        "[fetch_public_ip]",
+        "enabled = False",
+        "",
+        "[change_mac_addr]",
+        "enabled = False",
+        "",
+        "[syslog]",
+        "enabled = False",
+        "host = 127.0.0.1",
+        "port = 514",
+        "facility = local0",
+        "",
+        "[taxii]",
+        "enabled = False",
         "",
     ]
     raw = str(settings.get("raw_conpot_cfg") or "").strip()

@@ -219,6 +219,9 @@ class DockerRuntime:
         ]
         if module_id == "glutton":
             block.extend(["    cap_add:", "      - NET_ADMIN", "      - NET_RAW"])
+        user = self.compose_user(module)
+        if user:
+            block.append(f"    user: {yaml_scalar(user)}")
         build = self.compose_build(module)
         if build:
             block.append("    build:")
@@ -318,13 +321,18 @@ class DockerRuntime:
                 f"{base / 'data'}:/home/cowrie/cowrie/var/lib/cowrie/data",
             ]
         if module_id == "conpot":
-            return [f"{base / 'config' / 'conpot.cfg'}:/etc/conpot/conpot.cfg:ro", f"{base / 'data'}:/data", f"{base / 'logs'}:/logs"]
+            return [
+                f"{base / 'config' / 'conpot.cfg'}:/etc/conpot/conpot.cfg:ro",
+                f"{base / 'data'}:/data",
+                f"{base / 'logs'}:/logs",
+                f"{base / 'tmp'}:/tmp/conpot",
+            ]
         if module_id == "mailoney":
             return [f"{base / 'config' / 'mailoney.cfg'}:/etc/mailoney/mailoney.cfg:ro", f"{base / 'logs'}:/logs"]
         if module_id == "honeypy":
             return [f"{base / 'config' / 'honeypy.yml'}:/etc/honeypy/config.yml:ro", f"{base / 'logs'}:/logs"]
         if module_id == "glutton":
-            return [f"{base / 'config'}:/etc/glutton:ro", f"{base / 'logs'}:/logs"]
+            return [f"{base / 'config'}:/etc/glutton:ro", f"{base / 'logs'}:/logs", f"{base / 'data'}:/var/lib/glutton"]
         return []
 
     def compose_environment(self, module: dict[str, Any]) -> dict[str, Any]:
@@ -337,6 +345,12 @@ class DockerRuntime:
                 "COWRIE_SSH_VERSION": settings.get("ssh_version", "SSH-2.0-OpenSSH_8.4"),
             }
         return {}
+
+    def compose_user(self, module: dict[str, Any]) -> str:
+        module_id = str(module.get("id"))
+        if module_id == "conpot":
+            return "65534:65534"
+        return ""
 
     def compose_resource_limits(self, module: dict[str, Any]) -> dict[str, Any]:
         settings = module.get("settings", {}) if isinstance(module.get("settings"), dict) else {}
@@ -351,7 +365,9 @@ class DockerRuntime:
         module_id = str(module.get("id"))
         if module_id == "conpot":
             template = module.get("settings", {}).get("template", "default")
-            return yaml_scalar(f"conpot --template {template} --config /etc/conpot/conpot.cfg --logfile /logs/conpot.log --temp_dir /tmp")
+            if template in {"industrial-controller", "industrial-controller-lite"}:
+                template = "default"
+            return yaml_scalar(f"conpot --template {template} --config /etc/conpot/conpot.cfg --logfile /logs/conpot.log --temp_dir /tmp/conpot")
         if module_id == "glutton":
             return yaml_scalar("glutton --confpath /etc/glutton --ssh 22 --var-dir /var/lib/glutton --logpath /logs/glutton.log")
         return ""
@@ -534,7 +550,10 @@ class DockerRuntime:
                         "log_hint": str(path),
                     }
                     self.copy_network_fields(event, parsed)
-                    self.sender(event)
+                    while not self._stop_logs.is_set():
+                        if self.sender(event):
+                            break
+                        time.sleep(5)
 
     def raw_event_type(self, module_id: str, parsed: Any) -> str:
         if isinstance(parsed, dict):
