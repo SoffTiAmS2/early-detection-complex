@@ -3,19 +3,22 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{SITE_NAME}} · маскировка</title>
+  <title>{{SITE_NAME}} · профили маскировки</title>
   <style>
     :root {
       color-scheme: light;
-      --bg: #f5f7fb;
+      --bg: #f4f6f9;
       --panel: #ffffff;
       --text: #17202a;
       --muted: #627084;
       --line: #d8dee9;
+      --soft: #eef6f5;
       --brand: #0f766e;
       --brand-dark: #115e59;
-      --ok: #147a3d;
+      --blue: #2563eb;
+      --warn: #a16207;
       --bad: #b42318;
+      --ok: #137333;
     }
     * { box-sizing: border-box; }
     body {
@@ -28,166 +31,417 @@
     header {
       position: sticky;
       top: 0;
-      z-index: 2;
+      z-index: 5;
       display: flex;
       justify-content: space-between;
-      gap: 12px;
+      gap: 14px;
       align-items: center;
       padding: 14px 20px;
       background: var(--panel);
       border-bottom: 1px solid var(--line);
     }
     h1 { margin: 0; font-size: 20px; font-weight: 760; }
-    h2 { margin: 0 0 10px; font-size: 16px; }
-    main { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    h2 { margin: 0; font-size: 16px; }
+    h3 { margin: 0 0 8px; font-size: 14px; }
+    main { max-width: 1480px; margin: 0 auto; padding: 18px; }
+    button, .button, input, textarea, select {
+      border: 1px solid #c8d2de;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font: inherit;
+      min-height: 36px;
+    }
+    input, textarea, select { width: 100%; background: #fff; color: var(--text); }
+    textarea {
+      resize: vertical;
+      min-height: 92px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+    }
+    button, .button {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+      background: var(--brand);
+      color: #fff;
+      border-color: var(--brand);
+      cursor: pointer;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    button:hover, .button:hover { background: var(--brand-dark); }
+    button.secondary, .button.secondary { background: #fff; color: var(--text); border-color: var(--line); }
+    button.ghost { background: transparent; color: var(--text); border-color: transparent; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .muted { color: var(--muted); }
+    .hint { color: var(--muted); font-size: 12px; }
+    .toplinks, .actions, .chips { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .layout { display: grid; grid-template-columns: 420px minmax(0, 1fr); gap: 14px; align-items: start; }
+    .stack { display: grid; gap: 12px; }
     .panel {
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 14px;
-      margin-bottom: 12px;
     }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(280px, 1fr));
-      gap: 12px;
-    }
-    .row {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 6px;
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
       margin-bottom: 10px;
     }
-    label { color: var(--muted); font-size: 13px; }
-    input, textarea, select {
+    .sensor-grid {
+      display: grid;
+      grid-template-columns: 1fr 160px;
+      gap: 8px;
+      align-items: end;
+    }
+    .profile-list { display: grid; gap: 8px; max-height: calc(100vh - 280px); overflow: auto; padding-right: 2px; }
+    .profile-card {
       width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      padding: 8px 9px;
-      font: inherit;
+      text-align: left;
       background: #fff;
       color: var(--text);
-    }
-    textarea {
-      min-height: 120px;
-      resize: vertical;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 12px;
-    }
-    .buttons { display: flex; gap: 8px; flex-wrap: wrap; }
-    button, .button {
-      border: 1px solid var(--brand);
-      background: var(--brand);
-      color: white;
-      border-radius: 6px;
-      padding: 8px 11px;
-      font: inherit;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
       cursor: pointer;
-      text-decoration: none;
+    }
+    .profile-card:hover { border-color: #9ab8c7; background: #fbfdff; }
+    .profile-card.selected { border-color: var(--brand); background: var(--soft); }
+    .profile-card.active { box-shadow: inset 4px 0 0 var(--brand); }
+    .profile-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .profile-title strong { font-size: 15px; }
+    .chip {
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      min-height: 36px;
-    }
-    button:hover, .button:hover { background: var(--brand-dark); }
-    .button.secondary, button.secondary {
+      border: 1px solid var(--line);
+      border-radius: 999px;
       background: #fff;
       color: var(--text);
-      border-color: var(--line);
+      padding: 3px 8px;
+      font-size: 12px;
+      line-height: 1.2;
+      white-space: nowrap;
     }
-    .msg { min-height: 22px; margin-top: 8px; color: var(--muted); }
-    .ok { color: var(--ok); }
-    .bad { color: var(--bad); }
-    .hint { color: var(--muted); font-size: 12px; }
-    @media (max-width: 900px) {
-      .grid { grid-template-columns: 1fr; }
-      header { padding: 12px 14px; }
+    .chip.ok { border-color: #a9d5b8; background: #eef8f1; color: var(--ok); }
+    .chip.warn { border-color: #efd28a; background: #fff8e6; color: var(--warn); }
+    .chip.bad { border-color: #efb3ad; background: #fff1f0; color: var(--bad); }
+    .chip.info { border-color: #b8c9ee; background: #eef4ff; color: var(--blue); }
+    .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .stat { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: #fff; min-height: 68px; }
+    .stat .k { color: var(--muted); font-size: 12px; }
+    .stat .v { font-size: 18px; font-weight: 750; margin-top: 3px; overflow-wrap: anywhere; }
+    .preview-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 12px; }
+    .kv { display: grid; grid-template-columns: 150px 1fr; gap: 6px 10px; margin-top: 10px; }
+    .kv dt { color: var(--muted); font-size: 13px; }
+    .kv dd { margin: 0; overflow-wrap: anywhere; }
+    table { width: 100%; border-collapse: collapse; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
+    th, td { padding: 8px 7px; border-top: 1px solid #edf1f5; text-align: left; vertical-align: top; font-size: 13px; }
+    th { background: #f8fafc; color: var(--muted); border-top: 0; }
+    details { border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    details summary { cursor: pointer; padding: 12px 14px; font-weight: 700; }
+    details[open] summary { border-bottom: 1px solid var(--line); }
+    .advanced-body { padding: 14px; }
+    .forms { display: grid; grid-template-columns: repeat(2, minmax(260px, 1fr)); gap: 12px; }
+    .form-panel { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: #fff; }
+    .field { display: grid; gap: 5px; margin-bottom: 10px; }
+    label { color: var(--muted); font-size: 13px; }
+    .msg { min-height: 22px; color: var(--muted); }
+    .msg.ok { color: var(--ok); }
+    .msg.bad { color: var(--bad); }
+    code { font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+    @media (max-width: 1120px) {
+      .layout, .preview-grid { grid-template-columns: 1fr; }
+      .profile-list { max-height: none; }
+    }
+    @media (max-width: 740px) {
+      header { flex-direction: column; align-items: flex-start; padding: 12px 14px; }
       main { padding: 14px; }
+      .sensor-grid, .stats, .forms { grid-template-columns: 1fr; }
+      .kv { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <header>
     <div>
-      <h1>EDC · маскировка</h1>
+      <h1>EDC · профили маскировки</h1>
       <div class="hint">{{SITE_NAME}}</div>
     </div>
-    <div class="buttons">
-      <a class="button secondary" href="/">Настройки</a>
+    <nav class="toplinks">
+      <a class="button secondary" href="/">Центр</a>
       <a class="button secondary" href="/db">База</a>
       <a class="button" href="{{GRAFANA_LOGS_URL}}" target="_blank" rel="noopener">Grafana</a>
-    </div>
+    </nav>
   </header>
-  <main>
-    <section class="panel">
-      <div class="row">
-        <label for="sensor">Сенсор</label>
-        <select id="sensor"></select>
-      </div>
-      <div class="buttons">
-        <button id="save">Сохранить маскировку</button>
-        <button id="reload" class="secondary">Обновить</button>
-      </div>
-      <div class="msg" id="msg"></div>
-    </section>
 
-    <section class="grid">
-      <div class="panel">
-        <h2>Cowrie</h2>
-        <div class="row"><label>Hostname<input id="c_hostname" placeholder="filesrv01"></label></div>
-        <div class="row"><label>SSH banner / version<input id="c_ssh_version" placeholder="SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.5"></label></div>
-        <div class="row"><label>userdb entries<textarea id="c_userdb_entries" placeholder="root:x:123456"></textarea></label></div>
-        <div class="row"><label>Fake HTTP HTML<textarea id="c_fake_http_html" placeholder="<html>...</html>"></textarea></label></div>
-        <div class="row"><label>Fake FTP files (name,size per line)<textarea id="c_fake_ftp_files" placeholder="backup.zip,204800&#10;camera.jpg,51200"></textarea></label></div>
-      </div>
+  <main class="layout">
+    <aside class="stack">
+      <section class="panel">
+        <div class="section-head">
+          <h2>Сенсор</h2>
+          <button id="reload" class="secondary">Обновить</button>
+        </div>
+        <div class="sensor-grid">
+          <label>
+            Узел
+            <select id="sensor"></select>
+          </label>
+          <button id="applyProfile">Применить</button>
+        </div>
+        <div class="chips" id="sensorChips" style="margin-top:10px"></div>
+        <div class="msg" id="msg"></div>
+      </section>
 
-      <div class="panel">
-        <h2>HoneyPy / Mailoney / Glutton</h2>
-        <div class="row"><label>HoneyPy sensor_name<input id="h_sensor_name" placeholder="web-stack-01"></label></div>
-        <div class="row"><label>HoneyPy raw config<textarea id="h_raw_conf" placeholder="yaml override"></textarea></label></div>
-        <div class="row"><label>Mailoney hostname<input id="m_hostname" placeholder="mail-gw-01"></label></div>
-        <div class="row"><label>Mailoney SMTP banner<input id="m_smtp_banner" placeholder="220 mail.example.local ESMTP"></label></div>
-        <div class="row"><label>Mailoney raw config<textarea id="m_raw_conf" placeholder="ini override"></textarea></label></div>
-        <div class="row"><label>Glutton raw config<textarea id="g_raw_conf" placeholder="yaml/json override"></textarea></label></div>
-      </div>
+      <section class="panel">
+        <div class="section-head">
+          <h2>Устройства</h2>
+          <input id="profileSearch" placeholder="Поиск" style="max-width:170px">
+        </div>
+        <div class="profile-list" id="profileList"></div>
+      </section>
+    </aside>
+
+    <section class="stack">
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <h2 id="previewTitle">Профиль</h2>
+            <div class="muted" id="previewDescription"></div>
+          </div>
+          <div class="actions">
+            <button class="secondary" id="saveOverrides">Сохранить overrides</button>
+            <button id="applyProfileTop">Применить профиль</button>
+          </div>
+        </div>
+        <div class="stats" id="stats"></div>
+      </section>
+
+      <section class="preview-grid">
+        <div class="panel">
+          <div class="section-head">
+            <h2>Открытые сервисы</h2>
+            <div class="chips" id="honeypotChips"></div>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Порт</th><th>Сервис</th><th>Honeypot</th><th>Назначение</th></tr>
+            </thead>
+            <tbody id="portsBody"></tbody>
+          </table>
+        </div>
+
+        <div class="panel">
+          <div class="section-head"><h2>Легенда</h2></div>
+          <dl class="kv" id="legend"></dl>
+          <h3 style="margin-top:16px">Цели обнаружения</h3>
+          <div class="chips" id="goals"></div>
+        </div>
+      </section>
+
+      <details>
+        <summary>Расширенные настройки контейнеров</summary>
+        <div class="advanced-body">
+          <div class="forms">
+            <div class="form-panel">
+              <h3>Cowrie</h3>
+              <div class="field"><label for="c_hostname">Hostname</label><input id="c_hostname" placeholder="filesrv01"></div>
+              <div class="field"><label for="c_ssh_version">SSH banner / version</label><input id="c_ssh_version" placeholder="SSH-2.0-OpenSSH_8.2p1 Ubuntu-4ubuntu0.5"></div>
+              <div class="field"><label for="c_userdb_entries">userdb entries</label><textarea id="c_userdb_entries" placeholder="root:x:123456"></textarea></div>
+              <div class="field"><label for="c_fake_http_html">Fake HTTP HTML</label><textarea id="c_fake_http_html" placeholder="<html>...</html>"></textarea></div>
+              <div class="field"><label for="c_fake_ftp_files">Fake FTP files</label><textarea id="c_fake_ftp_files" placeholder="backup.zip,204800&#10;camera.jpg,51200"></textarea></div>
+            </div>
+
+            <div class="form-panel">
+              <h3>HoneyPy / Mailoney / Glutton</h3>
+              <div class="field"><label for="h_sensor_name">HoneyPy sensor_name</label><input id="h_sensor_name" placeholder="web-stack-01"></div>
+              <div class="field"><label for="h_raw_conf">HoneyPy raw config</label><textarea id="h_raw_conf" placeholder="yaml override"></textarea></div>
+              <div class="field"><label for="m_hostname">Mailoney hostname</label><input id="m_hostname" placeholder="mail-gw-01"></div>
+              <div class="field"><label for="m_smtp_banner">Mailoney SMTP banner</label><input id="m_smtp_banner" placeholder="220 mail.example.local ESMTP"></div>
+              <div class="field"><label for="m_raw_conf">Mailoney raw config</label><textarea id="m_raw_conf" placeholder="ini override"></textarea></div>
+              <div class="field"><label for="g_raw_conf">Glutton raw config</label><textarea id="g_raw_conf" placeholder="yaml/json override"></textarea></div>
+            </div>
+          </div>
+        </div>
+      </details>
     </section>
   </main>
 
   <script>
-    const state = { policy: null, selected: "" };
+    const state = { policy: null, sensorsLive: [], profiles: [], selectedSensor: "", selectedProfile: "" };
     const $ = (id) => document.getElementById(id);
-
-    function setMsg(text, ok = false) {
+    const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]));
+    const compact = (items, limit = 4) => {
+      const list = (items || []).filter(Boolean);
+      if (list.length <= limit) return list.join(", ");
+      return `${list.slice(0, limit).join(", ")} +${list.length - limit}`;
+    };
+    function setMsg(text, status = "") {
       const el = $("msg");
       el.textContent = text || "";
-      el.className = "msg " + (ok ? "ok" : "bad");
-      if (!text) el.className = "msg";
+      el.className = "msg " + status;
     }
-
-    function byId(sensorId) {
-      const sensors = state.policy?.sensors || [];
-      return sensors.find((sensor) => sensor.id === sensorId) || null;
+    function selectedSensor() {
+      return (state.policy?.sensors || []).find((sensor) => sensor.id === state.selectedSensor) || null;
     }
-
-    function modSettings(sensor, modId) {
+    function liveSensor() {
+      return (state.sensorsLive || []).find((sensor) => sensor.sensor_id === state.selectedSensor || sensor.id === state.selectedSensor) || null;
+    }
+    function selectedProfile() {
+      return state.profiles.find((profile) => profile.id === state.selectedProfile) || null;
+    }
+    function moduleSettings(sensor, moduleId) {
       const modules = sensor?.desired_state?.modules || [];
-      const mod = modules.find((item) => item && item.id === modId) || {};
-      return (mod.settings && typeof mod.settings === "object") ? mod.settings : {};
+      const module = modules.find((item) => item && item.id === moduleId) || {};
+      return module.settings && typeof module.settings === "object" ? module.settings : {};
     }
-
-    function fillForm() {
-      const sensor = byId(state.selected);
-      const cowrie = modSettings(sensor, "cowrie");
-      const honeypy = modSettings(sensor, "honeypy");
-      const mailoney = modSettings(sensor, "mailoney");
-      const glutton = modSettings(sensor, "glutton");
-
+    function profilePorts(profile) {
+      return profile?.exposed_ports || profile?.desired_state?.exposed_ports || [];
+    }
+    function profileHoneypots(profile) {
+      return profile?.honeypots || profile?.desired_state?.honeypots || [];
+    }
+    function profileLegend(profile) {
+      return profile?.legend || profile?.desired_state?.legend || profile?.desired_state?.persona || {};
+    }
+    function profileGoals(profile) {
+      return profile?.detection_goals || [];
+    }
+    async function request(path, options = {}) {
+      const response = await fetch(path, { cache: "no-store", headers: { "Content-Type": "application/json" }, ...options });
+      const text = await response.text();
+      const data = text ? JSON.parse(text) : {};
+      if (!response.ok) {
+        const details = data.errors ? `: ${data.errors.join("; ")}` : "";
+        throw new Error((data.error || data.status || response.statusText) + details);
+      }
+      return data;
+    }
+    async function loadAll(keepSelection = true) {
+      setMsg("Загрузка...");
+      const [mask, profiles, sensors] = await Promise.all([
+        request("/api/mask"),
+        request("/api/device-mask-profiles"),
+        request("/api/sensors"),
+      ]);
+      state.policy = mask.policy || {};
+      state.profiles = profiles.profiles || [];
+      state.sensorsLive = sensors.sensors || [];
+      const policySensors = state.policy.sensors || [];
+      if (!keepSelection || !policySensors.some((sensor) => sensor.id === state.selectedSensor)) {
+        state.selectedSensor = policySensors[0]?.id || "";
+      }
+      const currentProfile = selectedSensor()?.desired_state?.active_profile || selectedSensor()?.desired_state?.profile || "";
+      if (!keepSelection || !state.profiles.some((profile) => profile.id === state.selectedProfile)) {
+        state.selectedProfile = currentProfile || state.profiles[0]?.id || "";
+      }
+      render();
+      setMsg("");
+    }
+    function render() {
+      renderSensorSelect();
+      renderSensorSummary();
+      renderProfileList();
+      renderPreview();
+      fillAdvancedForm();
+    }
+    function renderSensorSelect() {
+      const sensors = state.policy?.sensors || [];
+      $("sensor").innerHTML = sensors.map((sensor) => `<option value="${esc(sensor.id)}">${esc(sensor.id)} (${esc(sensor.host || "-")})</option>`).join("");
+      $("sensor").value = state.selectedSensor;
+    }
+    function renderSensorSummary() {
+      const sensor = selectedSensor();
+      const live = liveSensor();
+      const desired = sensor?.desired_state || {};
+      const activeProfile = desired.active_profile || desired.profile || "не задан";
+      const services = desired.exposed_ports || [];
+      const liveState = live?.health || live?.status || "unknown";
+      const stateClass = liveState === "online" ? "ok" : liveState === "stale" ? "warn" : "info";
+      $("sensorChips").innerHTML = [
+        `<span class="chip ${stateClass}">${esc(liveState)}</span>`,
+        `<span class="chip info">${esc(activeProfile)}</span>`,
+        `<span class="chip">${esc(sensor?.host || "host n/a")}</span>`,
+        `<span class="chip">${esc((services || []).length)} ports</span>`,
+        `<span class="chip">v${esc(desired.config_version || "-")}</span>`,
+      ].join("");
+    }
+    function renderProfileList() {
+      const query = $("profileSearch").value.trim().toLowerCase();
+      const current = selectedSensor()?.desired_state?.active_profile || selectedSensor()?.desired_state?.profile || "";
+      const profiles = state.profiles.filter((profile) => {
+        const text = [profile.id, profile.title, profile.name, profile.device_type, profile.description, profile.legend?.vendor].join(" ").toLowerCase();
+        return !query || text.includes(query);
+      });
+      $("profileList").innerHTML = profiles.map((profile) => {
+        const ports = profilePorts(profile).map((item) => item.port);
+        const classes = ["profile-card"];
+        if (profile.id === state.selectedProfile) classes.push("selected");
+        if (profile.id === current) classes.push("active");
+        return `
+          <button class="${classes.join(" ")}" data-profile="${esc(profile.id)}">
+            <span class="profile-title">
+              <strong>${esc(profile.title || profile.name || profile.id)}</strong>
+              ${profile.id === current ? '<span class="chip ok">active</span>' : ''}
+            </span>
+            <span class="muted">${esc(profile.description || "")}</span>
+            <span class="chips">
+              <span class="chip">${esc(profile.device_type || "device")}</span>
+              <span class="chip">${esc(compact(profileHoneypots(profile), 3))}</span>
+              <span class="chip">${esc(compact(ports, 5))}</span>
+            </span>
+          </button>
+        `;
+      }).join("") || '<div class="muted">Профили не найдены</div>';
+      document.querySelectorAll("[data-profile]").forEach((button) => {
+        button.addEventListener("click", () => {
+          state.selectedProfile = button.dataset.profile || "";
+          renderProfileList();
+          renderPreview();
+        });
+      });
+    }
+    function renderPreview() {
+      const profile = selectedProfile();
+      const ports = profilePorts(profile);
+      const honeypots = profileHoneypots(profile);
+      const legend = profileLegend(profile);
+      $("previewTitle").textContent = profile ? `${profile.title || profile.name || profile.id}` : "Профиль";
+      $("previewDescription").textContent = profile?.description || "";
+      $("stats").innerHTML = [
+        ["device", profile?.device_type || "-"],
+        ["hostname", legend.hostname || "-"],
+        ["ports", ports.length],
+        ["limits", `${profile?.resource_limits?.memory_limit || "-"} / ${profile?.resource_limits?.cpu_limit || "-"}`],
+      ].map(([k, v]) => `<div class="stat"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join("");
+      $("honeypotChips").innerHTML = honeypots.map((item) => `<span class="chip info">${esc(item)}</span>`).join("") || '<span class="muted">нет модулей</span>';
+      $("portsBody").innerHTML = ports.map((item) => `
+        <tr>
+          <td><strong>${esc(item.port)}</strong><br><span class="muted">${esc(item.protocol || "tcp")}</span></td>
+          <td>${esc(item.service || item.module_service || "")}</td>
+          <td>${esc(item.honeypot || "")}<br><span class="muted">${esc(item.module_service || "")}</span></td>
+          <td>${esc(item.description || "")}</td>
+        </tr>
+      `).join("") || '<tr><td colspan="4">нет портов</td></tr>';
+      $("legend").innerHTML = Object.entries(legend).map(([key, value]) => `<dt>${esc(key)}</dt><dd>${esc(value)}</dd>`).join("") || '<dt>legend</dt><dd>-</dd>';
+      $("goals").innerHTML = profileGoals(profile).map((goal) => `<span class="chip">${esc(goal)}</span>`).join("") || '<span class="muted">-</span>';
+    }
+    function fillAdvancedForm() {
+      const sensor = selectedSensor();
+      const cowrie = moduleSettings(sensor, "cowrie");
+      const honeypy = moduleSettings(sensor, "honeypy");
+      const mailoney = moduleSettings(sensor, "mailoney");
+      const glutton = moduleSettings(sensor, "glutton");
       $("c_hostname").value = cowrie.hostname || "";
       $("c_ssh_version").value = cowrie.ssh_version || "";
       $("c_userdb_entries").value = cowrie.userdb_entries || "";
       $("c_fake_http_html").value = cowrie.fake_http_html || "";
       $("c_fake_ftp_files").value = cowrie.fake_ftp_files || "";
-
       $("h_sensor_name").value = honeypy.sensor_name || "";
       $("h_raw_conf").value = honeypy.raw_honeypy_yml || "";
       $("m_hostname").value = mailoney.hostname || "";
@@ -195,78 +449,62 @@
       $("m_raw_conf").value = mailoney.raw_mailoney_cfg || "";
       $("g_raw_conf").value = glutton.raw_glutton_yml || "";
     }
-
-    function fillSensors() {
-      const sensors = state.policy?.sensors || [];
-      const sel = $("sensor");
-      sel.innerHTML = sensors.map((sensor) => `<option value="${sensor.id}">${sensor.id} (${sensor.host || "-"})</option>`).join("");
-      if (!state.selected && sensors.length) state.selected = sensors[0].id;
-      sel.value = state.selected;
-      fillForm();
-    }
-
-    async function loadMask() {
-      setMsg("");
-      const response = await fetch("/api/mask", { cache: "no-store" });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || response.statusText);
-      state.policy = payload.policy || {};
-      const sensors = state.policy.sensors || [];
-      if (sensors.length && !sensors.some((sensor) => sensor.id === state.selected)) {
-        state.selected = sensors[0].id;
+    async function applyProfile() {
+      if (!state.selectedSensor || !state.selectedProfile) return;
+      $("applyProfile").disabled = true;
+      $("applyProfileTop").disabled = true;
+      try {
+        await request(`/api/sensors/${encodeURIComponent(state.selectedSensor)}/apply-profile`, {
+          method: "POST",
+          body: JSON.stringify({ profile_id: state.selectedProfile }),
+        });
+        setMsg("Профиль применен", "ok");
+        await loadAll(true);
+      } finally {
+        $("applyProfile").disabled = false;
+        $("applyProfileTop").disabled = false;
       }
-      fillSensors();
     }
-
-    async function saveMask() {
+    async function saveOverrides() {
+      if (!state.selectedSensor) return;
       const payload = {
-        sensor_id: state.selected,
+        sensor_id: state.selectedSensor,
         cowrie: {
           hostname: $("c_hostname").value,
           ssh_version: $("c_ssh_version").value,
           userdb_entries: $("c_userdb_entries").value,
           fake_http_html: $("c_fake_http_html").value,
-          fake_ftp_files: $("c_fake_ftp_files").value
+          fake_ftp_files: $("c_fake_ftp_files").value,
         },
         honeypy: {
           sensor_name: $("h_sensor_name").value,
-          raw_honeypy_yml: $("h_raw_conf").value
+          raw_honeypy_yml: $("h_raw_conf").value,
         },
         mailoney: {
           hostname: $("m_hostname").value,
           smtp_banner: $("m_smtp_banner").value,
-          raw_mailoney_cfg: $("m_raw_conf").value
+          raw_mailoney_cfg: $("m_raw_conf").value,
         },
         glutton: {
-          raw_glutton_yml: $("g_raw_conf").value
-        }
+          raw_glutton_yml: $("g_raw_conf").value,
+        },
       };
-      const response = await fetch("/api/mask", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        const details = result.errors ? `: ${result.errors.join("; ")}` : "";
-        throw new Error((result.error || result.status || "save failed") + details);
-      }
-      setMsg("Сохранено", true);
-      await loadMask();
+      await request("/api/mask", { method: "POST", body: JSON.stringify(payload) });
+      setMsg("Overrides сохранены", "ok");
+      await loadAll(true);
     }
-
     $("sensor").addEventListener("change", (event) => {
-      state.selected = event.target.value || "";
-      fillForm();
+      state.selectedSensor = event.target.value || "";
+      const current = selectedSensor()?.desired_state?.active_profile || selectedSensor()?.desired_state?.profile;
+      if (current) state.selectedProfile = current;
+      render();
     });
-    $("reload").addEventListener("click", async () => {
-      try { await loadMask(); setMsg("Обновлено", true); } catch (error) { setMsg(error.message || String(error)); }
-    });
-    $("save").addEventListener("click", async () => {
-      try { await saveMask(); } catch (error) { setMsg(error.message || String(error)); }
-    });
-
-    loadMask().catch((error) => setMsg(error.message || String(error)));
+    $("profileSearch").addEventListener("input", renderProfileList);
+    $("reload").addEventListener("click", () => loadAll(true).catch((error) => setMsg(error.message || String(error), "bad")));
+    $("applyProfile").addEventListener("click", () => applyProfile().catch((error) => setMsg(error.message || String(error), "bad")));
+    $("applyProfileTop").addEventListener("click", () => applyProfile().catch((error) => setMsg(error.message || String(error), "bad")));
+    $("saveOverrides").addEventListener("click", () => saveOverrides().catch((error) => setMsg(error.message || String(error), "bad")));
+    loadAll(false).catch((error) => setMsg(error.message || String(error), "bad"));
   </script>
 </body>
 </html>
