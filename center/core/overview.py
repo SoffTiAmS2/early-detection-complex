@@ -114,6 +114,17 @@ def provisioning_state(policy_sensor: dict[str, Any], live: dict[str, Any]) -> d
     state = dict(base)
     listener_errors = live.get("listener_errors") if isinstance(live.get("listener_errors"), list) else []
     if listener_errors:
+        active_count = len(live.get("active_services") if isinstance(live.get("active_services"), list) else [])
+        if active_count:
+            state.update(
+                {
+                    "status": "degraded",
+                    "stage": "runtime_partial",
+                    "progress": 90,
+                    "message": f"Agent online, активных сервисов: {active_count}, ошибок runtime: {len(listener_errors)}.",
+                }
+            )
+            return state
         state.update(
             {
                 "status": "error",

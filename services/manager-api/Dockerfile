@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates openssh-client sshpass \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir "psycopg[binary]==3.2.12"
@@ -11,6 +11,7 @@ COPY catalog ./catalog
 COPY config ./config
 COPY center ./center
 COPY sensor ./sensor
+COPY compose.sensor.yml ./compose.sensor.yml
 COPY scripts ./scripts
 COPY tools ./tools
 

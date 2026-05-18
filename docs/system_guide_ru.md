@@ -380,6 +380,17 @@ GF_SECURITY_ADMIN_PASSWORD
 
 Страница `http://<central-ip>:8080/settings` используется для управления центром и сенсорами. При добавлении сенсора центр не делает вид, что узел уже установлен: он создает запись в политике и показывает статус обработки `waiting_agent`. После первого `sync` от `sensor-agent` статус меняется на `completed`, `stale` или `error` в зависимости от heartbeat и ошибок runtime.
 
+В этом же разделе есть режим `Установить по SSH`. Он нужен для чистого узла, на который администратор не хочет заходить вручную. Центр принимает `sensor_id`, адрес узла, SSH-пользователя, пароль sudo, профиль и рабочий каталог, после чего выполняет bootstrap:
+
+1. Проверяет SSH-доступ.
+2. Ставит Docker, compose plugin и Python через `apt`, `pacman` или `dnf`.
+3. Копирует на сенсор минимальный bundle: `compose.sensor.yml` и каталог `sensor/`.
+4. Создает `.env` с `EDC_CENTER_URL`, `EDC_SENSOR_ID`, `EDC_IMAGE_POLICY`.
+5. Запускает `docker compose -f compose.sensor.yml up -d --build`.
+6. Отображает ход установки в `/settings` как install job.
+
+Такой поток не требует ручной работы на сенсоре. Минимальное требование к чистому железу - включенный SSH, пользователь с sudo и сетевой доступ до центра. Для слабых ARMv7-плат рекомендуется готовить образ ОС заранее: Docker уже установлен, а honeypot-образы `edc/cowrie:local`, `edc/glutton:local`, `edc/honeypy:local`, `edc/mailoney:local`, `edc/conpot:local` загружены через `docker load`. В этом случае используется `EDC_IMAGE_POLICY=prebuilt_only`, и Banana Pi не тратит время на сборку тяжелых контейнеров.
+
 Для контейнерного запуска агента на сенсоре используется отдельный compose-файл:
 
 ```bash

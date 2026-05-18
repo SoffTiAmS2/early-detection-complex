@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
+from center.core.bootstrap import latest_bootstrap_job, list_bootstrap_jobs, start_sensor_bootstrap
 from center.core.auth import auth_required_response, is_admin_route, is_authorized
 from center.core.overview import overview_payload, sensors_payload
 from center.core.paths import DEFAULT_CATALOG, DEFAULT_DEVICE_PROFILES, DEFAULT_POLICY, DEFAULT_STORE, MAX_EVENT_LIMIT
@@ -47,7 +48,15 @@ POLICY_SAFE_GET_PATHS = {
     "/api/device-mask-profiles",
     "/api/db/stats",
 }
-JSON_POST_PATHS = {"/api/events", "/api/sensors", "/api/mask", "/api/logs/batch", "/api/logs/events", "/api/logs/raw"}
+JSON_POST_PATHS = {
+    "/api/events",
+    "/api/sensors",
+    "/api/sensors/bootstrap",
+    "/api/mask",
+    "/api/logs/batch",
+    "/api/logs/events",
+    "/api/logs/raw",
+}
 
 
 class ControlPlaneHandler(BaseHTTPRequestHandler):
@@ -162,6 +171,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/sensors":
             self.handle_sensors(policy)
             return
+        if parsed.path == "/api/sensor-installs":
+            self.send_json({"jobs": list_bootstrap_jobs()})
+            return
         if parsed.path == "/api/events":
             self.handle_events_query(parsed.query)
             return
@@ -196,7 +208,21 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def handle_sensors(self, policy: dict[str, Any]) -> None:
         events = read_events(self.store_path, limit=MAX_EVENT_LIMIT)
-        self.send_json(sensors_payload(policy, events, read_sensor_states(self.store_path)))
+        payload = sensors_payload(policy, events, read_sensor_states(self.store_path))
+        for sensor in payload.get("sensors", []):
+            job = latest_bootstrap_job(str(sensor.get("sensor_id") or ""))
+            if not job or job.get("status") == "completed" and sensor.get("health") == "online":
+                continue
+            if job.get("status") in {"queued", "running", "failed", "completed"}:
+                sensor["provisioning"] = {
+                    **(sensor.get("provisioning") if isinstance(sensor.get("provisioning"), dict) else {}),
+                    "status": "installing" if job.get("status") in {"queued", "running"} else job.get("status"),
+                    "stage": job.get("stage"),
+                    "progress": job.get("progress"),
+                    "message": job.get("message"),
+                    "job_id": job.get("id"),
+                }
+        self.send_json(payload)
 
     def handle_events_query(self, query: str) -> None:
         params = parse_qs(query)
@@ -399,6 +425,9 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/sensors":
             self.handle_create_sensor(payload, policy, catalog)
             return
+        if parsed.path == "/api/sensors/bootstrap":
+            self.handle_bootstrap_sensor(payload, policy, catalog)
+            return
         if is_sensor_sync:
             self.handle_sensor_sync(parsed.path, payload, policy, catalog)
             return
@@ -470,6 +499,81 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             return
         policy = self.save_policy(policy)
         self.send_json({"status": "processing", "sensor": sensor, "operation": operation, "policy": policy}, HTTPStatus.CREATED)
+
+    def handle_bootstrap_sensor(self, payload: dict[str, Any], policy: dict[str, Any], catalog: dict[str, Any]) -> None:
+        sensor_id = str(payload.get("id") or payload.get("sensor_id") or "").strip()
+        host = str(payload.get("host") or "").strip()
+        ssh_user = str(payload.get("ssh_user") or "").strip()
+        ssh_password = str(payload.get("ssh_password") or "").strip()
+        if not sensor_id or not host or not ssh_user or not ssh_password:
+            self.send_json({"error": "sensor id, host, ssh_user and ssh_password are required"}, HTTPStatus.BAD_REQUEST)
+            return
+
+        profile_id = str(payload.get("profile_id") or "").strip()
+        sensor = find_sensor(policy, sensor_id)
+        if sensor is None:
+            source_id = str(payload.get("clone_from") or "").strip()
+            source = find_sensor(policy, source_id) if source_id else None
+            source = source or (policy.get("sensors") or [None])[0]
+            if not source and not profile_id:
+                self.send_json({"error": "profile_id is required for the first sensor"}, HTTPStatus.BAD_REQUEST)
+                return
+            sensor = {
+                "id": sensor_id,
+                "host": host,
+                "architecture": str(payload.get("architecture") or (source.get("architecture", "") if source else "")),
+                "enrollment": {"method": "ssh-bootstrap", "ssh_user": ssh_user, "ssh_port": int(payload.get("ssh_port") or 22)},
+                "desired_state": json.loads(json.dumps(payload.get("desired_state", source.get("desired_state", {}) if source else {}))),
+            }
+            policy.setdefault("sensors", []).append(sensor)
+        else:
+            sensor["host"] = host
+            sensor["enrollment"] = {"method": "ssh-bootstrap", "ssh_user": ssh_user, "ssh_port": int(payload.get("ssh_port") or 22)}
+
+        if profile_id:
+            ok_apply, error = apply_profile(policy, catalog, sensor, profile_id, load_json(self.profile_path))
+            if not ok_apply:
+                self.send_json({"error": error}, HTTPStatus.BAD_REQUEST)
+                return
+
+        central_url = str(payload.get("center_url") or policy.get("site", {}).get("central_url") or "").strip()
+        if not central_url:
+            self.send_json({"error": "center_url is required in site settings or bootstrap payload"}, HTTPStatus.BAD_REQUEST)
+            return
+
+        job = start_sensor_bootstrap(
+            {
+                "sensor_id": sensor_id,
+                "host": host,
+                "ssh_user": ssh_user,
+                "ssh_password": ssh_password,
+                "ssh_port": int(payload.get("ssh_port") or 22),
+                "remote_dir": str(payload.get("remote_dir") or "~/early-detection-complex"),
+                "center_url": central_url,
+                "image_policy": str(payload.get("image_policy") or "prebuilt_only"),
+                "log_receiver_url": str(payload.get("log_receiver_url") or ""),
+            }
+        )
+        operation = {
+            "id": f"sensor-bootstrap:{sensor_id}:{job['id']}",
+            "type": "sensor-bootstrap",
+            "job_id": job["id"],
+            "sensor_id": sensor_id,
+            "status": "installing",
+            "stage": "ssh_bootstrap",
+            "progress": 10,
+            "message": "Центр устанавливает sensor-agent по SSH.",
+            "created_at": job["created_at"],
+            "updated_at": job["updated_at"],
+            "next_action": "Открой статус установки в этом же разделе. На сенсор вручную заходить не требуется.",
+        }
+        sensor["provisioning"] = operation
+        errors = policy_errors(policy, catalog)
+        if errors:
+            self.send_json({"status": "invalid_policy", "errors": errors}, HTTPStatus.BAD_REQUEST)
+            return
+        policy = self.save_policy(policy)
+        self.send_json({"status": "installing", "operation": operation, "job": job, "sensor": sensor, "policy": policy}, HTTPStatus.ACCEPTED)
 
     def handle_apply_profile(
         self,

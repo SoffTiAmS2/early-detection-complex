@@ -24,6 +24,7 @@ services:
     volumes:
       - ./catalog:/app/catalog:ro
       - ./config:/app/config
+      - ./artifacts:/app/artifacts:ro
       - ./var/center:/app/var/center
     environment:
       CENTER_DB_DSN: ${CENTER_DB_DSN:-postgresql://edc:edc@postgres:5432/edc}

@@ -81,8 +81,9 @@
     code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
     .muted { color: var(--muted); }
     .toplinks { display: flex; flex-wrap: wrap; gap: 8px; }
-    .grid { display: grid; grid-template-columns: repeat(4, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
-    .layout { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(520px, 1.7fr); gap: 14px; align-items: start; }
+    .grid { display: grid; grid-template-columns: repeat(5, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .layout { display: grid; grid-template-columns: 1fr; gap: 14px; align-items: start; }
+    .fleet { display: grid; grid-template-columns: minmax(680px, 1.05fr) minmax(520px, .95fr); gap: 14px; align-items: start; }
     .panel {
       background: var(--panel);
       border: 1px solid var(--line);
@@ -121,7 +122,13 @@
     .event:first-child { border-top: 0; }
     .event-head { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .sample { margin-top: 6px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 90px; overflow: auto; color: var(--muted); }
-    .add-sensor { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 12px; }
+    .add-sensor { display: grid; grid-template-columns: repeat(6, minmax(140px, 1fr)); gap: 10px; align-items: end; margin-top: 12px; }
+    .add-sensor .wide { grid-column: span 2; }
+    .install-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; }
+    .sensor-table td:first-child { min-width: 160px; }
+    .sensor-table td:nth-child(3) { min-width: 220px; }
+    .sensor-table td:nth-child(4) { min-width: 260px; }
+    .sensor-card-title { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
     .message { min-height: 22px; margin: 8px 0 0; color: var(--muted); }
     .sitebar { display:grid; grid-template-columns: 1.2fr 1fr auto; gap:8px; margin-bottom:12px; align-items:end; }
     .provisioning { display: grid; gap: 6px; min-width: 180px; }
@@ -145,9 +152,22 @@
       overflow: auto;
       white-space: pre-wrap;
     }
+    .install-log {
+      max-height: 220px;
+      overflow: auto;
+      margin-top: 8px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
     @media (max-width: 1050px) {
-      .layout, .cards { grid-template-columns: 1fr; }
+      .layout, .fleet, .cards { grid-template-columns: 1fr; }
       .grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+      .add-sensor { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
     }
     @media (max-width: 680px) {
       header { align-items: flex-start; flex-direction: column; padding: 14px 16px; }
@@ -182,26 +202,44 @@
     </section>
     <section class="layout">
       <div class="panel">
-        <h2>Сенсоры</h2>
-        <div id="sensors"></div>
+        <div class="sensor-card-title">
+          <div>
+            <h2>Создать и установить сенсор</h2>
+            <div class="muted">Центр может сам зайти по SSH на чистый Linux/Armbian/Arch-узел, поставить Docker и запустить контейнерный sensor-agent.</div>
+          </div>
+        </div>
         <div class="add-sensor">
           <label><span class="muted">ID</span><input id="newSensorId" placeholder="sensor-2"></label>
           <label><span class="muted">Host</span><input id="newSensorHost" placeholder="192.168.0.240"></label>
-          <label><span class="muted">Clone from</span><input id="cloneFrom" placeholder="banana-pi-pro-1"></label>
+          <label><span class="muted">SSH user</span><input id="newSensorSshUser" placeholder="banana"></label>
+          <label><span class="muted">SSH password / sudo</span><input id="newSensorSshPassword" type="password" placeholder="••••••"></label>
+          <label><span class="muted">SSH port</span><input id="newSensorSshPort" type="number" min="1" max="65535" value="22"></label>
           <label><span class="muted">Профиль</span><select id="newSensorProfile"></select></label>
-          <button id="addSensorBtn">Добавить</button>
+          <label class="wide"><span class="muted">Remote dir</span><input id="newSensorRemoteDir" value="~/early-detection-complex"></label>
+          <label><span class="muted">Clone from</span><input id="cloneFrom" placeholder="banana-pi-pro-1"></label>
+          <label><span class="muted">Image policy</span><select id="newSensorImagePolicy"><option value="prebuilt_only">prebuilt only</option><option value="build_if_missing">build if missing</option></select></label>
+          <div class="install-actions">
+            <button id="addSensorBtn">Только создать</button>
+            <button id="installSensorBtn">Установить по SSH</button>
+          </div>
         </div>
         <div class="operation" id="operation"></div>
       </div>
-      <div class="panel">
-        <div class="toolbar">
-          <label><span class="muted">Активный сенсор</span><select id="sensorSelect"></select></label>
-          <label><span class="muted">Профиль сенсора</span><select id="sensorProfileSelect"></select></label>
-          <button id="applyProfileBtn">Применить профиль</button>
-          <button class="danger" id="deleteSensorBtn">Удалить сенсор</button>
+      <div class="fleet">
+        <div class="panel">
+          <h2>Сенсоры</h2>
+          <div id="sensors"></div>
         </div>
-        <div class="message" id="message"></div>
-        <div class="cards" id="modules"></div>
+        <div class="panel">
+          <div class="toolbar">
+            <label><span class="muted">Активный сенсор</span><select id="sensorSelect"></select></label>
+            <label><span class="muted">Профиль сенсора</span><select id="sensorProfileSelect"></select></label>
+            <button id="applyProfileBtn">Применить профиль</button>
+            <button class="danger" id="deleteSensorBtn">Удалить сенсор</button>
+          </div>
+          <div class="message" id="message"></div>
+          <div class="cards" id="modules"></div>
+        </div>
       </div>
     </section>
     <section class="panel" style="margin-top:14px">
@@ -226,7 +264,7 @@
     </section>
   </main>
   <script>
-    const state = { policy: null, catalog: null, overview: null, profiles: [], selectedSensor: new URLSearchParams(location.search).get('sensor_id') || '', lastOperation: null };
+    const state = { policy: null, catalog: null, overview: null, profiles: [], installJobs: [], selectedSensor: new URLSearchParams(location.search).get('sensor_id') || '', lastOperation: null };
     const $ = (id) => document.getElementById(id);
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
     const age = (ts) => ts ? Math.max(0, Math.round(Date.now() / 1000 - Number(ts))) + ' сек. назад' : 'нет данных';
@@ -272,7 +310,7 @@
     function provisioningView(provisioning = {}) {
       const status = provisioning.status || 'waiting_agent';
       const progress = Math.max(0, Math.min(100, Number(provisioning.progress || 0)));
-      const cls = status === 'completed' ? 'ok' : status === 'error' ? 'bad' : status === 'stale' ? 'warn' : 'info';
+      const cls = status === 'completed' ? 'ok' : status === 'error' ? 'bad' : ['stale', 'degraded'].includes(status) ? 'warn' : 'info';
       return `<div class="provisioning">
         <span class="status ${cls}">${esc(status)} · ${esc(provisioning.stage || '')}</span>
         <div class="progress" title="${esc(progress)}%"><span style="width:${progress}%"></span></div>
@@ -290,11 +328,30 @@
       ].join('\n');
     }
 
+    function renderInstallJobs(sensorId) {
+      const jobs = (state.installJobs || []).filter((job) => !sensorId || job.sensor_id === sensorId).slice(0, 3);
+      if (!jobs.length) return '';
+      return jobs.map((job) => {
+        const lines = (job.logs || []).slice(-8).map((item) => `[${new Date(Number(item.at || 0) * 1000).toLocaleTimeString()}] ${item.line}`).join('\n');
+        return `<div style="margin-top:12px">
+          <h3>SSH установка · ${esc(job.id)} · ${esc(job.status)} · ${esc(job.stage)}</h3>
+          ${provisioningView(job)}
+          ${lines ? `<div class="install-log">${esc(lines)}</div>` : ''}
+        </div>`;
+      }).join('');
+    }
+
     function renderOperation() {
       const box = $('operation');
       if (!state.lastOperation) {
-        box.className = 'operation';
-        box.innerHTML = '';
+        const runningJobs = (state.installJobs || []).filter((job) => ['queued', 'running', 'failed'].includes(job.status)).slice(0, 3);
+        if (!runningJobs.length) {
+          box.className = 'operation';
+          box.innerHTML = '';
+          return;
+        }
+        box.className = 'operation visible';
+        box.innerHTML = `<h3>Последние установки</h3>${runningJobs.map((job) => renderInstallJobs(job.sensor_id)).join('')}`;
         return;
       }
       const live = liveSensor(state.lastOperation.sensor_id);
@@ -303,7 +360,8 @@
       box.innerHTML = `
         <h3>Создание сенсора: ${esc(state.lastOperation.sensor_id)}</h3>
         ${provisioningView(provisioning)}
-        <div class="muted" style="margin-top:8px">Команда для запуска контейнерного агента на узле сенсора:</div>
+        ${renderInstallJobs(state.lastOperation.sensor_id)}
+        <div class="muted" style="margin-top:8px">Ручной fallback, если SSH-установка недоступна:</div>
         <pre><code>${esc(sensorLaunchCommand(state.lastOperation.sensor_id))}</code></pre>
       `;
     }
@@ -311,10 +369,16 @@
     function renderMetrics() {
       const sensors = state.overview?.sensors || [];
       const online = sensors.filter((sensor) => sensor.health === 'online').length;
-      const running = sensors.flatMap((sensor) => sensor.modules || []).filter((module) => module.status === 'running').length;
+      const stale = sensors.filter((sensor) => sensor.health === 'stale').length;
+      const waiting = sensors.filter((sensor) => ['waiting_agent', 'installing'].includes(sensor.provisioning?.status)).length;
+      const activeServices = sensors.reduce((total, sensor) => total + ((sensor.active_services || []).length), 0);
+      const plannedModules = (state.policy?.sensors || []).reduce((total, sensor) => total + (sensor.desired_state?.modules || []).filter((module) => module.enabled !== false).length, 0);
       $('metrics').innerHTML = [
-        metric('Сенсоры online', online, online ? 'ok' : 'warn'),
-        metric('Запущено модулей', running, running ? 'ok' : 'warn'),
+        metric('Всего сенсоров', sensors.length, sensors.length ? 'info' : 'warn'),
+        metric('Online', online, online ? 'ok' : 'warn'),
+        metric('Ожидают / stale', `${waiting} / ${stale}`, waiting || stale ? 'warn' : 'ok'),
+        metric('Активные сервисы', activeServices, activeServices ? 'ok' : 'warn'),
+        metric('Модулей в политике', plannedModules, plannedModules ? 'info' : 'warn'),
         metric('События', state.overview?.event_count_window ?? 0, 'info'),
         metric('Версия политики', state.policy?.version ?? 0, 'info')
       ].join('');
@@ -338,10 +402,9 @@
           <td>${provisioningView(sensor.provisioning || policySensor.provisioning || {})}</td>
           <td>${esc(sensor.events || 0)}</td>
           <td><code>${esc(modules)}</code></td>
-          <td></td>
         </tr>`;
       }).join('');
-      $('sensors').innerHTML = `<table><thead><tr><th>ID</th><th>Статус</th><th>Профиль / порты</th><th>Обработка</th><th>События</th><th>Модули</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="muted">нет сенсоров</td></tr>'}</tbody></table>`;
+      $('sensors').innerHTML = `<table class="sensor-table"><thead><tr><th>ID</th><th>Статус</th><th>Профиль / порты</th><th>Обработка</th><th>События</th><th>Модули</th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="muted">нет сенсоров</td></tr>'}</tbody></table>`;
     }
 
     function renderSelector() {
@@ -463,6 +526,36 @@
       await refresh();
     }
 
+    async function installSensor() {
+      const id = $('newSensorId').value.trim();
+      const host = $('newSensorHost').value.trim();
+      const sshUser = $('newSensorSshUser').value.trim();
+      const sshPassword = $('newSensorSshPassword').value;
+      if (!id || !host || !sshUser || !sshPassword) {
+        return setMessage('Для SSH-установки нужны ID, Host, SSH user и password/sudo.', 'bad');
+      }
+      const result = await request('/api/sensors/bootstrap', {
+        method: 'POST',
+        body: JSON.stringify({
+          id,
+          host,
+          ssh_user: sshUser,
+          ssh_password: sshPassword,
+          ssh_port: Number($('newSensorSshPort').value || 22),
+          remote_dir: $('newSensorRemoteDir').value.trim() || '~/early-detection-complex',
+          clone_from: $('cloneFrom').value.trim() || state.selectedSensor,
+          profile_id: $('newSensorProfile').value || undefined,
+          center_url: state.policy?.site?.central_url || location.origin,
+          image_policy: $('newSensorImagePolicy').value || 'prebuilt_only'
+        })
+      });
+      state.lastOperation = result.operation || { sensor_id: id, status: 'installing' };
+      state.selectedSensor = id;
+      setMessage(`Запущена SSH-установка ${id}. Статус будет обновляться автоматически.`, 'ok');
+      $('newSensorSshPassword').value = '';
+      await refresh();
+    }
+
     async function applyProfile() {
       const sensor = selectedPolicySensor();
       if (!sensor) return;
@@ -500,17 +593,19 @@
     }
 
     async function refresh() {
-      const [overview, policyPayload, catalog, profilesPayload, events] = await Promise.all([
+      const [overview, policyPayload, catalog, profilesPayload, installPayload, eventsPayload] = await Promise.all([
         request('/api/overview'),
         request('/api/policy'),
         request('/api/modules'),
         request('/api/profiles'),
+        request('/api/sensor-installs'),
         request('/api/events?limit=50')
       ]);
       state.overview = overview;
       state.policy = policyPayload.policy;
       state.catalog = catalog;
       state.profiles = profilesPayload.profiles || [];
+      state.installJobs = installPayload.jobs || [];
       $('siteCentralUrl').value = state.policy?.site?.central_url || '';
       $('siteMgmtNet').value = state.policy?.site?.management_network || '';
       renderMetrics();
@@ -518,7 +613,7 @@
       renderSelector();
       renderProfileSelectors();
       renderModules();
-      renderEvents(events);
+      renderEvents(eventsPayload);
       renderOperation();
     }
 
@@ -536,6 +631,7 @@
       if (button) saveModule(button.dataset.saveModule).catch((error) => setMessage(error.message, 'bad'));
     });
     $('addSensorBtn').addEventListener('click', () => addSensor().catch((error) => setMessage(error.message, 'bad')));
+    $('installSensorBtn').addEventListener('click', () => installSensor().catch((error) => setMessage(error.message, 'bad')));
     $('applyProfileBtn').addEventListener('click', () => applyProfile().catch((error) => setMessage(error.message, 'bad')));
     $('saveSiteBtn').addEventListener('click', () => saveSite().catch((error) => setMessage(error.message, 'bad')));
     $('deleteSensorBtn').addEventListener('click', () => deleteSensor().catch((error) => setMessage(error.message, 'bad')));
