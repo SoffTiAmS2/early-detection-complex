@@ -26,7 +26,11 @@ services:
       - ./config:/app/config
       - ./var/center:/app/var/center
     environment:
-      CENTER_DB_DSN: postgresql://edc:edc@postgres:5432/edc
+      CENTER_DB_DSN: ${CENTER_DB_DSN:-postgresql://edc:edc@postgres:5432/edc}
+      CENTER_AUTH_USER: ${CENTER_AUTH_USER:-centre}
+      CENTER_AUTH_PASSWORD: ${CENTER_AUTH_PASSWORD:-1}
+      CENTER_AUTH_TOKEN: ${CENTER_AUTH_TOKEN:-dev-token}
+      GRAFANA_URL: ${GRAFANA_URL:-http://127.0.0.1:3000}
     depends_on:
       postgres:
         condition: service_healthy
@@ -66,7 +70,7 @@ services:
     volumes:
       - ./var/center:/app/var/center
     environment:
-      CENTER_DB_DSN: postgresql://edc:edc@postgres:5432/edc
+      CENTER_DB_DSN: ${CENTER_DB_DSN:-postgresql://edc:edc@postgres:5432/edc}
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,7 +84,7 @@ services:
     volumes:
       - ./var/center:/app/var/center
     environment:
-      CENTER_DB_DSN: postgresql://edc:edc@postgres:5432/edc
+      CENTER_DB_DSN: ${CENTER_DB_DSN:-postgresql://edc:edc@postgres:5432/edc}
       NORMALIZER_INTERVAL_SECONDS: "5"
       NORMALIZER_BATCH_SIZE: "500"
     depends_on:
@@ -112,8 +116,8 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_USER: centre
-      GF_SECURITY_ADMIN_PASSWORD: "centre123"
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-centre}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-centre123}
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_USERS_DEFAULT_THEME: light
     volumes:

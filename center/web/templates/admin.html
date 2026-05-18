@@ -124,6 +124,27 @@
     .add-sensor { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr auto; gap: 8px; align-items: end; margin-top: 12px; }
     .message { min-height: 22px; margin: 8px 0 0; color: var(--muted); }
     .sitebar { display:grid; grid-template-columns: 1.2fr 1fr auto; gap:8px; margin-bottom:12px; align-items:end; }
+    .provisioning { display: grid; gap: 6px; min-width: 180px; }
+    .progress { height: 8px; border-radius: 999px; background: #e7edf4; overflow: hidden; border: 1px solid var(--line); }
+    .progress > span { display: block; height: 100%; background: var(--brand); width: 0%; }
+    .operation {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+      padding: 12px;
+      display: none;
+    }
+    .operation.visible { display: block; }
+    .operation pre {
+      margin: 8px 0 0;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
     @media (max-width: 1050px) {
       .layout, .cards { grid-template-columns: 1fr; }
       .grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
@@ -170,6 +191,7 @@
           <label><span class="muted">Профиль</span><select id="newSensorProfile"></select></label>
           <button id="addSensorBtn">Добавить</button>
         </div>
+        <div class="operation" id="operation"></div>
       </div>
       <div class="panel">
         <div class="toolbar">
@@ -204,7 +226,7 @@
     </section>
   </main>
   <script>
-    const state = { policy: null, catalog: null, overview: null, profiles: [], selectedSensor: new URLSearchParams(location.search).get('sensor_id') || '' };
+    const state = { policy: null, catalog: null, overview: null, profiles: [], selectedSensor: new URLSearchParams(location.search).get('sensor_id') || '', lastOperation: null };
     const $ = (id) => document.getElementById(id);
     const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
     const age = (ts) => ts ? Math.max(0, Math.round(Date.now() / 1000 - Number(ts))) + ' сек. назад' : 'нет данных';
@@ -247,6 +269,45 @@
       return (liveSensor(sensorId)?.modules || []).find((module) => module.id === moduleId) || null;
     }
 
+    function provisioningView(provisioning = {}) {
+      const status = provisioning.status || 'waiting_agent';
+      const progress = Math.max(0, Math.min(100, Number(provisioning.progress || 0)));
+      const cls = status === 'completed' ? 'ok' : status === 'error' ? 'bad' : status === 'stale' ? 'warn' : 'info';
+      return `<div class="provisioning">
+        <span class="status ${cls}">${esc(status)} · ${esc(provisioning.stage || '')}</span>
+        <div class="progress" title="${esc(progress)}%"><span style="width:${progress}%"></span></div>
+        <span class="muted">${esc(provisioning.message || '')}</span>
+      </div>`;
+    }
+
+    function sensorLaunchCommand(sensorId) {
+      const centerUrl = state.policy?.site?.central_url || location.origin;
+      return [
+        `export EDC_CENTER_URL=${JSON.stringify(centerUrl)}`,
+        `export EDC_SENSOR_ID=${JSON.stringify(sensorId)}`,
+        'export EDC_IMAGE_POLICY=prebuilt_only',
+        'docker compose -f compose.sensor.yml up -d --build'
+      ].join('\n');
+    }
+
+    function renderOperation() {
+      const box = $('operation');
+      if (!state.lastOperation) {
+        box.className = 'operation';
+        box.innerHTML = '';
+        return;
+      }
+      const live = liveSensor(state.lastOperation.sensor_id);
+      const provisioning = live?.provisioning || state.lastOperation;
+      box.className = 'operation visible';
+      box.innerHTML = `
+        <h3>Создание сенсора: ${esc(state.lastOperation.sensor_id)}</h3>
+        ${provisioningView(provisioning)}
+        <div class="muted" style="margin-top:8px">Команда для запуска контейнерного агента на узле сенсора:</div>
+        <pre><code>${esc(sensorLaunchCommand(state.lastOperation.sensor_id))}</code></pre>
+      `;
+    }
+
     function renderMetrics() {
       const sensors = state.overview?.sensors || [];
       const online = sensors.filter((sensor) => sensor.health === 'online').length;
@@ -274,12 +335,13 @@
           <td><strong>${esc(sensor.sensor_id)}</strong><br><span class="muted">${esc(sensor.host || '')}</span></td>
           <td class="${healthClass}">${esc(sensor.health || sensor.status || 'unknown')}<br><span class="muted">${age(sensor.last_seen)}</span></td>
           <td>${esc(profile || 'без профиля')}<br><span class="muted">${esc(ports || 'порты не заданы')}</span></td>
+          <td>${provisioningView(sensor.provisioning || policySensor.provisioning || {})}</td>
           <td>${esc(sensor.events || 0)}</td>
           <td><code>${esc(modules)}</code></td>
           <td></td>
         </tr>`;
       }).join('');
-      $('sensors').innerHTML = `<table><thead><tr><th>ID</th><th>Статус</th><th>Профиль / порты</th><th>События</th><th>Модули</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="6" class="muted">нет сенсоров</td></tr>'}</tbody></table>`;
+      $('sensors').innerHTML = `<table><thead><tr><th>ID</th><th>Статус</th><th>Профиль / порты</th><th>Обработка</th><th>События</th><th>Модули</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="7" class="muted">нет сенсоров</td></tr>'}</tbody></table>`;
     }
 
     function renderSelector() {
@@ -386,7 +448,7 @@
       const id = $('newSensorId').value.trim();
       if (!id) return setMessage('Укажи ID нового сенсора.', 'bad');
       const profileId = $('newSensorProfile').value;
-      await request('/api/sensors', {
+      const result = await request('/api/sensors', {
         method: 'POST',
         body: JSON.stringify({
           id,
@@ -395,8 +457,9 @@
           profile_id: profileId || undefined
         })
       });
+      state.lastOperation = result.operation || { sensor_id: id, status: result.status || 'processing' };
       state.selectedSensor = id;
-      setMessage(`Сенсор ${id} добавлен в политику.`, 'ok');
+      setMessage(`Сенсор ${id} добавлен в политику. Центр ожидает первый sync агента.`, 'ok');
       await refresh();
     }
 
@@ -419,6 +482,7 @@
       if (!confirm(`Удалить ${sensor.id} из политики центра?`)) return;
       await request(`/api/sensors/${encodeURIComponent(sensor.id)}?purge_events=1`, { method: 'DELETE' });
       state.selectedSensor = '';
+      if (state.lastOperation?.sensor_id === sensor.id) state.lastOperation = null;
       setMessage(`Сенсор ${sensor.id} удалён из политики.`, 'ok');
       await refresh();
     }
@@ -455,6 +519,7 @@
       renderProfileSelectors();
       renderModules();
       renderEvents(events);
+      renderOperation();
     }
 
     $('refreshBtn').addEventListener('click', () => refresh().catch((error) => setMessage(error.message, 'bad')));
@@ -475,6 +540,7 @@
     $('saveSiteBtn').addEventListener('click', () => saveSite().catch((error) => setMessage(error.message, 'bad')));
     $('deleteSensorBtn').addEventListener('click', () => deleteSensor().catch((error) => setMessage(error.message, 'bad')));
     refresh().catch((error) => setMessage(error.message, 'bad'));
+    setInterval(() => refresh().catch(() => {}), 5000);
   </script>
 </body>
 </html>

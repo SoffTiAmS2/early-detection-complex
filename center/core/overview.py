@@ -105,7 +105,60 @@ def sensors_payload(
         item["health"] = item.get("status")
         if item.get("status") == "online" and item["status_age_seconds"] is not None and item["status_age_seconds"] > STALE_AFTER_SECONDS:
             item["health"] = "stale"
+        item["provisioning"] = provisioning_state(sensor, item)
     return {"sensors": list(summaries.values())}
+
+
+def provisioning_state(policy_sensor: dict[str, Any], live: dict[str, Any]) -> dict[str, Any]:
+    base = policy_sensor.get("provisioning") if isinstance(policy_sensor.get("provisioning"), dict) else {}
+    state = dict(base)
+    listener_errors = live.get("listener_errors") if isinstance(live.get("listener_errors"), list) else []
+    if listener_errors:
+        state.update(
+            {
+                "status": "error",
+                "stage": "runtime_errors",
+                "progress": 90,
+                "message": f"Agent online, но runtime сообщил ошибки: {len(listener_errors)}.",
+            }
+        )
+    elif live.get("health") == "online":
+        state.update(
+            {
+                "status": "completed",
+                "stage": "agent_online",
+                "progress": 100,
+                "message": "Sensor-agent синхронизировался и отправляет актуальный status.",
+            }
+        )
+    elif live.get("health") == "stale":
+        state.update(
+            {
+                "status": "stale",
+                "stage": "heartbeat_stale",
+                "progress": 75,
+                "message": "Сенсор был online, но heartbeat устарел.",
+            }
+        )
+    elif live.get("last_status_seen"):
+        state.update(
+            {
+                "status": "processing",
+                "stage": "agent_seen",
+                "progress": 85,
+                "message": "Agent был зарегистрирован центром, ожидается свежий runtime status.",
+            }
+        )
+    else:
+        state.update(
+            {
+                "status": state.get("status") or "waiting_agent",
+                "stage": state.get("stage") or "policy_saved",
+                "progress": int(state.get("progress") or 45),
+                "message": state.get("message") or "Сенсор есть в политике, центр ожидает первый sync от agent.",
+            }
+        )
+    return state
 
 
 def overview_payload(

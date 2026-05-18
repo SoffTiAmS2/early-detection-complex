@@ -1,0 +1,10 @@
+FROM docker:27-cli
+
+RUN apk add --no-cache bash ca-certificates docker-cli-compose python3
+
+WORKDIR /app
+COPY sensor ./sensor
+
+ENV PYTHONUNBUFFERED=1
+
+ENTRYPOINT ["python3", "/app/sensor/agent.py"]

@@ -17,11 +17,13 @@ docs/system_guide_ru.md
 ```bash
 cp config/site.example.json config/site.local.json
 make up
-curl http://127.0.0.1:8080/health
+curl -u centre:1 http://127.0.0.1:8080/health
 ```
 
 Центр будет доступен на `http://127.0.0.1:8080`, Grafana - на
 `http://127.0.0.1:3000`.
+По умолчанию UI центра защищен Basic Auth `centre` / `1`; Grafana использует
+`centre` / `centre123`.
 
 Compose также поднимает микросервисы:
 
@@ -33,6 +35,23 @@ log-receiver    8091
 config-renderer 8092
 log-normalizer  background worker
 ```
+
+## Быстрый запуск контейнерного агента
+
+На узле сенсора, где уже доступны Docker и заранее собранные honeypot-образы:
+
+```bash
+export EDC_CENTER_URL=http://<central-ip>:8080
+export EDC_SENSOR_ID=banana-pi-pro-1
+export EDC_IMAGE_POLICY=prebuilt_only
+make sensor-up
+```
+
+`compose.sensor.yml` запускает только `sensor-agent`. Контейнер монтирует
+`/var/run/docker.sock` и `/var/lib/edc-sensor`, поэтому агент управляет
+honeypot-контейнерами хостового Docker и сохраняет runtime-конфиги на хосте.
+Создание сенсора и статус ожидания первого sync доступны в UI центра:
+`http://<central-ip>:8080/settings`.
 
 ## Быстрые проверки
 

@@ -449,13 +449,27 @@ class ControlPlaneHandler(BaseHTTPRequestHandler):
             if not ok_apply:
                 self.send_json({"error": error}, HTTPStatus.BAD_REQUEST)
                 return
+        created_at = now_ts()
+        operation = {
+            "id": f"sensor-create:{sensor_id}:{int(created_at)}",
+            "type": "sensor-create",
+            "sensor_id": sensor_id,
+            "status": "waiting_agent",
+            "stage": "policy_saved",
+            "progress": 45,
+            "message": "Сенсор создан в политике. Ожидается первый sync от sensor-agent.",
+            "created_at": created_at,
+            "updated_at": created_at,
+            "next_action": "Запусти sensor-agent на узле сенсора или через compose.sensor.yml.",
+        }
+        sensor["provisioning"] = operation
         policy.setdefault("sensors", []).append(sensor)
         errors = policy_errors(policy, catalog)
         if errors:
             self.send_json({"status": "invalid_policy", "errors": errors}, HTTPStatus.BAD_REQUEST)
             return
         policy = self.save_policy(policy)
-        self.send_json({"status": "saved", "sensor": sensor, "policy": policy}, HTTPStatus.CREATED)
+        self.send_json({"status": "processing", "sensor": sensor, "operation": operation, "policy": policy}, HTTPStatus.CREATED)
 
     def handle_apply_profile(
         self,

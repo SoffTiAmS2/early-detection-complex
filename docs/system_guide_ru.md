@@ -378,6 +378,19 @@ GF_SECURITY_ADMIN_PASSWORD
 
 Во встроенном UI центра в верхней панели есть кнопка `Grafana`. Она ведет сразу на dashboard `EDC Honeypot Logs`. URL берется из `GRAFANA_URL`, `site.grafana_url` или `site.observability.grafana_url`; если они не заданы, центр выводит `http://127.0.0.1:3000`.
 
+Страница `http://<central-ip>:8080/settings` используется для управления центром и сенсорами. При добавлении сенсора центр не делает вид, что узел уже установлен: он создает запись в политике и показывает статус обработки `waiting_agent`. После первого `sync` от `sensor-agent` статус меняется на `completed`, `stale` или `error` в зависимости от heartbeat и ошибок runtime.
+
+Для контейнерного запуска агента на сенсоре используется отдельный compose-файл:
+
+```bash
+export EDC_CENTER_URL=http://<central-ip>:8080
+export EDC_SENSOR_ID=banana-pi-pro-1
+export EDC_IMAGE_POLICY=prebuilt_only
+docker compose -f compose.sensor.yml up -d --build
+```
+
+Контейнер `sensor-agent` монтирует `/var/run/docker.sock` и `/var/lib/edc-sensor`. Поэтому сам агент работает в контейнере, но управляет honeypot-контейнерами хостового Docker и сохраняет `docker-compose.yml`, конфиги и логи на хосте сенсора.
+
 ## 11. Проверки проекта
 
 Основная проверка:
